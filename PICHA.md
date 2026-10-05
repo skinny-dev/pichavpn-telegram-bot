@@ -39,3 +39,8 @@ Applied at send time to every HTML message, caption and button label; nothing in
 Admins can also type a premium emoji into product/category/panel names (the "no HTML" check accepts that exact tag only).
 If Telegram refuses custom emoji for the bot, the existing fallback in `botapi.php` sends normal emoji, so nothing breaks.
 Tests: `php tests/premium_emoji_test.php`.
+
+### Premium emoji: aliases and catalog
+- **Aliases** let an emoji the pack lacks borrow a close premium one (✅→✔, 💰→💵, 🛒→🛍, 💀→🚨 ...). `php scripts/premium_emoji.php alias list`.
+- **Catalog emoji** (`catalog on`): product and category *buttons* get a fitting emoji (⚡ ≤25 GB, ⭐ ≤100, 💎 ≤250, 👑 above, 🔥 unlimited, 🚨 emergency, 🗓 monthly categories).
+  Display only: names in the database are never changed, because renewals look products up by name. `catalog preview` shows the result for your real catalog.

@@ -13,6 +13,18 @@
 
 const PREMIUM_EMOJI_MAX_PER_TEXT = 90; // Telegram caps entities per message
 
+// Emoji the bot uses that packs often lack -> a close premium emoji to show instead (the plain emoji stays as the fallback).
+// Applied only when the target exists in your imported packs and the source itself is not mapped.
+function premiumEmojiDefaultAliases()
+{
+    return [
+        '✅' => '✔', '☑' => '✔', '❎' => '❌', '✖' => '❌', '⭕' => '🔴', '💰' => '💵', '⏳' => '⌛', '⏱' => '⌛', '🕐' => '⌛',
+        '🛒' => '🛍', '📦' => '🛍', '✍' => '✏', '🎁' => '🎉', '💀' => '🚨', '🔋' => '⚡', '🚀' => '⚡', '♻' => '🔄', '🔁' => '🔄',
+        '🔃' => '🔄', '📩' => '✉', '📨' => '✉', '🔐' => '🔒', '🔓' => '🔒', '📅' => '🗓', '📆' => '🗓', '📢' => '📣', '🔊' => '🔈',
+        '📡' => '🌐', '🌍' => '🌐', '💻' => '🖥', '⏰' => '🔔', '⚜' => '✨', '🏆' => '🥇',
+    ];
+}
+
 function premiumEmojiFile()
 {
     $override = getenv('PICHA_PREMIUM_EMOJI_FILE'); // tests
@@ -31,7 +43,7 @@ function premiumEmojiConfig($reload = false)
     if ($cfg !== null && !$reload) {
         return $cfg;
     }
-    $cfg = ['enabled' => false, 'map' => [], 'regex' => null];
+    $cfg = ['enabled' => false, 'map' => [], 'regex' => null, 'catalog' => false, 'catalog_override' => []];
     $file = premiumEmojiFile();
     if (!is_file($file)) {
         return $cfg;
@@ -52,6 +64,19 @@ function premiumEmojiConfig($reload = false)
     if (!$map) {
         return $cfg;
     }
+    $aliases = ($raw['use_default_aliases'] ?? true) ? premiumEmojiDefaultAliases() : [];
+    if (is_array($raw['alias'] ?? null)) {
+        $aliases = array_merge($aliases, $raw['alias']);
+    }
+    foreach ($aliases as $from => $to) {
+        $from = premiumEmojiNormalize($from);
+        $to = premiumEmojiNormalize($to);
+        if ($from !== '' && !isset($map[$from]) && isset($map[$to])) {
+            $map[$from] = $map[$to];
+        }
+    }
+    $cfg['catalog'] = !empty($raw['catalog']);
+    $cfg['catalog_override'] = is_array($raw['catalog_override'] ?? null) ? $raw['catalog_override'] : [];
     $keys = array_keys($map);
     usort($keys, function ($a, $b) {
         return strlen($b) <=> strlen($a); // longest first so sequences win over their parts
@@ -59,7 +84,7 @@ function premiumEmojiConfig($reload = false)
     $parts = array_map(function ($k) {
         return preg_quote($k, '/');
     }, $keys);
-    $cfg = ['enabled' => true, 'map' => $map, 'regex' => '/(?:' . implode('|', $parts) . ")\u{FE0F}?/u"];
+    $cfg = ['enabled' => true, 'map' => $map, 'regex' => '/(?:' . implode('|', $parts) . ")\u{FE0F}?/u", 'catalog' => $cfg['catalog'], 'catalog_override' => $cfg['catalog_override']];
     return $cfg;
 }
 
@@ -218,4 +243,70 @@ function premiumEmojiRestoreLabel($text)
         }
     }
     return $index[$text] ?? $text;
+}
+
+function premiumEmojiStartsWithEmoji($label)
+{
+    return (bool) preg_match('/^\s*(?:<tg-emoji\b|\p{Extended_Pictographic})/u', (string) $label);
+}
+
+/**
+ * Emoji for a catalog item. Display only: product/category names in the database are never changed
+ * (renewals look products up by name). Override per item in config: "catalog_override": {"product": {"13": "🔥"}, "category": {"1": "🗓"}}
+ */
+function premiumCatalogEmoji($kind, array $row)
+{
+    if ($kind === 'category') {
+        $name = (string) ($row['remark'] ?? '');
+        $id = (string) ($row['id'] ?? '');
+    } else {
+        $name = (string) ($row['name_product'] ?? '');
+        $id = (string) ($row['id'] ?? '');
+    }
+    $ov = premiumEmojiConfig()['catalog_override'][$kind][$id] ?? null;
+    if (is_string($ov) && $ov !== '') {
+        return $ov;
+    }
+    if ($kind === 'category') {
+        if (mb_strpos($name, 'اضطراری') !== false) {
+            return '🚨';
+        }
+        if (mb_strpos($name, 'نامحدود') !== false) {
+            return '🔥';
+        }
+        if (mb_strpos($name, 'ماهه') !== false) {
+            return '🗓';
+        }
+        return '';
+    }
+    $gb = (float) ($row['Volume_constraint'] ?? 0);
+    $days = (int) ($row['Service_time'] ?? 0);
+    $cat = (string) ($row['category'] ?? '');
+    if ($days === 0 || mb_strpos($cat, 'اضطراری') !== false) {
+        return '🚨';
+    }
+    if ($gb <= 0) {
+        return '🔥';
+    }
+    if ($gb <= 25) {
+        return '⚡';
+    }
+    if ($gb <= 100) {
+        return '⭐';
+    }
+    if ($gb <= 250) {
+        return '💎';
+    }
+    return '👑';
+}
+
+/** Button label for a product/category, with its emoji in front when "catalog" is on and the label has none yet. */
+function premiumCatalogLabel($kind, array $row, $label)
+{
+    $cfg = premiumEmojiConfig();
+    if (empty($cfg['catalog']) || !is_string($label) || $label === '' || premiumEmojiStartsWithEmoji($label)) {
+        return $label;
+    }
+    $emoji = premiumCatalogEmoji($kind, $row);
+    return $emoji === '' ? $label : $emoji . ' ' . $label;
 }

@@ -1357,7 +1357,7 @@ function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $stat
             continue;
         }
         $product['inline_keyboard'][] = [
-            ['text' => $result['name_product'], 'callback_data' => "{$datakeyboard}{$result['code_product']}{$valuetow}"]
+            ['text' => function_exists('premiumCatalogLabel') ? premiumCatalogLabel('product', $result, $result['name_product']) : $result['name_product'], 'callback_data' => "{$datakeyboard}{$result['code_product']}{$valuetow}"]
         ];
     }
     if ($statuscustom)
@@ -1385,7 +1385,7 @@ function KeyboardCategory($location, $agent, $backuser = "backuser")
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         if (empty($categoryCounts[mb_strtolower(trim((string) $row['remark']), 'UTF-8')]))
             continue;
-        $list_category['inline_keyboard'][] = [['text' => $row['remark'], 'callback_data' => "categorynames_" . $row['id']]];
+        $list_category['inline_keyboard'][] = [['text' => function_exists('premiumCatalogLabel') ? premiumCatalogLabel('category', $row, $row['remark']) : $row['remark'], 'callback_data' => "categorynames_" . $row['id']]];
     }
     $list_category['inline_keyboard'][] = [
         ['text' => $textbotlang['keyboard']['backToPreviousMenu'], "callback_data" => $backuser],

@@ -97,6 +97,50 @@ t('unrelated text unchanged', premiumEmojiRestoreLabel('سلام') === 'سلام
 t('label without emoji unchanged', premiumEmojiRestoreLabel('بدون ایموجی') === 'بدون ایموجی');
 t('very long text skipped', premiumEmojiRestoreLabel(str_repeat('y', 200)) === str_repeat('y', 200));
 
+// --- aliases: a close premium emoji stands in for one the pack lacks
+cfg(true, ['✔' => '80001', '🔴' => '80002', '🛍' => '80003']);
+t('✅ shows the ✔ premium emoji (alias)', premiumEmojiWrapHtml('✅ ok') === '<tg-emoji emoji-id="80001">✅</tg-emoji> ok', premiumEmojiWrapHtml('✅ ok'));
+t('fallback char stays the original ✅', strpos(premiumEmojiWrapHtml('✅'), '>✅<') !== false);
+t('⭕ -> 🔴, 🛒 -> 🛍', premiumEmojiConfig()['map']['⭕'] === '80002' && premiumEmojiConfig()['map']['🛒'] === '80003');
+t('alias inactive when the target is not in the pack', !isset(premiumEmojiConfig()['map']['💰']));
+cfg(true, ['✔' => '80001', '✅' => '90009']);
+t('a real mapping always beats an alias', premiumEmojiConfig()['map']['✅'] === '90009');
+file_put_contents($tmp, json_encode(['enabled' => true, 'map' => ['✔' => '80001'], 'use_default_aliases' => false, 'alias' => ['❓' => '✔']]));
+premiumEmojiConfig(true);
+t('defaults can be turned off, custom alias still works', !isset(premiumEmojiConfig()['map']['✅']) && premiumEmojiConfig()['map']['❓'] === '80001');
+
+// --- catalog emoji (display only), using the real catalog from the backup
+cfg(true, ['⚡' => '10001', '⭐' => '10002', '💎' => '10003', '👑' => '10004', '🔥' => '10005', '🚨' => '10006', '🗓' => '10007']);
+$cat = fn($name, $id = 1) => ['id' => $id, 'remark' => $name];
+$prod = fn($name, $gb, $days, $category = '1 ماهه (حجمی)', $id = 1) => ['id' => $id, 'name_product' => $name, 'Volume_constraint' => (string) $gb, 'Service_time' => (string) $days, 'category' => $category];
+t('catalog OFF by default: labels unchanged', premiumCatalogLabel('product', $prod('10 گیگ', 10, 30), '10 گیگ — 60,000 تومان') === '10 گیگ — 60,000 تومان');
+file_put_contents($tmp, json_encode(['enabled' => true, 'catalog' => true, 'map' => ['⚡' => '10001', '⭐' => '10002', '💎' => '10003', '👑' => '10004', '🔥' => '10005', '🚨' => '10006', '🗓' => '10007']]));
+premiumEmojiConfig(true);
+$expect = [
+    [10, 30, '⚡'], [25, 30, '⚡'], [40, 30, '⭐'], [80, 30, '⭐'], [90, 60, '⭐'], [120, 30, '💎'], [130, 60, '💎'],
+    [200, 60, '💎'], [250, 90, '💎'], [300, 90, '👑'], [400, 90, '👑'], [0, 30, '🔥'], [0, 120, '🔥'], [1, 0, '🚨'], [5, 0, '🚨'],
+];
+$bad = [];
+foreach ($expect as [$gb, $days, $want]) {
+    $got = premiumCatalogEmoji('product', $prod("x", $gb, $days, $days === 0 ? '💀 اضطراری' : 'c'));
+    if ($got !== $want) { $bad[] = "$gb GB/$days d: $got != $want"; }
+}
+t('every product of the real catalog gets its intended emoji', !$bad, implode('; ', $bad));
+t('category 1/2/3 months -> 🗓', premiumCatalogEmoji('category', $cat('1 ماهه (حجمی)')) === '🗓' && premiumCatalogEmoji('category', $cat('3 ماهه (حجمی)')) === '🗓');
+t('unlimited and emergency categories', premiumCatalogEmoji('category', $cat('نامحدود (نت معمولی)')) === '🔥' && premiumCatalogEmoji('category', $cat('اضطراری (نت ملی)')) === '🚨');
+t('unknown category gets nothing', premiumCatalogEmoji('category', $cat('متفرقه')) === '');
+t('label gets the emoji in front', premiumCatalogLabel('product', $prod('x', 40, 30), '40 گیگ — 200,000 تومان') === '⭐ 40 گیگ — 200,000 تومان');
+t('a label that already starts with an emoji is left alone', premiumCatalogLabel('category', $cat('🔥 نامحدود (نت معمولی)'), '🔥 نامحدود (نت معمولی)') === '🔥 نامحدود (نت معمولی)');
+t('a label starting with a premium tag is left alone', premiumCatalogLabel('category', $cat('x'), '<tg-emoji emoji-id="55555">🔥</tg-emoji> x') === '<tg-emoji emoji-id="55555">🔥</tg-emoji> x');
+t('plain Farsi label is not mistaken for an emoji', premiumEmojiStartsWithEmoji('۴۰ گیگ') === false);
+file_put_contents($tmp, json_encode(['enabled' => true, 'catalog' => true, 'map' => ['🔥' => '50005', '⭐' => '20002'], 'catalog_override' => ['product' => ['13' => '🔥']]]));
+premiumEmojiConfig(true);
+t('per-item override wins', premiumCatalogEmoji('product', $prod('x', 10, 30, 'c', 13)) === '🔥');
+// the full path a button takes: label -> premium icon
+$label = premiumCatalogLabel('product', $prod('x', 40, 30), '40 گیگ — 200,000 تومان');
+$btn = json_decode(premiumEmojiApplyPayload(['reply_markup' => json_encode(['inline_keyboard' => [[['text' => $label, 'callback_data' => 'c']]]], JSON_UNESCAPED_UNICODE)], 'sendMessage')['reply_markup'], true)['inline_keyboard'][0][0]['text'];
+t('product button ends up with the ⭐ premium emoji and the same text', $btn === '<tg-emoji emoji-id="20002">⭐</tg-emoji> 40 گیگ — 200,000 تومان', $btn);
+
 // --- real language file: speed + no crash
 $textbotlang = require $root . '/lang/fa.php';
 $wrapN = 0;

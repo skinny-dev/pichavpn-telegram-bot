@@ -5,6 +5,9 @@
 //   php scripts/premium_emoji.php coverage                               # which emoji the bot uses, mapped or not
 //   php scripts/premium_emoji.php preview "🔥 خرید سرویس"                 # see what a text becomes
 //   php scripts/premium_emoji.php test 123456789                         # send a real test message + button to a chat id
+//   php scripts/premium_emoji.php catalog preview                        # how your products/categories look with emoji (reads the database)
+//   php scripts/premium_emoji.php catalog on|off                         # show emoji on product and category buttons (display only)
+//   php scripts/premium_emoji.php alias list | set ✅ ✔ | unset ✅ | defaults on|off   # borrow a close premium emoji when a pack lacks one
 //   php scripts/premium_emoji.php status | on | off | set 🔥 ID | unset 🔥 | export | clear
 //
 // Config lives in storage/premium_emoji.json. Turning it off or removing it returns the bot to plain emoji at once.
@@ -20,7 +23,8 @@ $file = premiumEmojiFile();
 function pe_load($file)
 {
     $raw = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
-    return is_array($raw) ? $raw + ['enabled' => false, 'map' => [], 'packs' => []] : ['enabled' => false, 'map' => [], 'packs' => []];
+    $base = ['enabled' => false, 'map' => [], 'packs' => [], 'alias' => [], 'catalog' => false];
+    return is_array($raw) ? $raw + $base : $base;
 }
 
 function pe_save($file, array $cfg)
@@ -183,8 +187,64 @@ switch ($cmd) {
         }
         break;
 
+    case 'catalog':
+        $sub = $argv[2] ?? 'preview';
+        if ($sub === 'on' || $sub === 'off') {
+            $cfg['catalog'] = $sub === 'on';
+            pe_save($file, $cfg);
+            echo 'catalog emoji ' . $sub . ($sub === 'on' && empty($cfg['enabled']) ? " (premium layer itself is off: plain emoji will show)" : '') . "\n";
+            break;
+        }
+        $config = dirname(__DIR__) . '/config.php';
+        ob_start();
+        require $config;
+        ob_end_clean();
+        $mapNow = premiumEmojiConfig(true)['map'];
+        $show = function ($emoji, $label) use ($mapNow) {
+            $has = $emoji !== '' && isset($mapNow[premiumEmojiNormalize($emoji)]);
+            return sprintf("  %-3s %s%s\n", $emoji === '' ? '·' : $emoji, $label, $emoji === '' ? '' : ($has ? '   [premium]' : '   [plain emoji]'));
+        };
+        echo "categories:\n";
+        foreach ($pdo->query('SELECT id, remark FROM category ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            echo premiumEmojiStartsWithEmoji($row['remark']) ? $show('', $row['remark'] . '   (already has an emoji)') : $show(premiumCatalogEmoji('category', $row), $row['remark']);
+        }
+        echo "products:\n";
+        foreach ($pdo->query('SELECT id, name_product, Volume_constraint, Service_time, category FROM product ORDER BY CAST(Service_time AS UNSIGNED), CAST(Volume_constraint AS UNSIGNED)')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            echo premiumEmojiStartsWithEmoji($row['name_product']) ? $show('', $row['name_product'] . '   (already has an emoji)') : $show(premiumCatalogEmoji('product', $row), $row['name_product']);
+        }
+        echo "\nNothing is stored. Turn it on with: php scripts/premium_emoji.php catalog on\n";
+        echo "Change one item: add to storage/premium_emoji.json  \"catalog_override\": {\"product\": {\"13\": \"🔥\"}, \"category\": {\"1\": \"🗓\"}}\n";
+        break;
+
+    case 'alias':
+        $sub = $argv[2] ?? 'list';
+        if ($sub === 'set' && !empty($argv[3]) && !empty($argv[4])) {
+            $cfg['alias'][premiumEmojiNormalize($argv[3])] = premiumEmojiNormalize($argv[4]);
+            pe_save($file, $cfg);
+            echo "alias {$argv[3]} -> {$argv[4]}\n";
+        } elseif ($sub === 'unset') {
+            unset($cfg['alias'][premiumEmojiNormalize($argv[3] ?? '')]);
+            pe_save($file, $cfg);
+            echo "removed\n";
+        } elseif ($sub === 'defaults') {
+            $cfg['use_default_aliases'] = ($argv[3] ?? 'on') !== 'off';
+            pe_save($file, $cfg);
+            echo 'default aliases ' . ($cfg['use_default_aliases'] ? 'on' : 'off') . "\n";
+        } else {
+            $direct = $cfg['map'];
+            $all = (($cfg['use_default_aliases'] ?? true) ? premiumEmojiDefaultAliases() : []) + $cfg['alias'];
+            foreach ($all as $from => $to) {
+                $from = premiumEmojiNormalize($from);
+                $to = premiumEmojiNormalize($to);
+                $state = isset($direct[$from]) ? 'not needed (pack has it)' : (isset($direct[$to]) ? 'active' : 'inactive (pack has no ' . $to . ')');
+                echo "  $from -> $to   $state\n";
+            }
+        }
+        break;
+
     case 'status':
         echo 'enabled: ' . (!empty($cfg['enabled']) ? 'yes' : 'no') . "\n";
+        echo 'catalog emoji on products/categories: ' . (!empty($cfg['catalog']) ? 'on' : 'off') . "\n";
         echo 'mapped emoji: ' . count($cfg['map']) . "\n";
         foreach ($cfg['packs'] as $n => $t) {
             echo "  pack $n ($t)\n";
