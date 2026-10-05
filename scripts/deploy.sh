@@ -14,7 +14,7 @@ REPO="skinny-dev/pichavpn-telegram-bot"
 TARBALL_URL="${PICHA_TARBALL_URL:-https://api.github.com/repos/$REPO/tarball/$BRANCH}"
 TEST="${PICHA_DEPLOY_TEST:-}"
 # top-level names that must never be copied to a live bot
-SKIP=(config.php install tests maintenance dashboard-src .github .git .gitignore PICHA.md README.md LICENSE composer.lock)
+SKIP=(config.php install tests maintenance dashboard-src .github .git .gitignore PICHA.md PRODUCTION.md README.md LICENSE composer.lock)
 
 say() { echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
