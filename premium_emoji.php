@@ -43,7 +43,7 @@ function premiumEmojiConfig($reload = false)
     if ($cfg !== null && !$reload) {
         return $cfg;
     }
-    $cfg = ['enabled' => false, 'map' => [], 'regex' => null, 'catalog' => false, 'catalog_override' => []];
+    $cfg = ['enabled' => false, 'map' => [], 'regex' => null, 'catalog' => false, 'catalog_override' => [], 'buttons' => false];
     $file = premiumEmojiFile();
     if (!is_file($file)) {
         return $cfg;
@@ -76,6 +76,7 @@ function premiumEmojiConfig($reload = false)
         }
     }
     $cfg['catalog'] = !empty($raw['catalog']);
+    $cfg['buttons'] = !empty($raw['buttons']); // premium ICONS on buttons: opt-in (see `php scripts/premium_emoji.php buttons on`)
     $cfg['catalog_override'] = is_array($raw['catalog_override'] ?? null) ? $raw['catalog_override'] : [];
     $keys = array_keys($map);
     usort($keys, function ($a, $b) {
@@ -84,7 +85,7 @@ function premiumEmojiConfig($reload = false)
     $parts = array_map(function ($k) {
         return preg_quote($k, '/');
     }, $keys);
-    $cfg = ['enabled' => true, 'map' => $map, 'regex' => '/(?:' . implode('|', $parts) . ")\u{FE0F}?/u", 'catalog' => $cfg['catalog'], 'catalog_override' => $cfg['catalog_override']];
+    $cfg = ['enabled' => true, 'map' => $map, 'regex' => '/(?:' . implode('|', $parts) . ")\u{FE0F}?/u", 'catalog' => $cfg['catalog'], 'catalog_override' => $cfg['catalog_override'], 'buttons' => $cfg['buttons']];
     return $cfg;
 }
 
@@ -156,7 +157,7 @@ function premiumEmojiApplyPayload(array $datas, $method = '')
             }
         }
     }
-    if (isset($datas['reply_markup']) && is_string($datas['reply_markup']) && $datas['reply_markup'] !== '') {
+    if ($cfg['buttons'] && isset($datas['reply_markup']) && is_string($datas['reply_markup']) && $datas['reply_markup'] !== '') {
         $markup = json_decode($datas['reply_markup'], true);
         if (is_array($markup)) {
             $changed = false;
@@ -169,7 +170,8 @@ function premiumEmojiApplyPayload(array $datas, $method = '')
                         continue;
                     }
                     foreach ($row as $b => $button) {
-                        if (is_array($button) && isset($button['text']) && is_string($button['text']) && !isset($button['icon_custom_emoji_id'])) {
+                        // idempotent: a label that already carries a <tg-emoji> tag (or an icon) is never wrapped again
+                        if (is_array($button) && isset($button['text']) && is_string($button['text']) && !isset($button['icon_custom_emoji_id']) && stripos($button['text'], '<tg-emoji') === false) {
                             $wrapped = premiumEmojiWrapHtml(htmlspecialchars($button['text'], ENT_NOQUOTES, 'UTF-8'));
                             if ($wrapped !== htmlspecialchars($button['text'], ENT_NOQUOTES, 'UTF-8')) {
                                 // botapi.php turns the first <tg-emoji> into the button icon and strips the rest
@@ -220,7 +222,7 @@ function premiumEmojiRestoreLabel($text)
 {
     static $index = null;
     $cfg = premiumEmojiConfig();
-    if (!$cfg['enabled'] || !is_string($text) || $text === '' || mb_strlen($text) > 120) {
+    if (!$cfg['enabled'] || !$cfg['buttons'] || !is_string($text) || $text === '' || mb_strlen($text) > 120) {
         return $text;
     }
     if ($index === null) {

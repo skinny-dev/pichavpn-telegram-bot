@@ -5,6 +5,7 @@
 //   php scripts/premium_emoji.php coverage                               # which emoji the bot uses, mapped or not
 //   php scripts/premium_emoji.php preview "🔥 خرید سرویس"                 # see what a text becomes
 //   php scripts/premium_emoji.php test 123456789                         # send a real test message + button to a chat id
+//   php scripts/premium_emoji.php buttons on|off                         # show premium ICONS on buttons (off = buttons keep a normal emoji; recommended until `test` proves it)
 //   php scripts/premium_emoji.php catalog preview                        # how your products/categories look with emoji (reads the database)
 //   php scripts/premium_emoji.php catalog on|off                         # show emoji on product and category buttons (display only)
 //   php scripts/premium_emoji.php alias list | set ✅ ✔ | unset ✅ | defaults on|off   # borrow a close premium emoji when a pack lacks one
@@ -200,7 +201,7 @@ switch ($cmd) {
         } elseif ($kinds) {
             echo "\nTelegram refused the message for another reason; see the text above.\n";
         } else {
-            echo "\nBoth worked. Premium emoji are accepted for this bot.\n";
+            echo "\nBoth worked. Telegram accepts premium emoji for this bot.\nLOOK at the second message on your phone/desktop: if the button shows the emoji icon in front of its text, run: php scripts/premium_emoji.php buttons on\nIf the button has no emoji, leave buttons off (messages still get premium emoji).\n";
         }
         break;
 
@@ -259,8 +260,20 @@ switch ($cmd) {
         }
         break;
 
+    case 'buttons':
+        $sub = $argv[2] ?? '';
+        if ($sub !== 'on' && $sub !== 'off') {
+            echo 'premium icons on buttons: ' . (!empty($cfg['buttons']) ? 'on' : 'off') . "\nuse: buttons on | buttons off\n";
+            break;
+        }
+        $cfg['buttons'] = $sub === 'on';
+        pe_save($file, $cfg);
+        echo 'premium icons on buttons: ' . $sub . ($sub === 'on' ? "\nAfter this, buttons show the premium emoji as an icon in front of the text. If a button then looks wrong or has no emoji on your phone, run: buttons off\n" : "\nButtons now keep their normal emoji.\n") . "\n";
+        break;
+
     case 'status':
         echo 'enabled: ' . (!empty($cfg['enabled']) ? 'yes' : 'no') . "\n";
+        echo 'premium icons on buttons: ' . (!empty($cfg['buttons']) ? 'on' : 'off (buttons show a normal emoji)') . "\n";
         echo 'catalog emoji on products/categories: ' . (!empty($cfg['catalog']) ? 'on' : 'off') . "\n";
         echo 'mapped emoji: ' . count($cfg['map']) . "\n";
         foreach ($cfg['packs'] as $n => $t) {

@@ -19,10 +19,10 @@ function t($name, $cond, $extra = '')
     echo ($cond ? 'PASS ' : 'FAIL ') . $name . ($cond ? '' : "  -> $extra") . "\n";
     $fails += !$cond;
 }
-function cfg($enabled, $map)
+function cfg($enabled, $map, $buttons = true)
 {
     global $tmp;
-    file_put_contents($tmp, json_encode(['enabled' => $enabled, 'map' => $map]));
+    file_put_contents($tmp, json_encode(['enabled' => $enabled, 'map' => $map, 'buttons' => $buttons]));
     premiumEmojiConfig(true);
 }
 
@@ -125,7 +125,7 @@ cfg(true, ['⚡' => '10001', '⭐' => '10002', '💎' => '10003', '👑' => '100
 $cat = fn($name, $id = 1) => ['id' => $id, 'remark' => $name];
 $prod = fn($name, $gb, $days, $category = '1 ماهه (حجمی)', $id = 1) => ['id' => $id, 'name_product' => $name, 'Volume_constraint' => (string) $gb, 'Service_time' => (string) $days, 'category' => $category];
 t('catalog OFF by default: labels unchanged', premiumCatalogLabel('product', $prod('10 گیگ', 10, 30), '10 گیگ — 60,000 تومان') === '10 گیگ — 60,000 تومان');
-file_put_contents($tmp, json_encode(['enabled' => true, 'catalog' => true, 'map' => ['⚡' => '10001', '⭐' => '10002', '💎' => '10003', '👑' => '10004', '🔥' => '10005', '🚨' => '10006', '🗓' => '10007']]));
+file_put_contents($tmp, json_encode(['enabled' => true, 'catalog' => true, 'buttons' => true, 'map' => ['⚡' => '10001', '⭐' => '10002', '💎' => '10003', '👑' => '10004', '🔥' => '10005', '🚨' => '10006', '🗓' => '10007']]));
 premiumEmojiConfig(true);
 $expect = [
     [10, 30, '⚡'], [25, 30, '⚡'], [40, 30, '⭐'], [80, 30, '⭐'], [90, 60, '⭐'], [120, 30, '💎'], [130, 60, '💎'],
@@ -144,13 +144,32 @@ t('label gets the emoji in front', premiumCatalogLabel('product', $prod('x', 40,
 t('a label that already starts with an emoji is left alone', premiumCatalogLabel('category', $cat('🔥 نامحدود (نت معمولی)'), '🔥 نامحدود (نت معمولی)') === '🔥 نامحدود (نت معمولی)');
 t('a label starting with a premium tag is left alone', premiumCatalogLabel('category', $cat('x'), '<tg-emoji emoji-id="55555">🔥</tg-emoji> x') === '<tg-emoji emoji-id="55555">🔥</tg-emoji> x');
 t('plain Farsi label is not mistaken for an emoji', premiumEmojiStartsWithEmoji('۴۰ گیگ') === false);
-file_put_contents($tmp, json_encode(['enabled' => true, 'catalog' => true, 'map' => ['🔥' => '50005', '⭐' => '20002'], 'catalog_override' => ['product' => ['13' => '🔥']]]));
+file_put_contents($tmp, json_encode(['enabled' => true, 'catalog' => true, 'buttons' => true, 'map' => ['🔥' => '50005', '⭐' => '20002'], 'catalog_override' => ['product' => ['13' => '🔥']]]));
 premiumEmojiConfig(true);
 t('per-item override wins', premiumCatalogEmoji('product', $prod('x', 10, 30, 'c', 13)) === '🔥');
 // the full path a button takes: label -> premium icon
 $label = premiumCatalogLabel('product', $prod('x', 40, 30), '40 گیگ — 200,000 تومان');
 $btn = json_decode(premiumEmojiApplyPayload(['reply_markup' => json_encode(['inline_keyboard' => [[['text' => $label, 'callback_data' => 'c']]]], JSON_UNESCAPED_UNICODE)], 'sendMessage')['reply_markup'], true)['inline_keyboard'][0][0]['text'];
 t('product button ends up with the ⭐ premium emoji and the same text', $btn === '<tg-emoji emoji-id="20002">⭐</tg-emoji> 40 گیگ — 200,000 تومان', $btn);
+
+// --- the screenshot bug: running the conversion twice must not nest or leak tags
+cfg(true, ['🗓' => '70007', '🔥' => '50005']);
+$kb1 = json_encode(['inline_keyboard' => [[['text' => '🗓 1 ماهه (حجمی)', 'callback_data' => 'c']]]]); // KeyboardCategory uses plain json_encode
+$once = premiumEmojiApplyPayload(['reply_markup' => $kb1], 'sendMessage');
+$twice = premiumEmojiApplyPayload($once, 'sendMessage');
+t('applying twice gives the same keyboard', $once['reply_markup'] === $twice['reply_markup'], $twice['reply_markup']);
+t('no nested or stray tags after two passes', substr_count(json_decode($twice['reply_markup'], true)['inline_keyboard'][0][0]['text'], '<tg-emoji') === 1 && substr_count(json_decode($twice['reply_markup'], true)['inline_keyboard'][0][0]['text'], '</tg-emoji>') === 1);
+$m = ['text' => 'a'];
+$h1 = premiumEmojiApplyPayload(['text' => '🔥 x', 'parse_mode' => 'HTML'], 'sendMessage'); $h2 = premiumEmojiApplyPayload($h1, 'sendMessage');
+t('HTML text is idempotent too', $h1['text'] === $h2['text']);
+// buttons are opt-in
+cfg(true, ['🗓' => '70007', '🔥' => '50005'], false);
+$off = premiumEmojiApplyPayload(['reply_markup' => $kb1, 'text' => '🔥 x', 'parse_mode' => 'HTML'], 'sendMessage');
+t('buttons OFF: labels keep the plain emoji', $off['reply_markup'] === $kb1);
+t('buttons OFF: message text still gets premium emoji', strpos($off['text'], '<tg-emoji emoji-id="50005">') === 0);
+$textbotlang = ['k' => ['a' => '🗓 1 ماهه (حجمی)']];
+t('buttons OFF: no tap remapping', premiumEmojiRestoreLabel('1 ماهه (حجمی)') === '1 ماهه (حجمی)');
+cfg(true, ['🗓' => '70007', '🔥' => '50005'], true);
 
 // --- real language file: speed + no crash
 $textbotlang = require $root . '/lang/fa.php';
