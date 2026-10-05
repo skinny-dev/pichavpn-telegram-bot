@@ -12,13 +12,27 @@ import { StatCard } from '@/components/Stat'
 
 const PERIODS = [['all', 'کل'], ['hour', 'یک ساعت اخیر'], ['today', 'امروز'], ['yesterday', 'دیروز'], ['month', 'ماه فعلی'], ['lastmonth', 'ماه قبل']] as const
 type D = Record<string, number>
-interface StatsRes { title: string; start: number; end: number; data: D; all: D; text: string }
+interface Method { m: string; c: string; s: string }
+interface Overall { users: number; with_service: number; buyers: number; test_users: number; test_only: number; test_then_buy: number; balance: number; agents_n: number; agents_n2: number; panels: number; active_services: number; active_sum: number; auto_users: number | null; auto_services: number | null; repeat_buyers: number; revenue_30d: number; volume_30d: number; methods: Method[] }
+interface StatsRes { title: string; start: number; end: number; data: D; all: D; overall: Overall | null; text: string }
+const LABELS: Record<string, string> = { 'cart to cart': '💳 کارت به کارت', 'Star Telegram': '⭐ استار تلگرام', tetraminator: '🏦 درگاه tetraminator', 'after pay': '🧾 پرداخت بعد از دریافت', 'manual invoice': '✍️ فاکتور دستی', 'add order by admin': '🛠 سفارش ثبت‌شده توسط ادمین', 'extend by admin': '🛠 تمدید توسط ادمین', wallet: '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin': '🎁 شارژ توسط ادمین (هدیه)', zarinpal: 'زرین‌پال', aqayepardakht: 'آقای پرداخت' }
+const dur = (sec: number) => { const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600); return d ? `${fmtNum(d)} روز${h ? ` و ${fmtNum(h)} ساعت` : ''}` : h ? `${fmtNum(h)} ساعت` : `${fmtNum2(sec / 60)} دقیقه` }
+const gb = (v: number) => `${fmtNum2(v)} گیگابایت`
+const pct = (a: number, b: number) => (b > 0 ? `${fmtNum2((a * 100) / b)}٪` : '—')
 
 function Row({ label, count, sum }: { label: string; count?: number; sum?: number }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="tabular">{count !== undefined && <span>{fmtNum(count)} عدد</span>}{count !== undefined && sum !== undefined && <span className="mx-1.5 text-muted-foreground">·</span>}{sum !== undefined && <span className="font-medium">{fmtToman(sum)}</span>}</span>
+    </div>
+  )
+}
+function TextRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular">{value}</span>
     </div>
   )
 }
@@ -61,26 +75,53 @@ export default function Stats() {
               <Row label="خرید نمایندگان پیشرفته" count={d.agent_n2} sum={d.agent_n2_sum} />
               <Row label="تمدید" count={d.renew} sum={d.renew_sum} />
               <Row label="حجم اضافه" count={d.extra} sum={d.extra_sum} />
-              <Row label="تعداد کل" count={d.count_all} />
             </Section>
-            <Section title="کیف پول و حسابداری" icon={Wallet}>
-              <Row label="شارژ کیف پول" count={d.wallet_in} sum={d.wallet_in_sum} />
-              <Row label="برداشت از کیف پول" count={d.wallet_out} sum={d.wallet_out_sum} />
+            <Section title="پول دریافتی و حسابداری" icon={Wallet}>
+              <Row label="پرداخت مشتریان (درگاه‌ها)" count={d.wallet_in} sum={d.wallet_in_sum} />
+              <Row label="ثبت‌شده توسط ادمین" count={d.admin_in} sum={d.admin_in_sum} />
+              <Row label="جمع پرداخت‌های موفق" count={d.count_all} />
               <Row label="هزینه‌ها" count={d.exp} sum={d.exp_sum} />
+              <Row label="برداشت از کیف پول" count={d.wallet_out} sum={d.wallet_out_sum} />
               <Row label="ورود سرمایه" count={d.cap} sum={d.cap_sum} />
             </Section>
+            {q.data?.overall && (
+              <>
+                <Section title="قیف کاربران" icon={Users}>
+                  <Row label="کل کاربران" count={q.data.overall.users} />
+                  <Row label="دارای سرویس" count={q.data.overall.with_service} />
+                  <Row label={`مشتری (${pct(q.data.overall.buyers, q.data.overall.users)} کاربران)`} count={q.data.overall.buyers} />
+                  <Row label={`دریافت‌کننده تست (${pct(q.data.overall.test_users, q.data.overall.users)})`} count={q.data.overall.test_users} />
+                  <Row label="تست بدون خرید" count={q.data.overall.test_only} />
+                  <Row label="تست و سپس خرید" count={q.data.overall.test_then_buy} />
+                  <Row label="موجودی کیف پول‌ها" sum={q.data.overall.balance} />
+                </Section>
+                <Section title="شاخص‌ها" icon={Coins}>
+                  <Row label="میانگین درآمد هر مشتری" sum={q.data.overall.buyers ? d.revenue / q.data.overall.buyers : 0} />
+                  <TextRow label="سهم تمدید از درآمد" value={pct(d.renew_sum, d.revenue)} />
+                  <TextRow label="وفاداری (۲ خرید/تمدید یا بیشتر)" value={pct(q.data.overall.repeat_buyers, q.data.overall.buyers)} />
+                  <Row label="درآمد ۳۰ روز اخیر" sum={q.data.overall.revenue_30d} />
+                  <Row label="سرویس‌های فعال" count={q.data.overall.active_services} sum={q.data.overall.active_sum} />
+                  {q.data.overall.auto_users !== null && <Row label={`تمدید خودکار (${fmtNum(q.data.overall.auto_services)} سرویس)`} count={q.data.overall.auto_users ?? 0} />}
+                  <Row label="نمایندگان (عادی / پیشرفته)" count={q.data.overall.agents_n + q.data.overall.agents_n2} />
+                </Section>
+                <div className="lg:col-span-2">
+                  <Section title="پرداخت‌ها به تفکیک روش" icon={Landmark}>
+                    {q.data.overall.methods.map((m) => <Row key={m.m} label={LABELS[m.m] ?? m.m} count={Number(m.c)} sum={Number(m.s)} />)}
+                  </Section>
+                </div>
+              </>
+            )}
             <Section title="حجم فروخته‌شده" icon={Boxes}>
-              <Row label="جمع حجم" sum={undefined} />
               <div className="py-2 text-2xl font-bold tabular">{fmtNum2(d.vol_service + d.vol_extra)} <span className="text-sm font-normal text-muted-foreground">گیگابایت</span></div>
-              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">از خرید سرویس</span><span className="tabular">{fmtNum2(d.vol_service)} GB</span></div>
-              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">از حجم اضافه</span><span className="tabular">{fmtNum2(d.vol_extra)} GB</span></div>
-              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">اینترنت معمولی</span><span className="tabular">{fmtNum2(d.vol_service - d.vol_emergency)} GB</span></div>
-              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">اینترنت اضطراری</span><span className="tabular">{fmtNum2(d.vol_emergency)} GB</span></div>
+              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">از خرید سرویس</span><span className="tabular">{gb(d.vol_service)}</span></div>
+              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">از حجم اضافه</span><span className="tabular">{gb(d.vol_extra)}</span></div>
+              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">اینترنت معمولی</span><span className="tabular">{gb(d.vol_service - d.vol_emergency)}</span></div>
+              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">اینترنت اضطراری</span><span className="tabular">{gb(d.vol_emergency)}</span></div>
             </Section>
             <Section title="کاربران" icon={Users}>
               <Row label="کاربران جدید" count={d.new_users} />
               <Row label="اکانت‌های تست" count={d.tests} />
-              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">میانگین زمان عضویت تا اولین خرید</span><span>{d.first_avg_n > 0 ? `${fmtNum2(d.first_avg_sec / 60)} دقیقه (${fmtNum(d.first_avg_n)} کاربر)` : '—'}</span></div>
+              <div className="flex justify-between py-2 text-sm"><span className="text-muted-foreground">میانگین زمان عضویت تا اولین خرید</span><span>{d.first_avg_n > 0 ? `${dur(d.first_avg_sec)} (${fmtNum(d.first_avg_n)} کاربر)` : '—'}</span></div>
             </Section>
           </div>
         </>

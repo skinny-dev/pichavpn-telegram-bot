@@ -308,88 +308,12 @@ if ($datain == "paygwback") {
 } elseif ($text == $textbotlang['keyboard']['channelSettings'] && $adminrulecheck['rule'] == "administrator") {
     sendmessage($from_id, $textbotlang['Admin']['channel']['description'], $channelkeyboard, 'HTML');
 } elseif ($text == $textbotlang['Admin']['Status']['btn'] || $datain == "stat_all_bot") {
-    $Balanceall = select("user", "SUM(Balance)", null, null, "select")['SUM(Balance)'];
-    $statistics = select("user", "*", null, null, "count");
-    $sumpanel = select("marzban_panel", "*", null, null, "count");
-    $sql1 = "SELECT COUNT(id) AS count FROM user WHERE agent != 'f'";
-    $stmt1 = $pdo->query($sql1);
-    $agentsum = $stmt1->fetch(PDO::FETCH_ASSOC)['count'];
-    $agentsumn = select("user", "COUNT(id)", "agent", "n", "select")['COUNT(id)'];
-    $agentsumn2 = select("user", "COUNT(id)", "agent", "n2", "select")['COUNT(id)'];
-    $sql1 = "SELECT COUNT(*) AS invoice_count FROM invoice WHERE (status = 'active' OR status = 'end_of_time' OR status = 'end_of_volume' OR status = 'sendedwarn' OR status = 'send_on_hold') AND name_product != '{$textbotlang['common']['labels']['testServiceName']}'";
-    $stmt1 = $pdo->query($sql1);
-    $invoiceactive = $stmt1->fetch(PDO::FETCH_ASSOC)['invoice_count'];
-    $sqlall = "SELECT COUNT(*) AS invoice_count FROM invoice WHERE status != 'Unpaid' AND name_product != '{$textbotlang['common']['labels']['testServiceName']}'";
-    $sqlall = $pdo->query($sqlall);
-    $invoice = $sqlall->fetch(PDO::FETCH_ASSOC)['invoice_count'];
-    $sql2 = "SELECT SUM(price_product) AS total_price FROM invoice WHERE (status = 'active' OR status = 'end_of_time' OR status = 'end_of_volume' OR status = 'sendedwarn' OR status = 'send_on_hold') AND name_product != '{$textbotlang['common']['labels']['testServiceName']}'";
-    $stmt2 = $pdo->query($sql2);
-    $invoicesum = $stmt2->fetch(PDO::FETCH_ASSOC)['total_price'];
-    $sql33 = "SELECT SUM(price_product) AS total_price FROM invoice WHERE status!= 'Unpaid' AND name_product != '{$textbotlang['common']['labels']['testServiceName']}'";
-    $sql33 = $pdo->query($sql33);
-    $invoiceSumRow = $sql33->fetch(PDO::FETCH_ASSOC);
-    $invoiceTotal = isset($invoiceSumRow['total_price']) ? (float) $invoiceSumRow['total_price'] : 0;
-    $invoicesumall = number_format($invoiceTotal, 0);
-    $sql3 = "SELECT SUM(price) AS total_extend FROM service_other WHERE type = 'extend_user'";
-    $stmt3 = $pdo->query($sql3);
-    $extendSumRow = $stmt3->fetch(PDO::FETCH_ASSOC);
-    $extendsum = isset($extendSumRow['total_extend']) ? (float) $extendSumRow['total_extend'] : 0;
-    $count_usertest = select("invoice", "*", "name_product", $textbotlang['common']['labels']['testServiceName'], "count");
-    $timeacc = jdate('H:i:s', time());
-    $stmt2 = $pdo->prepare("SELECT COUNT(DISTINCT id_user) as count FROM `invoice` WHERE Status != 'Unpaid'");
-    $stmt2->execute();
-    $statisticsorder = $stmt2->fetch(PDO::FETCH_ASSOC)['count'];
-    $sqlsum = "SELECT SUM(price) AS sumpay , Payment_Method,COUNT(price) AS countpay FROM Payment_report WHERE payment_Status = 'paid' AND Payment_Method NOT IN ('add balance by admin','low balance by admin') GROUP BY  Payment_Method;";
-    $stmt = $pdo->prepare($sqlsum);
-    $stmt->execute();
-    $statispay = $stmt->fetchAll();
-    $date = date("Y-m-d");
-    $timeacc = jdate('H:i:s', time());
-    $start_time = date('d.m.Y', strtotime("-1 days")) . " 00:00:00";
-    $end_time = date('d.m.Y', strtotime("-1 days")) . " 23:59:59";
-    $start_time_timestamp = strtotime($start_time);
-    $end_time_timestamp = strtotime($end_time);
-    $sql = "SELECT SUM(price_product) FROM invoice WHERE (time_sell BETWEEN :requestedDate AND :requestedDateend) AND (status = 'active' OR status = 'end_of_time'  OR status = 'end_of_volume' OR Status = 'send_on_hold' OR Status = 'sendedwarn') AND name_product != '{$textbotlang['common']['labels']['testServiceName']}'";
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindParam(':requestedDate', $start_time_timestamp);
-    $stmt->bindParam(':requestedDateend', $end_time_timestamp);
-    $stmt->execute();
-    $suminvoiceday = $stmt->fetch(PDO::FETCH_ASSOC)['SUM(price_product)'];
-    $invoicesum = (float) ($invoicesum ?? 0);
-    $extendsum = (float) ($extendsum ?? 0);
-    $suminvoiceday = (float) ($suminvoiceday ?? 0);
-    $statistics = (int) ($statistics ?? 0);
-    $statisticsorder = (int) ($statisticsorder ?? 0);
-    $paycount = "";
-    $ratecustomer = $statistics > 0 ? round(($statisticsorder / $statistics) * 100, 2) : 0;
-    $avgbuy_customer = $statisticsorder > 0 ? number_format($invoicesum / $statisticsorder) : '0';
-    $monthe_buy = number_format($suminvoiceday * 30);
-    $percent_of_extend = $invoicesum > 0 ? round(($extendsum / $invoicesum) * 100, 2) : 0;
-    $percent_of_extend = $percent_of_extend > 100 ? 100 : $percent_of_extend;
-    $extendsum = number_format($extendsum, 0);
-    if (count($statispay) != 0) {
-        foreach ($statispay as $tracepay) {
-            $status_var = [
-                'cart to cart' => $textbotlang['textbot']['cartToCart'],
-                'aqayepardakht' => $textbotlang['textbot']['aqayePardakht'],
-                'zarinpal' => $textbotlang['textbot']['zarinPal'],
-                'plisio' => $textbotlang['textbot']['nowPayment'],
-                'arze digital offline' => $textbotlang['textbot']['nowPaymentTron'],
-                'Currency Rial 1' => $textbotlang['textbot']['iranPay2'],
-                'Currency Rial 2' => $textbotlang['textbot']['iranPay3'],
-                'Currency Rial 3' => $textbotlang['textbot']['iranPay1'],
-                'paymentnotverify' => $textbotlang['textbot']['paymentNotVerify'],
-                'Star Telegram' => $textbotlang['textbot']['starTelegram']
-
-            ][$tracepay['Payment_Method']];
-            $paycount .= sprintf($textbotlang['Admin']['report']['gatewayRow'], $status_var, $tracepay['countpay'], $tracepay['sumpay']);
-        }
-    }
-    $statisticsall = sprintf($textbotlang['Admin']['stats']['overall'], $statistics, $statisticsorder, $count_usertest, $Balanceall, $invoice, $invoiceactive, $invoicesumall, $invoicesum, $extendsum, $ratecustomer, $avgbuy_customer, $monthe_buy, $percent_of_extend, $agentsum, $agentsumn, $agentsumn2, $sumpanel, $paycount);
+    require_once __DIR__ . '/stats_report.php';
+    $statsText = statsReport($pdo, 'all');
     if ($datain == "stat_all_bot") {
-        Editmessagetext($from_id, $message_id, $statisticsall, $keyboard_stat, 'HTML');
+        Editmessagetext($from_id, $message_id, $statsText, statsKeyboard('all'), 'HTML');
     } else {
-        sendmessage($from_id, $statisticsall, $keyboard_stat, 'HTML');
+        sendmessage($from_id, $statsText, statsKeyboard('all'), 'HTML');
     }
 } elseif (preg_match('/^\/(expense|capital)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
     $accTable = $acc[1] == 'expense' ? 'expenses' : 'capital_entries';

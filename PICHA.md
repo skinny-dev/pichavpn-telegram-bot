@@ -5,7 +5,7 @@ Admin stats menu now shows: کل / یک ساعت اخیر / امروز / دیر�
 - Record costs / capital (admins only), in the bot chat:
   `/expense 150000 توضیحات`   `/capital 5000000 توضیحات`
 - Emergency internet volume = products whose name contains «اضطراری».
-- `php tests/stats_sqlite_test.php` runs the report against fake SQLite data.
+- Statistics follow a cash-basis, wallet-aware model (see the header of `stats_report.php`); they also read Mirza Pro data (`cost`, `capital_injection`, `wallet_withdraw`, `auto_renew`) when present.
 
 ## Picha Panel (dashboard/)
 Mobile-first, RTL admin panel (React + Tailwind + shadcn/ui components). Open `https://YOUR_DOMAIN/dashboard/`.

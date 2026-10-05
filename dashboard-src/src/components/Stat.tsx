@@ -9,7 +9,7 @@ export function StatCard({ icon: Icon, label, value, hint, tone }: { icon: Lucid
         <span className="truncate">{label}</span>
         <Icon className={cn('size-4 shrink-0', tone === 'success' && 'text-success', tone === 'danger' && 'text-destructive', tone === 'warn' && 'text-amber-500')} />
       </div>
-      <div className="mt-2 text-2xl font-bold tabular tracking-tight">{value}</div>
+      <div className="mt-2 break-words text-lg font-bold leading-tight tabular tracking-tight sm:text-2xl">{value}</div>
       {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
     </Card>
   )

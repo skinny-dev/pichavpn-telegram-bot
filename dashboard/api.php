@@ -626,7 +626,7 @@ try {
             $p = statsPeriod($period);
             $d = statsCollect($pdo, $p['start'], $p['end']);
             $all = $period === 'all' ? $d : statsCollect($pdo, 0, time());
-            out(['ok' => true, 'period' => $period, 'title' => $p['title'], 'start' => $p['start'], 'end' => $p['end'], 'data' => $d, 'all' => $all, 'text' => strip_tags(statsReport($pdo, $period))]);
+            out(['ok' => true, 'period' => $period, 'title' => $p['title'], 'start' => $p['start'], 'end' => $p['end'], 'data' => $d, 'all' => $all, 'overall' => $period === 'all' ? statsOverall($pdo) : null, 'text' => strip_tags(statsReport($pdo, $period))]);
 
         case 'overview':
             $today = statsCollect($pdo, statsPeriod('today')['start'], time());
