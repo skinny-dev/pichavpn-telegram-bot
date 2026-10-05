@@ -30,5 +30,6 @@ return [
         ['category', null, 'varchar(200)'],
         ['hide_panel', '{}', 'TEXT'],
         ['status_product', 'active', 'VARCHAR(20)'],
+        ['sort_order', '0', 'INT'],
     ],
 ];

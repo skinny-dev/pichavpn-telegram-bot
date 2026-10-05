@@ -6,4 +6,7 @@ return [
         id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         remark varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL
         SQL,
+    'columns' => [
+        ['sort_order', '0', 'INT'],
+    ],
 ];
