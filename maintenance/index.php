@@ -10,7 +10,7 @@ if ($token === '') {
 
 $text = "درود وقتتون بخیر، ربات درحال بروزرسانی  میباشد.\n"
       . "لطفا برای خرید، تمدید و پیگیری سرویس ها به پشتیبانی پیام بدید :\n"
-      . "@picha_support";
+      . "@pichanet_support";
 
 $update = json_decode(file_get_contents('php://input'), true);
 $chatId = $update['message']['chat']['id']

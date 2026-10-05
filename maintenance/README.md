@@ -1,5 +1,5 @@
 # Maintenance bot
-Replies to every message with the "bot is updating, contact @picha_support" text.
+Replies to every message with the "bot is updating, contact @pichanet_support" text.
 
 1. Copy this folder to the server web root, e.g. /var/www/html/maintenance/ (HTTPS required by Telegram).
 2. `echo 'YOUR_BOT_TOKEN' > maintenance/token.txt`
