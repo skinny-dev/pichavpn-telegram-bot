@@ -50,7 +50,7 @@ command -v curl >/dev/null || [ -f "$(dirname "$0")/bot.py" ] || { apt-get insta
 
 step "2/7 Bot token"
 if [ -z "$TOKEN" ]; then
-  if [ -r /dev/tty ]; then
+  if { : </dev/tty; } 2>/dev/null; then
     printf "  Paste the bot token from @BotFather (input hidden): " >/dev/tty
     read -rs TOKEN </dev/tty; echo >/dev/tty
   else
@@ -101,7 +101,7 @@ if [ $CHECK_RC -ne 0 ]; then warn "some checks failed (see above). The service w
 if echo "$CHECK_OUT" | grep -q "webhook currently set" && [ "$YES" -ne 1 ]; then
   echo
   warn "This bot currently has a webhook. Starting maintenance mode REMOVES it (the real bot stops receiving messages until you set its webhook again)."
-  if [ -r /dev/tty ]; then
+  if { : </dev/tty; } 2>/dev/null; then
     printf "  Continue? [y/N] " >/dev/tty; read -r ans </dev/tty
     [[ "$ans" =~ ^[Yy] ]] || die "cancelled. Nothing was started."
   else die "re-run with --yes to confirm"; fi
