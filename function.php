@@ -2129,7 +2129,10 @@ function containsHtmlMarkup($value)
     if (!is_string($value)) {
         return false;
     }
-    return strpos($value, '<') !== false;
+    // Telegram delivers a premium emoji typed by an admin as <tg-emoji emoji-id="123...">🔥</tg-emoji>.
+    // That exact, harmless form is allowed; any other '<' is still rejected.
+    $value = preg_replace('#<tg-emoji emoji-id="\d{5,25}">[^<>&]{1,32}</tg-emoji>#u', '', $value);
+    return strpos((string) $value, '<') !== false;
 }
 function stripCustomEmojiTags($value)
 {
@@ -2186,7 +2189,11 @@ function restoreCustomEmojiLabel($value)
         return $value;
     }
     $map = customEmojiLabels();
-    return $map[$value] ?? $value;
+    $restored = $map[$value] ?? $value;
+    if ($restored === $value && function_exists('premiumEmojiRestoreLabel')) {
+        $restored = premiumEmojiRestoreLabel($value);
+    }
+    return $restored;
 }
 function applyKeyboardLabels($rows, array $labels)
 {

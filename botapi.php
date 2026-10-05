@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/premium_emoji.php';
 require_once 'config.php';
 function isTelegramChatIdEmpty($chat_id): bool
 {
@@ -172,6 +173,10 @@ function telegram($method, $datas = [], $token = null, $allowEmojiFallback = tru
 
     if (isset($datas['message_thread_id']) && intval($datas['message_thread_id']) <= 0) {
         unset($datas['message_thread_id']);
+    }
+
+    if (function_exists('premiumEmojiApplyPayload')) {
+        $datas = premiumEmojiApplyPayload($datas, $method);
     }
 
     $premiumEmojiPayload = null;

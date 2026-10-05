@@ -29,3 +29,13 @@ Log in with the bot's `admin` table credentials (role `administrator`).
 It backs up `config.php`, copies the code, **never** copies the web installer (`install/`: while it exists the bot's `.htaccess` answers
 403 to every request, including Telegram), config, backups, tests or dev sources, fixes ownership, runs `php table.php`, reloads Apache and
 self-tests the webhook URL. Bot folder: `/var/www/html/mirzaprobotconfig`.
+
+## Premium (custom) emoji
+Applied at send time to every HTML message, caption and button label; nothing in `lang/*.php` or the database is rewritten.
+    php scripts/premium_emoji.php import https://t.me/addemoji/PACKNAME   # repeat for more packs
+    php scripts/premium_emoji.php coverage                               # which emoji the bot uses and which have no premium version yet
+    php scripts/premium_emoji.php test YOUR_CHAT_ID                      # real test: does Telegram accept them for this bot?
+    php scripts/premium_emoji.php off                                    # back to plain emoji instantly
+Admins can also type a premium emoji into product/category/panel names (the "no HTML" check accepts that exact tag only).
+If Telegram refuses custom emoji for the bot, the existing fallback in `botapi.php` sends normal emoji, so nothing breaks.
+Tests: `php tests/premium_emoji_test.php`.
