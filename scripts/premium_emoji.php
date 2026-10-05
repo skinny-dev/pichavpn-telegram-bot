@@ -181,9 +181,26 @@ switch ($cmd) {
         echo "sending a button with a premium icon ...\n";
         $r2 = pe_api('sendMessage', ['chat_id' => $chat, 'text' => 'دکمه با آیکون پریمیوم', 'reply_markup' => $payload['reply_markup']]);
         echo $r2['ok'] ? "  button: OK\n" : '  button: REFUSED: ' . $r2['description'] . "\n";
-        if (!$r1['ok'] || !$r2['ok']) {
-            echo "\nTelegram only lets some bots use custom emoji (e.g. the bot needs an extra username bought on Fragment, or its owner needs Telegram Premium).\n";
-            echo "The bot already falls back to normal emoji automatically, so nothing breaks.\n";
+        $why = function ($r) {
+            $d = (string) ($r['description'] ?? '');
+            if (stripos($d, 'chat not found') !== false || stripos($d, 'bot was blocked') !== false || stripos($d, 'user not found') !== false) {
+                return 'chat';
+            }
+            if (stripos($d, 'emoji') !== false || stripos($d, 'entit') !== false || stripos($d, 'icon') !== false || stripos($d, 'premium') !== false) {
+                return 'emoji';
+            }
+            return $r['ok'] ? '' : 'other';
+        };
+        $kinds = array_filter([$why($r1), $why($r2)]);
+        if (in_array('chat', $kinds, true)) {
+            echo "\nThis is NOT an emoji problem: Telegram cannot find that chat. Use YOUR OWN numeric Telegram ID (ask @userinfobot) and press Start on this bot first.\n";
+        } elseif (in_array('emoji', $kinds, true)) {
+            echo "\nTelegram refused the custom emoji for this bot (it only allows some bots, e.g. one with an extra username bought on Fragment, or whose owner has Telegram Premium).\n";
+            echo "The bot falls back to normal emoji automatically, so nothing breaks.\n";
+        } elseif ($kinds) {
+            echo "\nTelegram refused the message for another reason; see the text above.\n";
+        } else {
+            echo "\nBoth worked. Premium emoji are accepted for this bot.\n";
         }
         break;
 
@@ -287,5 +304,10 @@ switch ($cmd) {
         break;
 
     default:
-        echo file_get_contents(__FILE__, false, null, 0, 1100);
+        foreach (array_slice(file(__FILE__), 1) as $line) {
+            if (strncmp($line, '//', 2) !== 0) {
+                break;
+            }
+            echo ltrim(substr($line, 2), ' ') === "\n" ? "\n" : substr($line, 3);
+        }
 }

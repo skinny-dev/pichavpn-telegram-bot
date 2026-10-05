@@ -36,6 +36,17 @@ t('tg-emoji with non-numeric id rejected', containsHtmlMarkup('<tg-emoji emoji-i
 t('tg-emoji wrapping markup rejected', containsHtmlMarkup('<tg-emoji emoji-id="12345"><b>x</b></tg-emoji>') === true);
 t('plain text still fine', containsHtmlMarkup('۴۰ گیگ | ۳۰ روز') === false);
 
+// --- incoming premium emoji (messages and captions) -> tags
+$ent = fn($o, $l, $id) => ['type' => 'custom_emoji', 'offset' => $o, 'length' => $l, 'custom_emoji_id' => $id];
+t('entity at the start (🔥 is 2 UTF-16 units)', premiumEmojiEntitiesToTags('🔥 سلام', [$ent(0, 2, '5368324170671202286')]) === '<tg-emoji emoji-id="5368324170671202286">🔥</tg-emoji> سلام');
+t('two entities, in any order', premiumEmojiEntitiesToTags('🔥 x ⭐', [$ent(5, 1, '22222'), $ent(0, 2, '11111')]) === '<tg-emoji emoji-id="11111">🔥</tg-emoji> x <tg-emoji emoji-id="22222">⭐</tg-emoji>', premiumEmojiEntitiesToTags('🔥 x ⭐', [$ent(5, 1, '22222'), $ent(0, 2, '11111')]));
+t('Farsi text before the emoji keeps offsets right', premiumEmojiEntitiesToTags('خرید 🔥', [$ent(5, 2, '33333')]) === 'خرید <tg-emoji emoji-id="33333">🔥</tg-emoji>');
+t('non custom-emoji entities ignored', premiumEmojiEntitiesToTags('hi', [['type' => 'bold', 'offset' => 0, 'length' => 2]]) === 'hi');
+t('out-of-range entity ignored safely', premiumEmojiEntitiesToTags('hi', [$ent(0, 50, '44444')]) === 'hi');
+t('non-numeric id rejected (no tag injection)', premiumEmojiEntitiesToTags('🔥', [$ent(0, 2, '1"><script>')]) === '🔥');
+t('null entities fine', premiumEmojiEntitiesToTags('x', null) === 'x');
+t('result is accepted by the name check', containsHtmlMarkup(premiumEmojiEntitiesToTags('40 گیگ 🔥', [$ent(7, 2, '5368324170671202286')])) === false);
+
 // --- disabled = no-op
 cfg(false, ['🔥' => '1111111']);
 t('disabled: html unchanged', premiumEmojiWrapHtml('🔥 hi') === '🔥 hi');

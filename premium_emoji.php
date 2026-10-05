@@ -310,3 +310,46 @@ function premiumCatalogLabel($kind, array $row, $label)
     $emoji = premiumCatalogEmoji($kind, $row);
     return $emoji === '' ? $label : $emoji . ' ' . $label;
 }
+
+/**
+ * Telegram sends a premium emoji as an entity (offset/length in UTF-16 units). Turn those into
+ * <tg-emoji emoji-id="..."> tags so the bot can store and re-send them. Used for message text and captions.
+ */
+function premiumEmojiEntitiesToTags($text, $entities)
+{
+    if (!is_string($text) || $text === '' || !is_array($entities)) {
+        return $text;
+    }
+    $emojis = [];
+    foreach ($entities as $e) {
+        if (is_array($e) && ($e['type'] ?? null) === 'custom_emoji' && isset($e['custom_emoji_id']) && preg_match('/^\d{5,25}$/', (string) $e['custom_emoji_id'])) {
+            $emojis[] = $e;
+        }
+    }
+    if (!$emojis) {
+        return $text;
+    }
+    usort($emojis, function ($a, $b) {
+        return $a['offset'] <=> $b['offset'];
+    });
+    $u = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+    $total = strlen($u);
+    $enc = function ($s) {
+        return mb_convert_encoding($s, 'UTF-16LE', 'UTF-8');
+    };
+    $out = '';
+    $cursor = 0;
+    foreach ($emojis as $e) {
+        $start = ((int) $e['offset']) * 2;
+        $len = ((int) $e['length']) * 2;
+        if ($start < $cursor || $len <= 0 || $start + $len > $total) {
+            continue;
+        }
+        $out .= substr($u, $cursor, $start - $cursor) . $enc('<tg-emoji emoji-id="' . $e['custom_emoji_id'] . '">') . substr($u, $start, $len) . $enc('</tg-emoji>');
+        $cursor = $start + $len;
+    }
+    if ($cursor === 0) {
+        return $text;
+    }
+    return mb_convert_encoding($out . substr($u, $cursor), 'UTF-8', 'UTF-16LE');
+}

@@ -523,6 +523,9 @@ $document = $update["message"]["document"] ?? 0;
 $fileid = $update["message"]["document"]["file_id"] ?? 0;
 $photoid = $photo ? end($photo)["file_id"] : '';
 $caption = $update["message"]["caption"] ?? '';
+if ($caption !== '' && function_exists('premiumEmojiEntitiesToTags')) {
+    $caption = premiumEmojiEntitiesToTags($caption, $update["message"]["caption_entities"] ?? null);
+}
 $video = $update["message"]["video"] ?? 0;
 $videoid = $video ? $video["file_id"] : 0;
 $datain = $update["callback_query"]["data"] ?? '';
