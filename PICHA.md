@@ -67,3 +67,9 @@ Log of every request (token never logged): `storage/sms_webhook.log`.
 Rotate the token any time with `scripts/sms_setup.php token` (update the app after).
 The old built-in blind timer `autoconfirmcart` must stay OFF.
 Tests: `php tests/sms_pay_test.php`.
+
+Catch-up (no need to pay again): every deposit SMS is kept in `sms_inbox`. If a deposit arrived
+before its order existed, the customer pressing «پرداخت کردم» makes the bot approve the order from
+the stored deposit (exact amount, one unclaimed deposit, received ≤15 min before the order, <24h old).
+A message the server missed can be stored by hand: put the Blu texts in a file and run
+`php scripts/sms_setup.php import file.txt`, then the customer presses «پرداخت کردم».

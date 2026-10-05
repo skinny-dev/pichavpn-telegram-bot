@@ -224,3 +224,82 @@ function smsExtractPayload(string $raw, array $post, array $query, array $header
     $keys = array_map(fn($k) => preg_replace('/^[a-z0-9]{16,}(?=_)/', '<token>', (string) $k), array_keys($flat));
     return ['text' => $text, 'bank' => $bank, 'token' => $token, 'keys' => $keys];
 }
+
+/**
+ * Catch-up: the customer pressed "I paid" (or an admin asked) and the matching deposit
+ * SMS already arrived earlier and is still unclaimed in sms_inbox. Only a single,
+ * unclaimed deposit of exactly this amount, received no more than 15 minutes before the
+ * order was created, and within the last 24h, is accepted.
+ * @return bool true when the order was approved
+ */
+function smsReconcileOrder(PDO $pdo, array $order, callable $approve, ?int $now = null): bool
+{
+    $now = $now ?? time();
+    if (($order['Payment_Method'] ?? '') !== 'cart to cart' || !in_array($order['payment_Status'] ?? '', SMS_STATUS_OPEN, true)) {
+        return false;
+    }
+    $ots = smsReportTs($order);
+    if ($ots <= 0) {
+        return false;
+    }
+    $rial = (int) $order['price'] * 10;
+    $st = $pdo->prepare("SELECT id FROM sms_inbox WHERE kind = 'deposit' AND status = 'unmatched' AND amount_rial = ? AND received_at >= ? AND received_at >= ? ORDER BY id DESC");
+    $st->execute([$rial, $ots - 900, $now - 86400]);
+    $ids = $st->fetchAll(PDO::FETCH_COLUMN);
+    if (count($ids) !== 1) {
+        return false;
+    }
+    // the same amount must not be wanted by another open order
+    if (count(smsOpenReports($pdo, (int) $order['price'], $now)) !== 1) {
+        return false;
+    }
+    $c1 = $pdo->prepare("UPDATE sms_inbox SET status = 'matched', id_order = ?, note = 'catch-up' WHERE id = ? AND status = 'unmatched'");
+    $c1->execute([$order['id_order'], $ids[0]]);
+    if ($c1->rowCount() === 0) {
+        return false;
+    }
+    $c2 = $pdo->prepare("UPDATE Payment_report SET payment_Status = 'paid', dec_not_confirmed = ? WHERE id_order = ? AND payment_Status IN ('Unpaid','waiting')");
+    $c2->execute(['تأیید خودکار با پیامک بانک (دریافت قبل از ثبت درخواست)', $order['id_order']]);
+    if ($c2->rowCount() === 0) {
+        $pdo->prepare("UPDATE sms_inbox SET status = 'unmatched', id_order = NULL, note = NULL WHERE id = ?")->execute([$ids[0]]);
+        return false;
+    }
+    $approve($order);
+    return true;
+}
+
+/** Credit the wallet / deliver the service for an auto-approved order and tell the report group. */
+function smsApproveOrder(array $order): void
+{
+    global $textbotlang, $setting;
+    DirectPayment($order['id_order'], __DIR__ . "/images.jpg");
+    $cash = select("PaySetting", "ValuePay", "NamePay", "chashbackcart", "select")['ValuePay'] ?? '0';
+    $user = select("user", "*", "id", $order['id_user'], "select");
+    if ($cash != "0" && $user) {
+        $bonus = ($order['price'] * $cash) / 100;
+        update("user", "Balance", intval($user['Balance']) + $bonus, "id", $user['id']);
+        sendmessage($user['id'], sprintf($textbotlang['users']['Balance']['giftDeposit'], $bonus), null, 'HTML');
+    }
+    if (strlen($setting['Channel_Report'] ?? '') > 0) {
+        $topic = select("topicid", "idreport", "report", "paymentreport", "select")['idreport'] ?? null;
+        $args = ['chat_id' => $setting['Channel_Report'], 'parse_mode' => 'HTML',
+            'text' => "✅ پرداخت کارت‌به‌کارت با پیامک بانک تأیید شد\n👤 کاربر: <code>{$order['id_user']}</code>\n💰 مبلغ: " . number_format((int) $order['price']) . " تومان\n🧾 سفارش: <code>{$order['id_order']}</code>"];
+        if ($topic) {
+            $args['message_thread_id'] = $topic;
+        }
+        telegram('sendmessage', $args);
+    }
+}
+
+/** Store a deposit SMS as unclaimed (admin import of a missed message). Returns the parsed deposit or null. */
+function smsStoreUnclaimed(PDO $pdo, string $text, string $bank = 'blu', ?int $now = null): ?array
+{
+    $parsed = smsParse($text);
+    if ($parsed === null || $parsed['kind'] !== 'deposit') {
+        return null;
+    }
+    $fp = sha1(smsNormalizeDigits(trim($text)) . '|' . strtolower($bank));
+    $ins = $pdo->prepare("INSERT IGNORE INTO sms_inbox (fingerprint,received_at,bank,kind,amount_rial,balance_rial,sms_time,status,note) VALUES (?,?,?,?,?,?,?,'unmatched','imported')");
+    $ins->execute([$fp, $now ?? time(), $bank, 'deposit', $parsed['amount_rial'], $parsed['balance_rial'], $parsed['sms_time']]);
+    return $ins->rowCount() === 1 ? $parsed : null;
+}

@@ -5487,6 +5487,13 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         sendmessage($from_id, $textbotlang['users']['Balance']['transactionExpired'], null, 'HTML');
         return;
     }
+    if ((select("PaySetting", "ValuePay", "NamePay", "smsautoconfirm", "select")['ValuePay'] ?? '') === 'onsms') {
+        require_once __DIR__ . '/sms_pay.php';
+        if (smsReconcileOrder($pdo, $payemntcheck, 'smsApproveOrder')) {
+            deletemessage($from_id, $message_id);
+            return;
+        }
+    }
     deletemessage($from_id, $message_id);
     sendmessage($from_id, $textbotlang['users']['Balance']['askReceiptImage'], $backuser, 'HTML');
     step('cart_to_cart_user', $from_id);

@@ -49,6 +49,26 @@ $e = smsExtractPayload('{"message":"m"}', [], [], ['authorization' => 'Bearer ZZ
 ok($e['token'] === 'ZZ' && $e['text'] === 'm', 'payload: bearer header');
 $e = smsExtractPayload('plain sms body', [], ['token' => 'Q'], []);
 ok($e['text'] === 'plain sms body' && $e['token'] === 'Q', 'payload: raw body + query token');
+// catch-up: deposit arrived first (unclaimed), order opened after, customer presses "I paid"
+$pdo->exec("DELETE FROM sms_inbox"); $pdo->exec("DELETE FROM Payment_report WHERE id_order LIKE 'smst%'");
+$ap2 = []; $apf = function ($o) use (&$ap2) { $ap2[] = $o['id_order']; };
+$r = smsProcess($pdo, $dep2, 'blu', $apf, $now - 120);          // 60,986 toman, no order yet -> unmatched
+ok($r['status'] === 'unmatched', 'deposit with no order yet is kept unclaimed');
+$mk('smstc', 60986, 60);                                         // order created 60s ago (after SMS 120s ago)
+$o = $pdo->query("SELECT * FROM Payment_report WHERE id_order='smstc'")->fetch(PDO::FETCH_ASSOC);
+ok(smsReconcileOrder($pdo, $o, $apf, $now) === true && $ap2 === ['smstc'], 'catch-up approves order from earlier deposit');
+ok(smsReconcileOrder($pdo, $o, $apf, $now) === false, 'catch-up does not approve twice');
+$mk('smstd', 60986, 30);
+$o2 = $pdo->query("SELECT * FROM Payment_report WHERE id_order='smstd'")->fetch(PDO::FETCH_ASSOC);
+ok(smsReconcileOrder($pdo, $o2, $apf, $now) === false, 'consumed deposit cannot pay a second order');
+$pdo->exec("DELETE FROM sms_inbox");
+smsProcess($pdo, $dep2, 'blu', $apf, $now - 7200);               // deposit 2h before order
+$mk('smste', 60986, 60);
+$o3 = $pdo->query("SELECT * FROM Payment_report WHERE id_order='smste'")->fetch(PDO::FETCH_ASSOC);
+ok(smsReconcileOrder($pdo, $o3, $apf, $now) === false, 'deposit far older than the order is not accepted');
+ok(smsStoreUnclaimed($pdo, $dep) !== null && smsStoreUnclaimed($pdo, $dep) === null, 'import stores once, then dedupes');
+$pdo->exec("DELETE FROM Payment_report WHERE id_order LIKE 'smst%'");
+
 $e = smsExtractPayload('{"c6f69d2a0d1dd1030df100b86e34e536_blu":"بلو\nواریز پول"}', [], [], []);
 ok($e['token'] === 'c6f69d2a0d1dd1030df100b86e34e536' && $e['bank'] === 'blu' && str_contains($e['text'], 'واریز'), 'payload: forwarder {token_bank: text}');
 ok(!str_contains(implode(',', $e['keys']), 'c6f69d2a'), 'token never appears in logged keys');

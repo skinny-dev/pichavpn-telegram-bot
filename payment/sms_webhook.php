@@ -69,17 +69,7 @@ $notify = function (string $text) use ($setting): void {
     }
 };
 
-$approve = function (array $order) use ($textbotlang, $notify, $setting): void {
-    DirectPayment($order['id_order'], "../images.jpg");
-    $cash = select("PaySetting", "ValuePay", "NamePay", "chashbackcart", "select")['ValuePay'] ?? '0';
-    $user = select("user", "*", "id", $order['id_user'], "select");
-    if ($cash != "0" && $user) {
-        $bonus = ($order['price'] * $cash) / 100;
-        update("user", "Balance", intval($user['Balance']) + $bonus, "id", $user['id']);
-        sendmessage($user['id'], sprintf($textbotlang['users']['Balance']['giftDeposit'], $bonus), null, 'HTML');
-    }
-    $notify("✅ پرداخت کارت‌به‌کارت با پیامک بانک تأیید شد\n👤 کاربر: <code>{$order['id_user']}</code>\n💰 مبلغ: " . number_format((int) $order['price']) . " تومان\n🧾 سفارش: <code>{$order['id_order']}</code>");
-};
+$approve = 'smsApproveOrder';
 
 $res = smsProcess($pdo, $p['text'], $p['bank'], $approve);
 
