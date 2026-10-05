@@ -22,3 +22,10 @@ Log in with the bot's `admin` table credentials (role `administrator`).
 - Tests: `python3 tests/api_test.py URL admin PASS` (needs `tests/seed_test_db.sql` loaded), `cd dashboard-src && npm test`,
   `node tests/panel_e2e.mjs` (Playwright, needs `npm i playwright-core`).
 - The old server-rendered `panel/` is untouched and still works.
+
+## Deploying this branch to a bot server (use the script, not a raw tar extract)
+    curl -fsSL -o /root/deploy.sh https://raw.githubusercontent.com/skinny-dev/pichavpn-telegram-bot/claude/picha-bot-farsi-restore-uwlwar/scripts/deploy.sh
+    sudo bash /root/deploy.sh
+It backs up `config.php`, copies the code, **never** copies the web installer (`install/`: while it exists the bot's `.htaccess` answers
+403 to every request, including Telegram), config, backups, tests or dev sources, fixes ownership, runs `php table.php`, reloads Apache and
+self-tests the webhook URL. Bot folder: `/var/www/html/mirzaprobotconfig`.
