@@ -100,6 +100,8 @@ if ($amount < $billed) {
 
 $order_id = $payment['id_order'];
 
+$statusBeforeClaim = $payment['payment_Status'];
+
 // One credit per order, whatever the path.
 if (!claimPaymentPaid($order_id)) {
     variza_webhook_respond(200, 'already claimed');
@@ -143,6 +145,16 @@ if (!empty($setting['Channel_Report']) && $paymentreports) {
         'chat_id' => $setting['Channel_Report'],
         'message_thread_id' => $paymentreports,
         'text' => $text_report,
+        'parse_mode' => "HTML"
+    ]);
+}
+
+// An admin had declined the manual receipt, but Variza now confirms the money really arrived: it was credited, tell the admins.
+if ($statusBeforeClaim === 'reject' && !empty($setting['Channel_Report']) && $paymentreports) {
+    telegram('sendmessage', [
+        'chat_id' => $setting['Channel_Report'],
+        'message_thread_id' => $paymentreports,
+        'text' => "⚠️ واریزا پرداختی را تأیید کرد که قبلاً به‌عنوان رسید رد شده بود؛ مبلغ " . number_format($billed) . " تومان به کاربر <code>{$payment['id_user']}</code> شارژ شد.\n🧾 سفارش: <code>{$order_id}</code>",
         'parse_mode' => "HTML"
     ]);
 }
