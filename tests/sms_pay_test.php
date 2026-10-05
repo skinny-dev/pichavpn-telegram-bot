@@ -49,4 +49,9 @@ $e = smsExtractPayload('{"message":"m"}', [], [], ['authorization' => 'Bearer ZZ
 ok($e['token'] === 'ZZ' && $e['text'] === 'm', 'payload: bearer header');
 $e = smsExtractPayload('plain sms body', [], ['token' => 'Q'], []);
 ok($e['text'] === 'plain sms body' && $e['token'] === 'Q', 'payload: raw body + query token');
+$e = smsExtractPayload('{"c6f69d2a0d1dd1030df100b86e34e536_blu":"بلو\nواریز پول"}', [], [], []);
+ok($e['token'] === 'c6f69d2a0d1dd1030df100b86e34e536' && $e['bank'] === 'blu' && str_contains($e['text'], 'واریز'), 'payload: forwarder {token_bank: text}');
+ok(!str_contains(implode(',', $e['keys']), 'c6f69d2a'), 'token never appears in logged keys');
+$e = smsExtractPayload('', ['c6f69d2a0d1dd1030df100b86e34e536_blu' => 'x'], [], []);
+ok($e['text'] === 'x' && $e['bank'] === 'blu', 'payload: same shape as form field');
 exit($fail ? 1 : 0);

@@ -190,7 +190,17 @@ function smsExtractPayload(string $raw, array $post, array $query, array $header
         }
         return '';
     };
-    $text = $pick(['text', 'message', 'body', 'sms', 'content', 'msg', 'notification', 'big_text', 'title']);
+    // Mirza SMS Forwarder style: {"<token>_<bank>": "<sms text>"}
+    $keyToken = '';
+    $keyBank = '';
+    $keyText = '';
+    foreach ($flat as $k => $v) {
+        if (preg_match('/^([a-z0-9]{16,})_([a-z0-9]{2,20})$/', $k, $km) && $v !== '') {
+            [$keyToken, $keyBank, $keyText] = [$km[1], $km[2], $v];
+            break;
+        }
+    }
+    $text = $keyText !== '' ? $keyText : $pick(['text', 'message', 'body', 'sms', 'content', 'msg', 'notification', 'big_text', 'title']);
     if ($text === '' && !is_array($json) && !$post) {
         $text = trim($raw);
     }
@@ -199,9 +209,9 @@ function smsExtractPayload(string $raw, array $post, array $query, array $header
     if ($text !== '' && $title !== '' && $title !== $text && !str_contains($text, $title)) {
         $text = $title . "\n" . $text;
     }
-    $bank = strtolower($pick(['bank', 'bank_code', 'bankcode', 'code']));
-    $token = '';
-    foreach (['authorization', 'x-admin-token', 'x-token', 'x-api-key'] as $h) {
+    $bank = $keyBank !== '' ? $keyBank : strtolower($pick(['bank', 'bank_code', 'bankcode', 'code']));
+    $token = $keyToken;
+    foreach ($token !== '' ? [] : ['authorization', 'x-admin-token', 'x-token', 'x-api-key'] as $h) {
         if (!empty($headers[$h])) {
             $token = trim(preg_replace('/^Bearer\s+/i', '', $headers[$h]));
             break;
@@ -210,5 +220,7 @@ function smsExtractPayload(string $raw, array $post, array $query, array $header
     if ($token === '') {
         $token = $pick(['token', 'admin_token', 'admintoken']) ?: ($query['token'] ?? '');
     }
-    return ['text' => $text, 'bank' => $bank, 'token' => $token, 'keys' => array_keys($flat)];
+    // never let a token-looking field name reach the logs
+    $keys = array_map(fn($k) => preg_replace('/^[a-z0-9]{16,}(?=_)/', '<token>', (string) $k), array_keys($flat));
+    return ['text' => $text, 'bank' => $bank, 'token' => $token, 'keys' => $keys];
 }
