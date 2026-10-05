@@ -2190,8 +2190,8 @@ function restoreCustomEmojiLabel($value)
     }
     $map = customEmojiLabels();
     $restored = $map[$value] ?? $value;
-    if ($restored === $value && function_exists('premiumEmojiRestoreLabel')) {
-        $restored = premiumEmojiRestoreLabel($value);
+    if ($restored === $value && function_exists('premiumEmojiRestoreName')) {
+        $restored = premiumEmojiRestoreName($value);
     }
     return $restored;
 }

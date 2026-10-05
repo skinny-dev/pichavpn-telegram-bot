@@ -47,6 +47,33 @@ t('non-numeric id rejected (no tag injection)', premiumEmojiEntitiesToTags('🔥
 t('null entities fine', premiumEmojiEntitiesToTags('x', null) === 'x');
 t('result is accepted by the name check', containsHtmlMarkup(premiumEmojiEntitiesToTags('40 گیگ 🔥', [$ent(7, 2, '5368324170671202286')])) === false);
 
+// --- the screenshot bug #2: a premium emoji typed into a name must not vanish from reply keyboards
+$tagName = '<tg-emoji emoji-id="5368324170671202286">✨</tg-emoji> 1 ماهه (حجمی)';
+$rk = json_encode(['keyboard' => [[['text' => $tagName], ['text' => '🔥 نامحدود']]], 'resize_keyboard' => true], JSON_UNESCAPED_UNICODE);
+cfg(true, ['✨' => '5368324170671202286'], true);
+$m = json_decode(premiumEmojiPrepareButtons(['reply_markup' => $rk])['reply_markup'], true);
+t('reply keyboard: tag stripped, emoji character kept', $m['keyboard'][0][0]['text'] === '✨ 1 ماهه (حجمی)' && $m['keyboard'][0][1]['text'] === '🔥 نامحدود' && $m['resize_keyboard'] === true, json_encode($m, JSON_UNESCAPED_UNICODE));
+$ik = json_encode(['inline_keyboard' => [[['text' => $tagName, 'callback_data' => 'c']]]], JSON_UNESCAPED_UNICODE);
+t('inline keyboard with icons ON: tag kept for the icon conversion', json_decode(premiumEmojiPrepareButtons(['reply_markup' => $ik])['reply_markup'], true)['inline_keyboard'][0][0]['text'] === $tagName);
+cfg(true, ['✨' => '5368324170671202286'], false);
+t('inline keyboard with icons OFF: tag stripped, emoji kept', json_decode(premiumEmojiPrepareButtons(['reply_markup' => $ik])['reply_markup'], true)['inline_keyboard'][0][0]['text'] === '✨ 1 ماهه (حجمی)');
+unlink($tmp);
+premiumEmojiConfig(true);
+t('layer disabled entirely: tags still never reach a button as text', json_decode(premiumEmojiPrepareButtons(['reply_markup' => $ik])['reply_markup'], true)['inline_keyboard'][0][0]['text'] === '✨ 1 ماهه (حجمی)');
+t('keyboard without tags untouched (byte for byte)', premiumEmojiPrepareButtons(['reply_markup' => '{"keyboard":[[{"text":"a"}]]}'])['reply_markup'] === '{"keyboard":[[{"text":"a"}]]}');
+
+// --- tap on that reply-keyboard button: map the plain text back to the stored name (sqlite stands in for MySQL)
+$pdo = new PDO('sqlite::memory:');
+$pdo->exec("CREATE TABLE category (id INTEGER, remark TEXT); CREATE TABLE product (id INTEGER, name_product TEXT); CREATE TABLE marzban_panel (name_panel TEXT)");
+$pdo->prepare("INSERT INTO category VALUES (1, ?), (2, '2 ماهه (حجمی)')")->execute([$tagName]);
+$pdo->exec("INSERT INTO product VALUES (1, '40 گیگ')");
+function convertPersianNumbersToEnglish($v) { return strtr($v, ['۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9']); }
+t('tap "✨ 1 ماهه (حجمی)" maps back to the stored name', premiumEmojiRestoreName('✨ 1 ماهه (حجمی)') === $tagName, premiumEmojiRestoreName('✨ 1 ماهه (حجمی)'));
+t('tap without the emoji also maps back', premiumEmojiRestoreName('1 ماهه (حجمی)') === $tagName);
+t('a name without a tag is untouched', premiumEmojiRestoreName('2 ماهه (حجمی)') === '2 ماهه (حجمی)');
+t('unrelated text untouched', premiumEmojiRestoreName('سلام') === 'سلام');
+t('text with < is never remapped', premiumEmojiRestoreName('<b>x</b>') === '<b>x</b>');
+
 // --- disabled = no-op
 cfg(false, ['🔥' => '1111111']);
 t('disabled: html unchanged', premiumEmojiWrapHtml('🔥 hi') === '🔥 hi');
@@ -86,27 +113,13 @@ $m = json_decode($p['reply_markup'], true);
 t('inline button label wrapped, callback_data kept', $m['inline_keyboard'][0][0]['text'] === '<tg-emoji emoji-id="1111111">🔥</tg-emoji> خرید' && $m['inline_keyboard'][0][0]['callback_data'] === 'buy', $p['reply_markup']);
 $kb = json_encode(['keyboard' => [[['text' => '🛍 فروشگاه'], ['text' => 'بدون ایموجی']]], 'resize_keyboard' => true], JSON_UNESCAPED_UNICODE);
 $m = json_decode(premiumEmojiApplyPayload(['reply_markup' => $kb], 'sendMessage')['reply_markup'], true);
-t('reply-keyboard label wrapped, others and options kept', strpos($m['keyboard'][0][0]['text'], 'emoji-id="3333333"') !== false && $m['keyboard'][0][1]['text'] === 'بدون ایموجی' && $m['resize_keyboard'] === true);
+t('reply-keyboard labels are left alone (Telegram draws no icons there), options kept', $m['keyboard'][0][0]['text'] === '🛍 فروشگاه' && $m['keyboard'][0][1]['text'] === 'بدون ایموجی' && $m['resize_keyboard'] === true);
 $kb = json_encode(['inline_keyboard' => [[['text' => 'a < b 🔥 & c', 'callback_data' => 'x']]]], JSON_UNESCAPED_UNICODE);
 $m = json_decode(premiumEmojiApplyPayload(['reply_markup' => $kb], 'sendMessage')['reply_markup'], true);
 t('label with < and & survives the HTML round trip', $m['inline_keyboard'][0][0]['text'] === 'a < b <tg-emoji emoji-id="1111111">🔥</tg-emoji> & c', $m['inline_keyboard'][0][0]['text']);
 $kb = json_encode(['inline_keyboard' => [[['text' => '🔥 x', 'icon_custom_emoji_id' => '77', 'callback_data' => 'x']]]], JSON_UNESCAPED_UNICODE);
 t('button that already has an icon is left alone', json_decode(premiumEmojiApplyPayload(['reply_markup' => $kb], 'sendMessage')['reply_markup'], true)['inline_keyboard'][0][0]['text'] === '🔥 x');
 t('invalid reply_markup string survives', premiumEmojiApplyPayload(['reply_markup' => 'not json'], 'sendMessage')['reply_markup'] === 'not json');
-
-// --- tap restore: matches what upstream sends (first emoji becomes the icon)
-foreach (['🔥 خرید', '🔥 خرید ❤', '🛍 فروشگاه', 'بدون ایموجی'] as $label) {
-    $mine = premiumEmojiButtonText($label);
-    $theirs = splitCustomEmojiLabel(htmlspecialchars_decode(premiumEmojiWrapHtml(htmlspecialchars($label, ENT_NOQUOTES))))['text'];
-    t("button text equals upstream split for \"$label\" -> \"$mine\"", $mine === $theirs, "$mine vs $theirs");
-}
-cfg(true, ['🔥' => '1111111', '🛍' => '3333333']);
-$textbotlang = ['keyboard' => ['buy' => '🔥 خرید سرویس', 'shop' => '🛍 فروشگاه', 'plain' => 'بدون ایموجی'], 'msg' => ['long' => str_repeat('x', 300)]];
-t('tap on "خرید سرویس" maps back to the original label', premiumEmojiRestoreLabel('خرید سرویس') === '🔥 خرید سرویس');
-t('tap on "فروشگاه" maps back', premiumEmojiRestoreLabel('فروشگاه') === '🛍 فروشگاه');
-t('unrelated text unchanged', premiumEmojiRestoreLabel('سلام') === 'سلام');
-t('label without emoji unchanged', premiumEmojiRestoreLabel('بدون ایموجی') === 'بدون ایموجی');
-t('very long text skipped', premiumEmojiRestoreLabel(str_repeat('y', 200)) === str_repeat('y', 200));
 
 // --- aliases: a close premium emoji stands in for one the pack lacks
 cfg(true, ['✔' => '80001', '🔴' => '80002', '🛍' => '80003']);
@@ -167,23 +180,8 @@ cfg(true, ['🗓' => '70007', '🔥' => '50005'], false);
 $off = premiumEmojiApplyPayload(['reply_markup' => $kb1, 'text' => '🔥 x', 'parse_mode' => 'HTML'], 'sendMessage');
 t('buttons OFF: labels keep the plain emoji', $off['reply_markup'] === $kb1);
 t('buttons OFF: message text still gets premium emoji', strpos($off['text'], '<tg-emoji emoji-id="50005">') === 0);
-$textbotlang = ['k' => ['a' => '🗓 1 ماهه (حجمی)']];
-t('buttons OFF: no tap remapping', premiumEmojiRestoreLabel('1 ماهه (حجمی)') === '1 ماهه (حجمی)');
 cfg(true, ['🗓' => '70007', '🔥' => '50005'], true);
 
-// --- real language file: speed + no crash
-$textbotlang = require $root . '/lang/fa.php';
-$wrapN = 0;
-$t0 = microtime(true);
-cfg(true, ['🛍' => '1', '💰' => '2', '💳' => '3', '🔑' => '4', '👤' => '5', '📊' => '6', '🔙' => '7', '✅' => '8', '❌' => '9', '⚠️' => '10', '📌' => '11'] + array_combine(['🔹', '🔸', '⭕️', '💵'], ['12', '13', '14', '15']));
-$cfgMap = premiumEmojiConfig()['map'];
-foreach ($cfgMap as $k => $v) { $cfgMap[$k] = (string) (10000 + (int) $v); }
-cfg(true, $cfgMap);
-$first = premiumEmojiRestoreLabel('خرید سرویس');
-$ms = (microtime(true) - $t0) * 1000;
-t(sprintf('restore index over the full Farsi language file builds in %.0f ms (limit 400)', $ms), $ms < 400, $ms);
-$t0 = microtime(true); premiumEmojiRestoreLabel('x'); $ms2 = (microtime(true) - $t0) * 1000;
-t('later lookups are instant', $ms2 < 5, $ms2);
 unlink($tmp);
 echo "\nFAILED: $fails\n";
 exit($fails ? 1 : 0);

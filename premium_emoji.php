@@ -161,7 +161,7 @@ function premiumEmojiApplyPayload(array $datas, $method = '')
         $markup = json_decode($datas['reply_markup'], true);
         if (is_array($markup)) {
             $changed = false;
-            foreach (['keyboard', 'inline_keyboard'] as $key) {
+            foreach (['inline_keyboard'] as $key) { // reply keyboards never get icons: Telegram does not draw them there
                 if (!isset($markup[$key]) || !is_array($markup[$key])) {
                     continue;
                 }
@@ -193,55 +193,85 @@ function premiumEmojiApplyPayload(array $datas, $method = '')
     return $datas;
 }
 
-/** The label Telegram will deliver when a user taps a button whose first emoji became its icon. */
-function premiumEmojiButtonText($label)
+
+/**
+ * Runs before every send. A button label that carries a <tg-emoji> tag (an admin typed a premium emoji into a name or text)
+ * keeps its emoji as a normal character on every reply keyboard, and on inline keyboards unless premium icons are switched on.
+ * Reason: when the bot turns the emoji into a button icon and Telegram does not draw it, the label silently loses its emoji.
+ */
+function premiumEmojiPrepareButtons(array $datas)
 {
-    $wrapped = premiumEmojiWrapHtml(htmlspecialchars((string) $label, ENT_NOQUOTES, 'UTF-8'));
-    if ($wrapped === htmlspecialchars((string) $label, ENT_NOQUOTES, 'UTF-8')) {
-        return (string) $label;
+    if (!isset($datas['reply_markup']) || !is_string($datas['reply_markup']) || stripos($datas['reply_markup'], '<tg-emoji') === false) {
+        return $datas;
     }
-    // same rule as splitCustomEmojiLabel(): the first <tg-emoji> becomes the icon, the others stay as plain emoji
-    $decoded = htmlspecialchars_decode($wrapped, ENT_NOQUOTES);
-    $first = false;
-    $text = preg_replace_callback('#<tg-emoji\b[^>]*>(.*?)</tg-emoji>#isu', function ($m) use (&$first) {
-        if (!$first) {
-            $first = true;
-            return '';
+    $markup = json_decode($datas['reply_markup'], true);
+    if (!is_array($markup)) {
+        return $datas;
+    }
+    $cfg = premiumEmojiConfig();
+    $iconsOn = $cfg['enabled'] && $cfg['buttons'];
+    $changed = false;
+    foreach (['keyboard', 'inline_keyboard'] as $key) {
+        if ($key === 'inline_keyboard' && $iconsOn) {
+            continue; // botapi.php turns the first emoji into the icon
         }
-        return $m[1];
-    }, $decoded);
-    $text = trim(preg_replace('/[ \t]+/u', ' ', (string) $text));
-    return $text === '' ? preg_replace('#<tg-emoji\b[^>]*>(.*?)</tg-emoji>#isu', '$1', $decoded) : $text;
+        if (!isset($markup[$key]) || !is_array($markup[$key])) {
+            continue;
+        }
+        foreach ($markup[$key] as $r => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            foreach ($row as $b => $button) {
+                if (is_array($button) && isset($button['text']) && is_string($button['text']) && stripos($button['text'], '<tg-emoji') !== false) {
+                    $markup[$key][$r][$b]['text'] = preg_replace('#<tg-emoji\b[^>]*>(.*?)</tg-emoji>#isu', '$1', $button['text']);
+                    $changed = true;
+                }
+            }
+        }
+    }
+    if ($changed) {
+        $encoded = json_encode($markup, JSON_UNESCAPED_UNICODE);
+        if ($encoded !== false) {
+            $datas['reply_markup'] = $encoded;
+        }
+    }
+    return $datas;
 }
 
 /**
- * An incoming message text equal to a button label minus its (now icon) emoji -> the original label,
- * so `$text == $textbotlang[...]` comparisons keep working. Only runs for short texts.
+ * A name stored with a premium-emoji tag (category, product, panel) is shown on a reply keyboard as plain text, so
+ * the text Telegram sends back on a tap no longer equals the stored name. Map it back to the stored name.
  */
-function premiumEmojiRestoreLabel($text)
+function premiumEmojiRestoreName($text)
 {
     static $index = null;
-    $cfg = premiumEmojiConfig();
-    if (!$cfg['enabled'] || !$cfg['buttons'] || !is_string($text) || $text === '' || mb_strlen($text) > 120) {
+    if (!is_string($text) || $text === '' || strpos($text, '<') !== false || mb_strlen($text) > 120) {
         return $text;
     }
     if ($index === null) {
         $index = [];
-        global $textbotlang;
-        $walk = function ($node) use (&$walk, &$index) {
-            if (is_array($node)) {
-                foreach ($node as $v) {
-                    $walk($v);
+        global $pdo;
+        if (isset($pdo) && $pdo instanceof PDO) {
+            $norm = function ($v) {
+                return function_exists('convertPersianNumbersToEnglish') ? convertPersianNumbersToEnglish($v) : $v;
+            };
+            foreach ([['category', 'remark'], ['product', 'name_product'], ['marzban_panel', 'name_panel']] as [$table, $col]) {
+                try {
+                    $names = $pdo->query("SELECT `$col` FROM `$table` WHERE `$col` LIKE '%<tg-emoji%'")->fetchAll(PDO::FETCH_COLUMN);
+                } catch (Throwable $e) {
+                    continue;
                 }
-            } elseif (is_string($node) && $node !== '' && mb_strlen($node) <= 120 && strpos($node, "\n") === false) {
-                $plain = premiumEmojiButtonText($node);
-                if ($plain !== $node && $plain !== '' && !isset($index[$plain])) {
-                    $index[$plain] = $node;
+                foreach ($names as $name) {
+                    $plain = $norm(preg_replace('#<tg-emoji\b[^>]*>(.*?)</tg-emoji>#isu', '$1', $name));
+                    $noIcon = $norm(trim(preg_replace('/[ \t]+/u', ' ', preg_replace('#<tg-emoji\b[^>]*>.*?</tg-emoji>#isu', '', $name, 1))));
+                    foreach ([$plain, $noIcon] as $variant) {
+                        if ($variant !== '' && !isset($index[$variant])) {
+                            $index[$variant] = $name;
+                        }
+                    }
                 }
             }
-        };
-        if (isset($textbotlang) && is_array($textbotlang)) {
-            $walk($textbotlang);
         }
     }
     return $index[$text] ?? $text;

@@ -176,6 +176,7 @@ function telegram($method, $datas = [], $token = null, $allowEmojiFallback = tru
     }
 
     if (function_exists('premiumEmojiApplyPayload')) {
+        $datas = premiumEmojiPrepareButtons($datas);
         $datas = premiumEmojiApplyPayload($datas, $method);
     }
 
