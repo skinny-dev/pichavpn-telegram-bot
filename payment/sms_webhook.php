@@ -71,12 +71,15 @@ $notify = function (string $text) use ($setting): void {
 
 $approve = 'smsApproveOrder';
 
-$res = smsProcess($pdo, $p['text'], $p['bank'], $approve);
-
-$amt = $res['parsed']['amount_rial'] ?? 0;
-smsLog("OK ip=$ip bank={$p['bank']} status={$res['status']} amount_rial=$amt order=" . ($res['order']['id_order'] ?? '-'));
-if (in_array($res['status'], ['unmatched', 'ambiguous', 'review'], true) && $amt > 0) {
-    $why = ['unmatched' => 'سفارش بازی با این مبلغ پیدا نشد', 'ambiguous' => 'چند سفارش هم‌مبلغ وجود دارد', 'review' => 'نیاز به بررسی دستی'][$res['status']];
-    $notify("⚠️ واریز بانکی بدون تطبیق\n💰 " . number_format(intdiv($amt, 10)) . " تومان\n❗️ $why");
+$results = smsProcessText($pdo, $p['text'], $p['bank'], $approve);
+$statuses = [];
+foreach ($results as $res) {
+    $amt = $res['parsed']['amount_rial'] ?? 0;
+    $statuses[] = $res['status'];
+    smsLog("OK ip=$ip bank={$p['bank']} status={$res['status']} amount_rial=$amt order=" . ($res['order']['id_order'] ?? '-'));
+    if (in_array($res['status'], ['unmatched', 'ambiguous', 'review'], true) && $amt > 0) {
+        $why = ['unmatched' => 'سفارش بازی با این مبلغ پیدا نشد', 'ambiguous' => 'چند سفارش هم‌مبلغ وجود دارد', 'review' => 'نیاز به بررسی دستی'][$res['status']];
+        $notify("⚠️ واریز بانکی بدون تطبیق\n💰 " . number_format(intdiv($amt, 10)) . " تومان\n❗️ $why");
+    }
 }
-smsReply(200, ['ok' => true, 'status' => $res['status']]);
+smsReply(200, ['ok' => true, 'status' => $statuses[0] ?? 'ignored', 'messages' => count($statuses)]);

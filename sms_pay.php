@@ -54,6 +54,38 @@ function smsParse(string $text): ?array
     return ['kind' => $kind, 'amount_rial' => $amount, 'balance_rial' => $balance, 'sms_time' => $time];
 }
 
+/** Bank-message timestamp ("1405/07/13 20:44", Jalali, Tehran) as a unix time, or null. */
+function smsTimeToUnix(?string $smsTime): ?int
+{
+    if ($smsTime === null || !preg_match('#^(\d{4})/(\d{2})/(\d{2}) (\d{2}):(\d{2})$#', $smsTime, $m)) {
+        return null;
+    }
+    require_once __DIR__ . '/jdf.php';
+    [$gy, $gm, $gd] = jalali_to_gregorian((int) $m[1], (int) $m[2], (int) $m[3]);
+    $dt = new DateTime(sprintf('%04d-%02d-%02d %02d:%02d:00', $gy, $gm, $gd, $m[4], $m[5]), new DateTimeZone('Asia/Tehran'));
+    return $dt->getTimestamp();
+}
+
+/** Same deposit => same fingerprint, whether it came as an SMS, a notification or inside a grouped notification. */
+function smsFingerprint(array $parsed, string $bank): string
+{
+    return sha1(implode('|', [$parsed['kind'], $parsed['amount_rial'], $parsed['balance_rial'] ?? '', $parsed['sms_time'] ?? '', strtolower($bank)]));
+}
+
+/** Google Messages groups several bank messages into one notification; each starts with a line «بلو». */
+function smsSplitMessages(string $text): array
+{
+    $parts = preg_split('/^\s*بلو\s*$/mu', $text);
+    $out = [];
+    foreach ($parts as $part) {
+        $part = trim($part);
+        if ($part !== '' && smsParse("بلو\n" . $part) !== null) {
+            $out[] = "بلو\n" . $part;
+        }
+    }
+    return $out ?: [$text];
+}
+
 function smsWindowSeconds(PDO $pdo): int
 {
     $st = $pdo->prepare("SELECT ValuePay FROM PaySetting WHERE NamePay = 'sms_match_window'");
@@ -114,11 +146,11 @@ function smsUniqueAmount(PDO $pdo, int $base): int
  * review (matched but not safely approvable), matched.
  * Approval itself is injected so tests do not need Telegram/panels.
  */
-function smsProcess(PDO $pdo, string $text, string $bank, callable $approve, ?int $now = null): array
+function smsProcess(PDO $pdo, string $text, string $bank, callable $approve, ?int $now = null, int $maxAgeSec = 21600): array
 {
     $now = $now ?? time();
-    $fp = sha1(smsNormalizeDigits(trim($text)) . '|' . strtolower($bank));
     $parsed = smsParse($text);
+    $fp = $parsed ? smsFingerprint($parsed, $bank) : sha1(smsNormalizeDigits(trim($text)) . '|' . strtolower($bank));
 
     $ins = $pdo->prepare("INSERT IGNORE INTO sms_inbox (fingerprint,received_at,bank,kind,amount_rial,balance_rial,sms_time,status,note) VALUES (?,?,?,?,?,?,?,?,?)");
     $kind = $parsed['kind'] ?? 'unknown';
@@ -133,6 +165,11 @@ function smsProcess(PDO $pdo, string $text, string $bank, callable $approve, ?in
     };
     if ($parsed === null || $kind !== 'deposit') {
         return ['status' => 'ignored', 'order' => null, 'duplicate' => false, 'parsed' => $parsed];
+    }
+    $sentAt = smsTimeToUnix($parsed['sms_time']);
+    if ($maxAgeSec > 0 && $sentAt !== null && $now - $sentAt > $maxAgeSec) {
+        $set('stale', null, 'bank timestamp older than ' . intdiv($maxAgeSec, 3600) . 'h');
+        return ['status' => 'stale', 'order' => null, 'duplicate' => false, 'parsed' => $parsed];
     }
     if ($parsed['amount_rial'] % 10 !== 0) {
         $set('review', null, 'amount not a whole toman');
@@ -159,6 +196,16 @@ function smsProcess(PDO $pdo, string $text, string $bank, callable $approve, ?in
     $set('matched', $order['id_order']);
     $approve($order);
     return ['status' => 'matched', 'order' => $order, 'duplicate' => false, 'parsed' => $parsed];
+}
+
+/** Process a forwarded text that may contain several grouped messages. @return array[] one result per message */
+function smsProcessText(PDO $pdo, string $text, string $bank, callable $approve, ?int $now = null, int $maxAgeSec = 21600): array
+{
+    $res = [];
+    foreach (smsSplitMessages($text) as $msg) {
+        $res[] = smsProcess($pdo, $msg, $bank, $approve, $now, $maxAgeSec);
+    }
+    return $res;
 }
 
 /** Pull the SMS text / bank / token out of whatever the forwarder sends. */
@@ -298,7 +345,7 @@ function smsStoreUnclaimed(PDO $pdo, string $text, string $bank = 'blu', ?int $n
     if ($parsed === null || $parsed['kind'] !== 'deposit') {
         return null;
     }
-    $fp = sha1(smsNormalizeDigits(trim($text)) . '|' . strtolower($bank));
+    $fp = smsFingerprint($parsed, $bank);
     $ins = $pdo->prepare("INSERT IGNORE INTO sms_inbox (fingerprint,received_at,bank,kind,amount_rial,balance_rial,sms_time,status,note) VALUES (?,?,?,?,?,?,?,'unmatched','imported')");
     $ins->execute([$fp, $now ?? time(), $bank, 'deposit', $parsed['amount_rial'], $parsed['balance_rial'], $parsed['sms_time']]);
     return $ins->rowCount() === 1 ? $parsed : null;
