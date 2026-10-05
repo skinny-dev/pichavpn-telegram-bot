@@ -50,7 +50,13 @@ def mask(s):
     s = re.sub(r"((?:[?&;]|^)([A-Za-z_\-]*(?:key|token|secret|pass|pwd|sign|auth|hash|code)[A-Za-z_\-]*)=)([^&\s\"']+)",
                lambda m: m.group(1) + mask_token(m.group(3)), s, flags=re.I)
     # long random-looking strings anywhere
-    s = re.sub(r"[A-Za-z0-9_\-+/=]{28,}", lambda m: mask_token(m.group()) if not m.group().startswith(("android.", "androidx.", "com.", "java.", "kotlin.")) else m.group(), s)
+    def _long(m):
+        t = m.group()
+        # class / package / path names are structure, not secrets: they contain dots or slashes between words
+        if re.search(r"[A-Za-z]{2,}[./$][A-Za-z]{2,}", t):
+            return t
+        return mask_token(t)
+    s = re.sub(r"[A-Za-z0-9_\-+/=]{28,}", _long, s)
     # bearer/basic values
     s = re.sub(r"(Bearer|Basic)\s+\S+", lambda m: m.group(1) + " <masked>", s, flags=re.I)
     return s
@@ -106,6 +112,36 @@ def main(path):
         if n.endswith((".xml", ".arsc")) or n == "AndroidManifest.xml":
             for s in utf16_runs(data):
                 strings.setdefault(s, n)
+
+    # strings that come from native libraries / big data files are noise for protocol discovery
+    native = {s: n for s, n in strings.items() if n.endswith(".so") or n.startswith("lib/") or n.endswith((".dat", ".bin"))}
+    strings = {s: n for s, n in strings.items() if s not in native}
+
+    # --- what takes the space, and is a proxy/VPN core bundled?
+    sized = sorted(((i.file_size, i.filename) for i in z.infolist()), reverse=True)
+    p("largest files inside the APK:")
+    for sz, n in sized[:12]:
+        p("   %8.1f MB  %s" % (sz / 1048576, n))
+    core = sorted({n for n in names if re.search(r"(xray|v2ray|sing-?box|hysteria|tun2socks|geosite|geoip|clash|libgojni|libgo|gvisor|wireguard|openvpn)", n, re.I)})
+    p("proxy / VPN components bundled: " + (", ".join(core[:15]) if core else "none by file name"))
+    p("(a bank-SMS forwarder normally does not need these; ask whoever made the app why it ships them)")
+    allbytes = {}
+    links = set()
+    for n in names:
+        if re.match(r"classes\d*\.dex$", n) or n.startswith("assets/") or n.endswith((".json", ".xml", ".txt", ".properties")):
+            try:
+                data = z.read(n)[:MAX_SCAN]
+            except Exception:
+                continue
+            for m in re.finditer(rb"(?:vless|vmess|trojan|ss|hysteria2?|tuic|socks5?)://[\x21-\x7e]{6,300}", data):
+                t = m.group().decode("ascii", "ignore")
+                scheme, rest = t.split("://", 1)
+                host = re.sub(r"^[^@]*@", "", rest).split("?")[0].split("#")[0]
+                links.add("%s://<masked>@%s" % (scheme, re.sub(r"^(.{3}).*(:\d+)?$", lambda mm: mm.group(1) + "…" + (mm.group(2) or ""), host)))
+    p("proxy links (vless/vmess/trojan/ss...) hard-coded in the app: " + (str(len(links)) + " found" if links else "none found"))
+    for l in sorted(links)[:10]:
+        p("   " + l)
+    p("")
 
     # --- manifest facts
     manifest = [s for s, n in strings.items() if n == "AndroidManifest.xml"]
@@ -165,11 +201,23 @@ def main(path):
         p("   (none: the app probably forwards the raw message and the server does the parsing)")
     p("")
 
-    # --- other relevant strings
-    rel = sorted({mask(s) for s in strings if 6 <= len(s) <= 100 and KEYWORDS.search(s) and not s.startswith(("android.", "androidx.", "com.google", "kotlin", "java.", "Landroid", "L", "Ljava"))
-                  and re.fullmatch(r"[\x20-\x7e]+", s) and " " not in s.strip() or (len(s) <= 100 and s.lower().startswith("sms"))})
-    p("other relevant strings (first 80):")
-    for x in rel[:80]:
+    dex = {s: n for s, n in strings.items() if re.match(r"classes\d*\.dex$", n)}
+    own = sorted({mask(s) for s in dex if "mirzabot" in s.lower() or "smsforwarder" in s.lower()})
+    p("the app's own classes / members (from the dex files):")
+    for x in own[:80]:
+        p("   " + x)
+    p("")
+    code_strings = sorted({mask(s) for s in dex if 4 <= len(s) <= 90 and re.search(r"[A-Za-z]{3}", s)
+                           and not re.match(r"(L?(android|androidx|kotlin|kotlinx|java|javax|com/google|com/android|dalvik|org/jetbrains)|\(|\[|<)", s)
+                           and (KEYWORDS.search(s) or "://" in s or s.startswith("/"))})
+    p("string constants in the app code that look like network / protocol details (first 120):")
+    for x in code_strings[:120]:
+        p("   " + x)
+    p("")
+    ui = sorted({mask(s) for s, n in strings.items() if n in ("resources.arsc",) or n.startswith("res/") for s in [s]
+                 if 4 <= len(s) <= 80 and (" " in s or re.search(r"[\u0600-\u06ff]", s)) and not re.match(r"(Theme|Widget|Base|TextAppearance|ThemeOverlay|Platform|res/|abc_|m3_|mtrl_|android)", s)})
+    p("texts shown on the app's screens (labels, hints, messages) (first 120):")
+    for x in ui[:120]:
         p("   " + x)
     p("")
     p("--- end of report. Secrets are masked; the full APK was not uploaded anywhere. ---")
