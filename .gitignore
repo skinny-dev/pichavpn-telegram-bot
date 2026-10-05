@@ -2,3 +2,4 @@ lang/override/
 config.local.php
 *.sql
 *.tgz
+maintenance/token.txt
