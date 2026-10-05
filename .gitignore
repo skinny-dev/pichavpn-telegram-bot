@@ -3,3 +3,5 @@ config.local.php
 *.sql
 *.tgz
 maintenance/token.txt
+*.zip
+backup*
