@@ -6,3 +6,19 @@ Admin stats menu now shows: کل / یک ساعت اخیر / امروز / دیر�
   `/expense 150000 توضیحات`   `/capital 5000000 توضیحات`
 - Emergency internet volume = products whose name contains «اضطراری».
 - `php tests/stats_sqlite_test.php` runs the report against fake SQLite data.
+
+## Picha Panel (dashboard/)
+Mobile-first, RTL admin panel (React + Tailwind + shadcn/ui components). Open `https://YOUR_DOMAIN/dashboard/`.
+Log in with the bot's `admin` table credentials (role `administrator`).
+
+- **Overview / Statistics** (all, last hour, today, yesterday, this month, last month) — same numbers as the bot's stats report.
+- **Users, Orders, Products, Categories, Payments, Expenses, Capital**: spreadsheet-style grids. Double-click or Enter edits a cell;
+  arrows/Tab move; Paste from Excel/Sheets works; on phones, tap a cell to edit in a sheet.
+  Changing a user's balance writes an `add/low balance by admin` payment row so the accounting stays correct.
+- **Products tree**: drag categories and products (also between categories); order is saved to `sort_order`.
+- **Import / export** on every grid: CSV, Excel, JSON. Import checks the file first (dry run) and applies all-or-nothing.
+- Code: `dashboard/api.php` (JSON API), `dashboard-src/` (frontend source). The built files in `dashboard/` are committed, so the server needs no Node.
+  Rebuild: `cd dashboard-src && npm ci && npm run build`.
+- Tests: `python3 tests/api_test.py URL admin PASS` (needs `tests/seed_test_db.sql` loaded), `cd dashboard-src && npm test`,
+  `node tests/panel_e2e.mjs` (Playwright, needs `npm i playwright-core`).
+- The old server-rendered `panel/` is untouched and still works.

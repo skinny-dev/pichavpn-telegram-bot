@@ -1,0 +1,45 @@
+@import '@fontsource-variable/vazirmatn';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; --foreground: 222 28% 12%;
+    --card: 0 0% 100%; --card-foreground: 222 28% 12%;
+    --popover: 0 0% 100%; --popover-foreground: 222 28% 12%;
+    --primary: 221 83% 53%; --primary-foreground: 0 0% 100%;
+    --secondary: 220 20% 95%; --secondary-foreground: 222 28% 18%;
+    --muted: 220 20% 96%; --muted-foreground: 220 9% 40%;
+    --accent: 220 30% 94%; --accent-foreground: 222 28% 18%;
+    --destructive: 0 72% 46%; --destructive-foreground: 0 0% 100%;
+    --success: 142 66% 33%; --success-foreground: 0 0% 100%;
+    --border: 220 16% 90%; --input: 220 16% 86%; --ring: 221 83% 53%;
+    --radius: 0.75rem;
+  }
+  .dark {
+    --background: 222 30% 7%; --foreground: 210 20% 96%;
+    --card: 222 28% 10%; --card-foreground: 210 20% 96%;
+    --popover: 222 28% 10%; --popover-foreground: 210 20% 96%;
+    --primary: 217 91% 64%; --primary-foreground: 222 30% 8%;
+    --secondary: 222 20% 16%; --secondary-foreground: 210 20% 96%;
+    --muted: 222 20% 14%; --muted-foreground: 215 14% 66%;
+    --accent: 222 20% 18%; --accent-foreground: 210 20% 96%;
+    --destructive: 0 72% 58%; --destructive-foreground: 0 0% 100%;
+    --success: 142 55% 48%; --success-foreground: 222 30% 8%;
+    --border: 222 18% 18%; --input: 222 18% 22%; --ring: 217 91% 64%;
+  }
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-background text-foreground font-sans antialiased; font-feature-settings: 'ss01'; overscroll-behavior-y: none; }
+  :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { @apply rounded-full bg-border; }
+}
+
+@layer utilities {
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
