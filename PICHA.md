@@ -44,3 +44,26 @@ Tests: `php tests/premium_emoji_test.php`.
 - **Aliases** let an emoji the pack lacks borrow a close premium one (✅→✔, 💰→💵, 🛒→🛍, 💀→🚨 ...). `php scripts/premium_emoji.php alias list`.
 - **Catalog emoji** (`catalog on`): product and category *buttons* get a fitting emoji (⚡ ≤25 GB, ⭐ ≤100, 💎 ≤250, 👑 above, 🔥 unlimited, 🚨 emergency, 🗓 monthly categories).
   Display only: names in the database are never changed, because renewals look products up by name. `catalog preview` shows the result for your real catalog.
+
+## Card-to-card auto-approval (Mirza SMS Forwarder + Blu)
+
+How it works: when SMS auto-approval is on, each card-to-card top-up gets a unique amount
+(your price + 1..999 toman, never shared by two open orders). The forwarder app sends the
+bank's «واریز پول» SMS to `payment/sms_webhook.php`; the bot converts rial→toman, finds the
+single open order with that exact amount (created within `sms_match_window` minutes, default
+180) and approves it atomically. Withdrawals are ignored; replayed SMS are ignored
+(fingerprint); no match / two matches go to the payment-report topic for manual review.
+
+Setup (on the server, in the bot folder):
+```
+php table.php                       # creates sms_inbox + settings
+php scripts/sms_setup.php token     # prints the token + webhook URL (shown once)
+php scripts/sms_setup.php on        # enable (off = nothing changes for customers)
+php scripts/sms_setup.php status    # state + last 15 SMS
+```
+In the app → Webhook tab: Webhook URL = the printed URL, Admin token = the printed token,
+Bank code `blu`, "must contain" `بلو`. Use "Test webhook reachability".
+Log of every request (token never logged): `storage/sms_webhook.log`.
+Rotate the token any time with `scripts/sms_setup.php token` (update the app after).
+The old built-in blind timer `autoconfirmcart` must stay OFF.
+Tests: `php tests/sms_pay_test.php`.

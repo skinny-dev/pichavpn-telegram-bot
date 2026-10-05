@@ -4677,22 +4677,31 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $PaySettingname = $card_info['namecard'];
         /* freed */
         $cardQuery = null;
-        $price_copy = $user['Processing_value'];
-        $valueprice = number_format($user['Processing_value']);
+        $cardPrice = intval($user['Processing_value']);
+        $smsMode = select("PaySetting", "ValuePay", "NamePay", "smsautoconfirm", "select")['ValuePay'] ?? 'offsms';
+        if ($smsMode === 'onsms') {
+            require_once __DIR__ . '/sms_pay.php';
+            $cardPrice = smsUniqueAmount($pdo, $cardPrice);
+        }
+        $price_copy = $cardPrice;
+        $valueprice = number_format($cardPrice);
         $replacements = [
             '{price}' => $valueprice,
             '{card_number}' => $card_number,
             '{name_card}' => $PaySettingname,
         ];
-        $price_copy = intval($user['Processing_value'] . "0");
+        $price_copy = intval($cardPrice . "0");
         $textcart = strtr($textbotlang['textbot']['cart'], $replacements);
+        if ($smsMode === 'onsms') {
+            $textcart .= "\n\n⚠️ <b>دقیقاً همین مبلغ</b> را واریز کنید تا پرداخت شما خودکار و فوری تأیید شود.";
+        }
         $invoice = "{$user['Processing_value_tow']}|{$user['Processing_value_one']}";
         $dateacc = date('Y/m/d H:i:s');
         $randomString = bin2hex(random_bytes(5));
         $stmt = $pdo->prepare("INSERT INTO Payment_report (id_user,id_order,time,price,payment_Status,Payment_Method,id_invoice) VALUES (?,?,?,?,?,?,?)");
         $payment_Status = "Unpaid";
         $Payment_Method = "cart to cart";
-        $stmt->execute([$from_id, $randomString, $dateacc, $user['Processing_value'], $payment_Status, $Payment_Method, $invoice]);
+        $stmt->execute([$from_id, $randomString, $dateacc, $cardPrice, $payment_Status, $Payment_Method, $invoice]);
         deletemessage($from_id, $message_id);
         if ($setting['statuscopycart'] == "1") {
             $sendresidcart = json_encode([
