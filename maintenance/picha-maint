@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Helper for the Picha maintenance bot. Run without arguments for help.
+ROOT="${PICHA_ROOT:-}"
+APP="$ROOT/opt/picha-maintenance"; ENVF="$ROOT/etc/picha-maintenance.env"
+LOGD="$ROOT/var/log/picha-maintenance"; STATED="$ROOT/var/lib/picha-maintenance"
+SVC=picha-maintenance
+[ -f "$ENVF" ] || { echo "not installed (missing $ENVF)"; exit 1; }
+sysd() { if [ -n "$ROOT" ]; then echo "(test mode: systemctl $*)"; else systemctl "$@"; fi; }
+py()   { ( set -a; . "$ENVF"; set +a; export PICHA_LOG_DIR="$LOGD" PICHA_STATE_DIR="$STATED" PICHA_MESSAGE_FILE="$APP/message.txt"; python3 "$APP/bot.py" "$@" ); }
+need_root() { [ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ] || { echo "run as root: sudo picha-maint $1"; exit 1; }; }
+
+case "${1:-help}" in
+  status)
+    if [ -z "$ROOT" ]; then
+      if systemctl is-active --quiet $SVC; then echo "service: RUNNING  (since $(systemctl show $SVC -p ActiveEnterTimestamp --value))"; else echo "service: NOT RUNNING"; fi
+      echo "restarts: $(systemctl show $SVC -p NRestarts --value)"
+    fi
+    py stats; echo; echo "--- last 12 log lines ---"; tail -n 12 "$LOGD/bot.log" 2>/dev/null || echo "(no log yet)";;
+  logs)     tail -n "${2:-50}" "$LOGD/bot.log";;
+  follow)   exec tail -n 20 -F "$LOGD/bot.log";;
+  errors)   grep -E " (WARNING|ERROR) " "$LOGD/bot.log" | tail -n "${2:-50}";;
+  messages) tail -n "${2:-20}" "$LOGD/messages.jsonl";;
+  journal)  journalctl -u $SVC -n "${2:-100}" --no-pager;;
+  stats)    py stats;;
+  check)    py check;;
+  test)     [ -n "${2:-}" ] || { echo "usage: picha-maint test <chat_id>   (your numeric Telegram id)"; exit 1; }; py test "$2";;
+  edit)     need_root edit; ${EDITOR:-nano} "$APP/message.txt" && echo "saved. The bot reloads the text within a minute.";;
+  show)     cat "$APP/message.txt";;
+  start|restart) need_root "$1"; sysd "$1" $SVC && echo "$1 done";;
+  stop)     need_root stop; sysd stop $SVC
+            echo "Maintenance mode stopped. The webhook is currently NOT set, so no bot receives messages."
+            echo "Restore the real bot now, e.g.:  php /var/www/html/mirzabotapp/table.php   (or: picha-maint webhook <url>)";;
+  webhook)  [ -n "${2:-}" ] || { echo "usage: picha-maint webhook <https-url>"; exit 1; }; py webhook "$2";;
+  set-token) need_root set-token; printf "New bot token (hidden): "; read -rs T; echo
+            [[ "$T" =~ ^[0-9]{5,}:[A-Za-z0-9_-]{20,}$ ]] || { echo "not a valid token format"; exit 1; }
+            ( umask 077; printf 'PICHA_BOT_TOKEN=%s\n' "$T" > "$ENVF" ); sysd restart $SVC; echo "token updated, service restarted";;
+  uninstall) need_root uninstall
+            read -rp "Remove the maintenance bot? Logs are kept in $LOGD. [y/N] " a; [[ "$a" =~ ^[Yy] ]] || exit 0
+            sysd disable --now $SVC; rm -f "$ROOT/etc/systemd/system/$SVC.service" "$ENVF"; rm -rf "$APP"; [ -n "$ROOT" ] || systemctl daemon-reload
+            rm -f "$ROOT/usr/local/bin/picha-maint"; echo "removed. Re-create the real bot's webhook if needed."; ;;
+  version)  py version;;
+  *) cat <<H
+picha-maint  -  control the maintenance bot
+  status | follow | logs [N] | errors [N] | messages [N] | journal [N] | stats | check
+  test <chat_id> | show | edit | start | stop | restart | set-token | webhook <url> | uninstall | version
+H
+  ;;
+esac
