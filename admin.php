@@ -1394,6 +1394,9 @@ elseif ($datain == "systemsms") {
         return;
     }
     DirectPayment($order_id);
+    if ($Payment_report['Payment_Method'] === 'variza') {
+        Editmessagetext($from_id, $message_id, "✅ پرداخت واریزا (رسید دستی) تأیید شد\n🧾 سفارش: <code>{$order_id}</code>\n💰 مبلغ: " . $format_price_cart . " تومان", $Confirm_pay);
+    }
     $pricecashback = select("PaySetting", "ValuePay", "NamePay", "chashbackcart", "select")['ValuePay'];
     $Balance_id = select("user", "*", "id", $Payment_report['id_user'], "select");
     if ($pricecashback != "0") {

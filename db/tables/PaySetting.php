@@ -89,6 +89,7 @@ $values = [
     'variza_status' => 'offvariza',
     'variza_api_token' => '0',
     'variza_webhook_secret' => '0',
+    'variza_receipt_delay' => '5',
     'minbalancevariza' => '20000',
     'maxbalancevariza' => '1000000',
     'chashbackvariza' => '0',

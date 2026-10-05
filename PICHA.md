@@ -73,3 +73,12 @@ before its order existed, the customer pressing «پرداخت کردم» makes 
 the stored deposit (exact amount, one unclaimed deposit, received ≤15 min before the order, <24h old).
 A message the server missed can be stored by hand: put the Blu texts in a file and run
 `php scripts/sms_setup.php import file.txt`, then the customer presses «پرداخت کردم».
+
+## Variza: manual receipt fallback
+Every Variza invoice has a «📎 پرداخت کردم، ارسال رسید» button. It is refused until `variza_receipt_delay` minutes (default 5) have
+passed since the invoice was created (the customer gets an alert with the remaining minutes). After that the customer sends a receipt
+photo and the admins get the same ✅/❌ buttons as card-to-card (plus a note that this is a Variza receipt to verify in the Variza
+dashboard or the bank). Safe by construction: approval is one atomic claim (`paid` can be set once), so a later Variza webhook, an SMS
+or a second admin click can never credit the order twice; a receipt cannot reopen an order that is already paid/rejected/expired;
+only the order's owner can attach a receipt; one receipt per order, and re-submits are rate limited.
+Change the delay: `UPDATE PaySetting SET ValuePay='10' WHERE NamePay='variza_receipt_delay';` (minutes).
