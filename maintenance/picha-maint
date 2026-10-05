@@ -29,7 +29,7 @@ case "${1:-help}" in
   start|restart) need_root "$1"; sysd "$1" $SVC && echo "$1 done";;
   stop)     need_root stop; sysd stop $SVC
             echo "Maintenance mode stopped. The webhook is currently NOT set, so no bot receives messages."
-            echo "Restore the real bot now, e.g.:  php /var/www/html/mirzabotapp/table.php   (or: picha-maint webhook <url>)";;
+            echo "Restore the real bot now, e.g.:  php /var/www/html/mirzaprobotconfig/table.php   (or: picha-maint webhook <url>)";;
   webhook)  [ -n "${2:-}" ] || { echo "usage: picha-maint webhook <https-url>"; exit 1; }; py webhook "$2";;
   set-token) need_root set-token; printf "New bot token (hidden): "; read -rs T; echo
             [[ "$T" =~ ^[0-9]{5,}:[A-Za-z0-9_-]{20,}$ ]] || { echo "not a valid token format"; exit 1; }

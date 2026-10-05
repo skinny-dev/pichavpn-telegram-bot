@@ -9,7 +9,7 @@ set -uo pipefail
 
 CONF="${PICHA_BACKUP_CONF:-/etc/picha-backup.conf}"
 [ -f "$CONF" ] && . "$CONF"
-APP_DIR="${APP_DIR:-/var/www/html/mirzabotapp}"
+APP_DIR="${APP_DIR:-/var/www/html/mirzaprobotconfig}"
 OUT_DIR="${OUT_DIR:-/root/picha-backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 TELEGRAM="${TELEGRAM:-0}"

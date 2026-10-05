@@ -7,7 +7,7 @@
 #   Options: --app DIR  --passfile FILE  --db-admin-args "-uroot"
 set -uo pipefail
 FILE="${1:-}"; shift || true
-APP_DIR="${APP_DIR:-/var/www/html/mirzabotapp}"; PASSFILE="${PASSFILE:-/root/.picha-backup-pass}"; MODE=""; ADMIN_ARGS="${DB_ADMIN_ARGS:--uroot}"
+APP_DIR="${APP_DIR:-/var/www/html/mirzaprobotconfig}"; PASSFILE="${PASSFILE:-/root/.picha-backup-pass}"; MODE=""; ADMIN_ARGS="${DB_ADMIN_ARGS:--uroot}"
 while [ $# -gt 0 ]; do case "$1" in
   --verify) MODE=verify; shift;; --apply) MODE=apply; shift;; --extract-sql) MODE=extract; shift;;
   --app) APP_DIR="$2"; shift 2;; --passfile) PASSFILE="$2"; shift 2;; --db-admin-args) ADMIN_ARGS="$2"; shift 2;;
