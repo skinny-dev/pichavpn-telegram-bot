@@ -1,0 +1,4 @@
+lang/override/
+config.local.php
+*.sql
+*.tgz
