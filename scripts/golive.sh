@@ -31,7 +31,8 @@ run()  { if [ "$DRY" = 1 ]; then echo "    [dry-run] $*"; else "$@"; fi; }
 confirm() { # confirm WORD "question"
   [ "$YES" = 1 ] && return 0
   [ "$DRY" = 1 ] && { echo "    [dry-run] would ask: $2 (type $1)"; return 0; }
-  read -rp "    $2 (type $1 to continue): " a </dev/tty 2>/dev/null || die "no terminal for confirmation (use --yes)"
+  printf '    %s -- type %s and press Enter to continue: ' "$2" "$1" >&2
+  read -r a </dev/tty || die "no terminal for confirmation (use --yes)"
   [ "$a" = "$1" ] || die "cancelled"
 }
 here="$(cd "$(dirname "$0")" && pwd)"
