@@ -102,9 +102,10 @@ Tests: `php tests/premium_emoji_test.php`.
 
 
 ## Welcome message with guide buttons
-`/start` sends the welcome text with **🚀 شروع سریع | 📥 نصب و اتصال | 🔄 تمدید | 🛠 رفع مشکل** under it (each opens the matching آموزش category),
-then a short line with the normal bottom menu. A guide button only appears when its category has articles.
+`/start` sends the welcome text with two buttons side by side under it: **🚀 شروع سریع** (opens the quick-start articles) and **📚 آموزش** (the full guide list: quick start, install and connect, renew, troubleshooting),
+then a short line with the normal bottom menu. The quick-start button only appears when that category has articles.
     php scripts/start_menu.php seed      # creates the 4 categories with starter articles (edit them in the bot: آموزش management)
+    php scripts/start_menu.php reset     # back to the default two buttons
     php scripts/start_menu.php status | on | off | set "TEXT" "CATEGORY" | url "TEXT" https://... | remove "TEXT"
 The welcome text is editable in the bot's text editor (`users.text_start`); premium emoji typed there are kept (see below).
 Tests: `php tests/start_menu_test.php`.

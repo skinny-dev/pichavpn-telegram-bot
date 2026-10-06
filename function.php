@@ -1042,16 +1042,14 @@ function startMenuConfig()
 {
     $default = ['enabled' => true, 'buttons' => [
         ['text' => '🚀 شروع سریع', 'help' => 'شروع سریع'],
-        ['text' => '📥 نصب و اتصال', 'help' => 'نصب و اتصال'],
-        ['text' => '🔄 تمدید', 'help' => 'تمدید'],
-        ['text' => '🛠 رفع مشکل', 'help' => 'رفع مشکل'],
+        ['text' => '📚 آموزش', 'callback' => 'helpbtn'],
     ]];
     $file = getenv('PICHA_START_MENU_FILE') ?: __DIR__ . '/storage/start_menu.json';
     $raw = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
     return is_array($raw) ? array_replace($default, $raw) : $default;
 }
 
-/** Inline rows (2 per row). A guide button only appears when its help category really has articles, so nothing is ever dead. */
+/** Inline rows (2 per row). A help-category button only appears when that category really has articles, so nothing is ever dead. */
 function startGuideButtons()
 {
     global $pdo;
@@ -1071,6 +1069,8 @@ function startGuideButtons()
         }
         if (!empty($b['url']) && preg_match('#^https?://#i', (string) $b['url'])) {
             $buttons[] = ['text' => $b['text'], 'url' => $b['url']];
+        } elseif (!empty($b['callback']) && in_array($b['callback'], ['helpbtn', 'supportbtns'], true)) {
+            $buttons[] = ['text' => $b['text'], 'callback_data' => $b['callback']];
         } elseif (!empty($b['help']) && in_array($b['help'], $cats, true)) {
             $buttons[] = ['text' => $b['text'], 'callback_data' => 'helpctg_' . dechex(crc32($b['help']))];
         }

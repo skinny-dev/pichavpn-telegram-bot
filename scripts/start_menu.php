@@ -7,6 +7,7 @@
  *   php scripts/start_menu.php set "TEXT" "HELP CATEGORY"   # add or change a button (TEXT may start with a premium-mapped emoji)
  *   php scripts/start_menu.php url "TEXT" https://...         # a button that opens a link
  *   php scripts/start_menu.php remove "TEXT"
+ *   php scripts/start_menu.php reset         # back to the default two buttons: 🚀 شروع سریع | 📚 آموزش
  * Articles are edited in the bot (آموزش management); the welcome text itself in the bot's text editor (users.text_start).
  */
 if (PHP_SAPI !== 'cli') {
@@ -91,6 +92,10 @@ switch ($cmd) {
         $save();
         echo "saved\n";
         break;
+    case 'reset':
+        @unlink($file);
+        echo "back to the default buttons (🚀 شروع سریع | 📚 آموزش)\n";
+        break;
     case 'remove':
         $text = $argv[2] ?? '';
         $cfg['buttons'] = array_values(array_filter($cfg['buttons'], fn($b) => ($b['text'] ?? '') !== $text));
@@ -107,7 +112,7 @@ switch ($cmd) {
         }
         foreach ($cfg['buttons'] as $b) {
             $t = $b['text'] ?? '?';
-            $target = isset($b['url']) ? 'link ' . $b['url'] : 'help category «' . ($b['help'] ?? '?') . '»';
+            $target = isset($b['url']) ? 'link ' . $b['url'] : (isset($b['callback']) ? 'opens ' . $b['callback'] : 'help category «' . ($b['help'] ?? '?') . '»');
             echo '  ' . (isset($live[$t]) ? '[shown]  ' : '[hidden] ') . "$t -> $target" . (isset($live[$t]) || empty($cfg['enabled']) ? '' : '   (no articles in that category: run seed or add articles)') . "\n";
         }
 }
