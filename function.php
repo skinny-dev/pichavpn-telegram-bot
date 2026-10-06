@@ -985,6 +985,58 @@ function addBalance($userId, $amount)
     $stmt = $pdo->prepare("UPDATE user SET Balance = Balance + ? WHERE id = ?");
     $stmt->execute([$amount, $userId]);
 }
+/** How product buttons are ordered for customers: manual | volume_asc | volume_desc | price_asc | price_desc */
+function productSortModes()
+{
+    return [
+        'volume_asc' => '📈 حجم: کم ← زیاد',
+        'volume_desc' => '📉 حجم: زیاد ← کم',
+        'price_asc' => '💰 قیمت: ارزان ← گران',
+        'price_desc' => '💎 قیمت: گران ← ارزان',
+        'manual' => '✋ دستی (شماره ترتیب در پنل وب، بعد حجم)',
+    ];
+}
+
+function productSortMode()
+{
+    global $pdo;
+    try {
+        $v = $pdo->query("SELECT value FROM shopSetting WHERE Namevalue = 'product_sort'")->fetchColumn();
+    } catch (Throwable $e) {
+        $v = false;
+    }
+    return is_string($v) && isset(productSortModes()[$v]) ? $v : 'volume_asc';
+}
+
+/** Sort product rows for display. Unlimited / 0 volume, 0 days and an unset manual number always go last. */
+function sortProductRows(array $rows, $mode = null)
+{
+    $mode = $mode ?? productSortMode();
+    $num = fn($v) => is_numeric($v) ? (float) $v : 0.0;
+    $vol = fn($r) => $num($r['Volume_constraint'] ?? 0) > 0 ? $num($r['Volume_constraint']) : INF;
+    $days = fn($r) => $num($r['Service_time'] ?? 0) > 0 ? $num($r['Service_time']) : INF;
+    $price = fn($r) => $num($r['price_product'] ?? 0);
+    $manual = fn($r) => (int) ($r['sort_order'] ?? 0) > 0 ? (int) $r['sort_order'] : PHP_INT_MAX;
+    $desc = fn($x) => $x === INF ? INF : -$x;
+    $key = function ($r) use ($mode, $vol, $days, $price, $manual, $desc) {
+        $id = (int) ($r['id'] ?? 0);
+        switch ($mode) {
+            case 'volume_desc':
+                return [$desc($vol($r)), $days($r), $price($r), $id];
+            case 'price_asc':
+                return [$price($r), $vol($r), $days($r), $id];
+            case 'price_desc':
+                return [-$price($r), $vol($r), $days($r), $id];
+            case 'manual':
+                return [$manual($r), $vol($r), $days($r), $price($r), $id];
+            default: // volume_asc
+                return [$vol($r), $days($r), $price($r), $id];
+        }
+    };
+    usort($rows, fn($a, $b) => $key($a) <=> $key($b));
+    return $rows;
+}
+
 /** Welcome-message guide buttons. Config: storage/start_menu.json (managed by scripts/start_menu.php). */
 function startMenuConfig()
 {

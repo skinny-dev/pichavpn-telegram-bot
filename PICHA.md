@@ -108,3 +108,10 @@ then a short line with the normal bottom menu. A guide button only appears when 
     php scripts/start_menu.php status | on | off | set "TEXT" "CATEGORY" | url "TEXT" https://... | remove "TEXT"
 The welcome text is editable in the bot's text editor (`users.text_start`); premium emoji typed there are kept (see below).
 Tests: `php tests/start_menu_test.php`.
+
+## Product and category order
+Customers' product lists are sorted by the bot (they used to follow creation order). Admin: 🏬 تنظیمات فروشگاه → 🛍 مدیریت محصولات → **🔃 ترتیب نمایش محصولات**:
+`حجم کم←زیاد` (default), `حجم زیاد←کم`, `قیمت ارزان←گران`, `قیمت گران←ارزان`, or `دستی` (the order numbers from the web panel's tree/table, then volume).
+Unlimited / zero-volume products always come last. Categories follow the web panel's order numbers.
+`php scripts/sort_products.php --by=volume --dir=asc [--apply]` writes clean order numbers (1..n per category) to start a manual order from.
+Tests: `php tests/product_order_test.php`.

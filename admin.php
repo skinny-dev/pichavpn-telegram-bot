@@ -8778,6 +8778,21 @@ if ($datain == "settimecornday" && $adminrulecheck['rule'] == "administrator") {
     sendmessage($from_id, $textbotlang['users']['selectoption'], $shopkeyboard, 'HTML');
 } elseif ($text == $textbotlang['keyboard']['manageProducts'] || $datain == "backproductadmin") {
     sendmessage($from_id, $textbotlang['users']['selectoption'], $keyboard_shop_manage, 'HTML');
+} elseif (($text == ($textbotlang['keyboard']['productOrder'] ?? '🔃 ترتیب نمایش محصولات') || preg_match('/^prodsort_([a-z_]+)$/', $datain, $dataget)) && $adminrulecheck['rule'] == "administrator") {
+    if (isset($dataget[1]) && isset(productSortModes()[$dataget[1]])) {
+        $pdo->prepare("INSERT INTO shopSetting (Namevalue, value) VALUES ('product_sort', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)")->execute([$dataget[1]]);
+    }
+    $currentSort = productSortMode();
+    $sortList = ['inline_keyboard' => []];
+    foreach (productSortModes() as $modeKey => $modeLabel) {
+        $sortList['inline_keyboard'][] = [['text' => ($modeKey == $currentSort ? "✅ " : "") . $modeLabel, 'callback_data' => 'prodsort_' . $modeKey]];
+    }
+    $sortDesc = "📌 ترتیب نمایش محصولات در لیست خرید مشتریان را انتخاب کنید.\n\n«حجم» و «قیمت» خودکار مرتب می‌کنند (محصول بدون حجم یا نامحدود آخر لیست می‌آید). «دستی» از شماره ترتیب محصولات در پنل وب پیروی می‌کند و برای محصولات بدون شماره، بر اساس حجم مرتب می‌کند.";
+    if (isset($dataget[1])) {
+        Editmessagetext($from_id, $message_id, $sortDesc, json_encode($sortList, JSON_UNESCAPED_UNICODE));
+    } else {
+        sendmessage($from_id, $sortDesc, json_encode($sortList, JSON_UNESCAPED_UNICODE), 'HTML');
+    }
 } elseif (($text == ($textbotlang['keyboard']['categorySaleStatus'] ?? '🚦 وضعیت فروش دسته بندی') || preg_match('/^catstatus_(\d+)$/', $datain, $dataget)) && $adminrulecheck['rule'] == "administrator") {
     if (isset($dataget[1])) {
         $catRow = select("category", "*", "id", $dataget[1], "select");

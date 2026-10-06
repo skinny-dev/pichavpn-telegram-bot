@@ -16,6 +16,7 @@ $values = [
     'statusdisorder' => 'offdisorder',
     'statuschangeservice' => 'onstatus',
     'statusshowprice' => 'offshowprice',
+    'product_sort' => 'volume_asc',
     'configshow' => 'onconfig',
     'backserviecstatus' => 'on',
     'chashbackextend' => '0',

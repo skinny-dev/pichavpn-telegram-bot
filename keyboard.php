@@ -670,6 +670,7 @@ $keyboard_shop_manage = json_encode([
     'keyboard' => [
         [['text' => $textbotlang['keyboard']['addProduct']], ['text' => $textbotlang['keyboard']['deleteProduct']]],
         [['text' => $textbotlang['keyboard']['editProduct']]],
+        [['text' => $textbotlang['keyboard']['productOrder'] ?? '🔃 ترتیب نمایش محصولات']],
         [['text' => $textbotlang['keyboard']['increaseGroupPrice']], ['text' => $textbotlang['keyboard']['decreaseGroupPrice']]],
         [['text' => $textbotlang['keyboard']['backToShopMenu']]]
     ],
@@ -1330,7 +1331,7 @@ function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $stat
     }
     $countorder = null;
     $soldOutCategories = soldOutCategoryKeys();
-    while ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    foreach (sortProductRows($stmt->fetchAll(PDO::FETCH_ASSOC)) as $result) {
         $hide_panel = json_decode($result['hide_panel'], true);
         if (in_array($location, $hide_panel))
             continue;
@@ -1381,7 +1382,7 @@ function KeyboardCategory($location, $agent, $backuser = "backuser")
         $categoryKey = mb_strtolower(trim((string) $catRow['category']), 'UTF-8');
         $categoryCounts[$categoryKey] = ($categoryCounts[$categoryKey] ?? 0) + (int) $catRow['c'];
     }
-    $stmt = $pdo->prepare("SELECT * FROM category");
+    $stmt = $pdo->prepare("SELECT * FROM category ORDER BY (CAST(sort_order AS SIGNED) <= 0), CAST(sort_order AS SIGNED), id");
     $stmt->execute();
     $list_category = ['inline_keyboard' => [],];
     $soldOutCategories = soldOutCategoryKeys();
@@ -1507,7 +1508,7 @@ $keyboardchangelimit = json_encode([
 function KeyboardCategoryadmin()
 {
     global $pdo, $textbotlang;
-    $stmt = $pdo->prepare("SELECT * FROM category");
+    $stmt = $pdo->prepare("SELECT * FROM category ORDER BY (CAST(sort_order AS SIGNED) <= 0), CAST(sort_order AS SIGNED), id");
     $stmt->execute();
     $list_category = [
         'keyboard' => [],
