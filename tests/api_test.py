@@ -74,6 +74,14 @@ s, r = call('tree'); check('tree order persisted', [c['id'] for c in r['categori
 check('moved product got category', any(p['id'] == unc[0] for p in [x for c in r['categories'] if c['id'] == order[1]['id'] for x in c['products']]), r)
 s, r = call('delete', {'res': 'products', 'id': newp}); check('delete product', s == 200, (s, r))
 
+# sale status (category + product) from the web panel
+s, r = call('update', {'res': 'categories', 'id': '1', 'field': 'status', 'value': 'disable'}); check('category can be switched to sold out', s == 200 and r['ok'], (s, r))
+s, r = call('list', res='categories'); check('category sold-out state persisted', any(str(x['id']) == '1' and x['status'] == 'disable' for x in r['rows']) and all(x['status'] in ('active', 'disable') for x in r['rows']), r)
+s, r = call('update', {'res': 'categories', 'id': '1', 'field': 'status', 'value': 'zzz'}); check('bad category status rejected', s == 422, (s, r))
+s, r = call('update', {'res': 'categories', 'id': '1', 'field': 'status', 'value': 'active'}); check('category switched back to available', s == 200, (s, r))
+s, r = call('update', {'res': 'products', 'id': '1', 'field': 'status_product', 'value': 'disable'}); check('product can be marked sold out', s == 200 and r['ok'], (s, r))
+s, r = call('update', {'res': 'products', 'id': '1', 'field': 'status_product', 'value': 'active'}); check('product available again', s == 200, (s, r))
+
 # import
 rows = [{'id': '1', 'price_product': '65000'}, {'name_product': 'ایمپورت ۱', 'price_product': '5'}, {'name_product': 'بد', 'price_product': 'x'}]
 s, r = call('import', {'res': 'products', 'rows': rows, 'dry': True}); check('import dry-run reports error line 3', s == 200 and r['errors'] and r['errors'][0]['line'] == 3 and not r['applied'], (s, r))

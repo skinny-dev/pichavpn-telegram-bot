@@ -661,6 +661,7 @@ $keyboard_Category_manage = json_encode([
     'keyboard' => [
         [['text' => $textbotlang['keyboard']['addCategory']], ['text' => $textbotlang['keyboard']['deleteCategory']]],
         [['text' => $textbotlang['keyboard']['editCategoryMenu']]],
+        [['text' => $textbotlang['keyboard']['categorySaleStatus'] ?? '🚦 وضعیت فروش دسته بندی']],
         [['text' => $textbotlang['keyboard']['backToShopMenu']]]
     ],
     'resize_keyboard' => true
@@ -1328,6 +1329,7 @@ function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $stat
         $valuetow = "";
     }
     $countorder = null;
+    $soldOutCategories = soldOutCategoryKeys();
     while ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $hide_panel = json_decode($result['hide_panel'], true);
         if (in_array($location, $hide_panel))
@@ -1350,7 +1352,7 @@ function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $stat
         if ($statusshowprice == "onshowprice") {
             $result['name_product'] = $namekeyboard;
         }
-        if ($result['status_product'] == "disable" && str_starts_with($datakeyboard, "prodcutservice")) {
+        if (($result['status_product'] == "disable" || in_array(categoryOffKey($result['category'] ?? ''), $soldOutCategories, true)) && str_starts_with($datakeyboard, "prodcutservice")) {
             $product['inline_keyboard'][] = [
                 ['text' => $result['name_product'] . " | " . $textbotlang['keyboard']['productSoldOut'], 'callback_data' => "productsoldout"]
             ];
@@ -1382,10 +1384,16 @@ function KeyboardCategory($location, $agent, $backuser = "backuser")
     $stmt = $pdo->prepare("SELECT * FROM category");
     $stmt->execute();
     $list_category = ['inline_keyboard' => [],];
+    $soldOutCategories = soldOutCategoryKeys();
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         if (empty($categoryCounts[mb_strtolower(trim((string) $row['remark']), 'UTF-8')]))
             continue;
-        $list_category['inline_keyboard'][] = [['text' => function_exists('premiumCatalogLabel') ? premiumCatalogLabel('category', $row, $row['remark']) : $row['remark'], 'callback_data' => "categorynames_" . $row['id']]];
+        $label = function_exists('premiumCatalogLabel') ? premiumCatalogLabel('category', $row, $row['remark']) : $row['remark'];
+        if (in_array(categoryOffKey($row['remark']), $soldOutCategories, true)) {
+            $list_category['inline_keyboard'][] = [['text' => $label . " | " . ($textbotlang['keyboard']['productSoldOut'] ?? '🔴 ناموجود'), 'callback_data' => "categorysoldout"]];
+            continue;
+        }
+        $list_category['inline_keyboard'][] = [['text' => $label, 'callback_data' => "categorynames_" . $row['id']]];
     }
     $list_category['inline_keyboard'][] = [
         ['text' => $textbotlang['keyboard']['backToPreviousMenu'], "callback_data" => $backuser],

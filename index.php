@@ -3593,6 +3593,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
 } elseif (preg_match('/^categorynames_(.*)/', $datain, $dataget)) {
     $categorynames = $dataget[1];
     $categorynames = select("category", "remark", "id", $categorynames, "select")['remark'];
+    if (categoryIsSoldOut($categorynames)) {
+        telegram('answerCallbackQuery', [
+            'callback_query_id' => $callback_query_id,
+            'text' => $textbotlang['users']['sell']['productSoldOut'],
+            'show_alert' => true,
+        ]);
+        return;
+    }
     $userdate = json_decode($user['Processing_value'], true);
     if (isset($userdate['monthproduct'])) {
         $query = "SELECT * FROM product WHERE (Location = :loc OR Location = '/all') AND agent = :agent AND category = :category AND Service_time = :stime";
@@ -3701,7 +3709,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } else {
         step('getvolumecustomuser', $from_id);
     }
-} elseif ($datain == "productsoldout" || (preg_match('/^prodcutservices?(?:om)?_([^-]+)/', $datain, $soldOutMatch) && (select("product", "status_product", "code_product", $soldOutMatch[1], "select")['status_product'] ?? '') == "disable")) {
+} elseif ($datain == "productsoldout" || $datain == "categorysoldout" || (preg_match('/^prodcutservices?(?:om)?_([^-]+)/', $datain, $soldOutMatch) && productIsSoldOutByCode($soldOutMatch[1]))) {
     telegram('answerCallbackQuery', [
         'callback_query_id' => $callback_query_id,
         'text' => $textbotlang['users']['sell']['productSoldOut'],

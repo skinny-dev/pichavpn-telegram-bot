@@ -8778,6 +8778,25 @@ if ($datain == "settimecornday" && $adminrulecheck['rule'] == "administrator") {
     sendmessage($from_id, $textbotlang['users']['selectoption'], $shopkeyboard, 'HTML');
 } elseif ($text == $textbotlang['keyboard']['manageProducts'] || $datain == "backproductadmin") {
     sendmessage($from_id, $textbotlang['users']['selectoption'], $keyboard_shop_manage, 'HTML');
+} elseif (($text == ($textbotlang['keyboard']['categorySaleStatus'] ?? '🚦 وضعیت فروش دسته بندی') || preg_match('/^catstatus_(\d+)$/', $datain, $dataget)) && $adminrulecheck['rule'] == "administrator") {
+    if (isset($dataget[1])) {
+        $catRow = select("category", "*", "id", $dataget[1], "select");
+        if ($catRow) {
+            update("category", "status", ($catRow['status'] ?? 'active') == "disable" ? "active" : "disable", "id", $catRow['id']);
+        }
+    }
+    $catList = ['inline_keyboard' => []];
+    $catStmt = $pdo->query("SELECT * FROM category ORDER BY sort_order, id");
+    foreach ($catStmt->fetchAll(PDO::FETCH_ASSOC) as $catRow) {
+        $off = ($catRow['status'] ?? 'active') == "disable";
+        $catList['inline_keyboard'][] = [['text' => ($off ? "🔴 " : "🟢 ") . trim(strip_tags($catRow['remark'])), 'callback_data' => 'catstatus_' . $catRow['id']]];
+    }
+    $catDesc = $textbotlang['Admin']['category']['saleStatusDesc'] ?? '📌 با ضربه روی هر دسته‌بندی، وضعیت آن بین «🟢 موجود» و «🔴 ناموجود» تغییر می‌کند. دسته‌بندی ناموجود با برچسب ناموجود نمایش داده می‌شود و خرید همه محصولات آن ممکن نیست. تمدید سرویس‌های قبلی تغییری نمی‌کند.';
+    if (isset($dataget[1])) {
+        Editmessagetext($from_id, $message_id, $catDesc, json_encode($catList));
+    } else {
+        sendmessage($from_id, $catDesc, json_encode($catList), 'HTML');
+    }
 } elseif ($text == $textbotlang['keyboard']['editCategoryMenu']) {
     sendmessage($from_id, $textbotlang['Admin']['category']['selectEdit'], KeyboardCategoryadmin(), 'HTML');
     step("editcategory_name", $from_id);

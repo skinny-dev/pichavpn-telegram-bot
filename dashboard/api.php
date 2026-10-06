@@ -106,8 +106,9 @@ function picha_resources(): array
                 ['agent', 'قابل خرید برای', 'enum', 'edit' => true, 'options' => ['f' => 'کاربر عادی', 'n' => 'نماینده عادی', 'n2' => 'نماینده پیشرفته', 'all' => 'همه']],
                 ['note', 'توضیحات', 'text', 'edit' => true],
                 ['sort_order', 'ترتیب', 'int', 'edit' => true],
+                ['status_product', 'وضعیت فروش', 'enum', 'edit' => true, 'options' => ['active' => 'موجود', 'disable' => 'ناموجود']],
             ],
-            'defaults' => ['agent' => 'f', 'data_limit_reset' => 'no_reset', 'one_buy_status' => '0', 'hide_panel' => '{}', 'note' => '', 'price_product' => '0', 'Volume_constraint' => '0', 'Service_time' => '0'],
+            'defaults' => ['status_product' => 'active', 'agent' => 'f', 'data_limit_reset' => 'no_reset', 'one_buy_status' => '0', 'hide_panel' => '{}', 'note' => '', 'price_product' => '0', 'Volume_constraint' => '0', 'Service_time' => '0'],
         ],
         'categories' => [
             'table' => 'category', 'pk' => 'id', 'title' => 'دسته‌بندی‌ها', 'create' => true, 'delete' => true, 'import' => true,
@@ -116,7 +117,9 @@ function picha_resources(): array
                 ['id', 'شناسه', 'int'],
                 ['remark', 'نام دسته', 'text', 'edit' => true, 'req' => true],
                 ['sort_order', 'ترتیب', 'int', 'edit' => true],
+                ['status', 'وضعیت فروش', 'enum', 'edit' => true, 'options' => ['active' => 'موجود', 'disable' => 'ناموجود']],
             ],
+            'defaults' => ['status' => 'active'],
         ],
         'payments' => [
             'table' => 'Payment_report', 'pk' => 'id', 'title' => 'پرداخت‌ها', 'create' => false, 'delete' => false, 'import' => false,
@@ -445,7 +448,8 @@ try {
             foreach ((array) ($_GET['f'] ?? []) as $fk => $fv) {
                 $col = picha_col($res, (string) $fk);
                 if ($col && $fv !== '') {
-                    $where[] = "`{$col['key']}` = ?";
+                    $isSaleStatus = in_array($col['key'], ['status', 'status_product'], true) && isset($col['options']['active']);
+                    $where[] = $isSaleStatus ? "COALESCE(NULLIF(`{$col['key']}`,''),'active') = ?" : "`{$col['key']}` = ?";
                     $params[] = (string) $fv;
                 }
             }
@@ -457,7 +461,11 @@ try {
             }
             $dir = strtoupper((string) ($_GET['dir'] ?? $res['dir'])) === 'ASC' ? 'ASC' : 'DESC';
             $orderExpr = in_array($sortCol['type'] ?? '', ['int', 'ts'], true) ? "CAST(`$sortKey` AS SIGNED)" : "`$sortKey`";
-            $names = '`' . implode('`,`', array_map(fn($c) => $c[0], $res['cols'])) . '`';
+            // rows created before the sale-status column existed (or by the bot's own add flows) have an empty status = available
+            $names = implode(',', array_map(function ($c) {
+                $isSaleStatus = in_array($c[0], ['status', 'status_product'], true) && isset($c['options']['active']);
+                return $isSaleStatus ? "COALESCE(NULLIF(`{$c[0]}`,''),'active') AS `{$c[0]}`" : "`{$c[0]}`";
+            }, $res['cols']));
             $wsql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
             if ($route === 'export') {
                 $st = $pdo->prepare("SELECT $names FROM `$table`$wsql ORDER BY $orderExpr $dir, `{$res['pk']}` LIMIT " . PICHA_MAX_EXPORT);

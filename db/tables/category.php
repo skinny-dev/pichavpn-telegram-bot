@@ -8,5 +8,6 @@ return [
         SQL,
     'columns' => [
         ['sort_order', '0', 'INT'],
+        ['status', 'active', 'VARCHAR(20)'],
     ],
 ];

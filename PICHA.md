@@ -82,3 +82,10 @@ dashboard or the bank). Safe by construction: approval is one atomic claim (`pai
 or a second admin click can never credit the order twice; a receipt cannot reopen an order that is already paid/rejected/expired;
 only the order's owner can attach a receipt; one receipt per order, and re-submits are rate limited.
 Change the delay: `UPDATE PaySetting SET ValuePay='10' WHERE NamePay='variza_receipt_delay';` (minutes).
+
+## Sale status for categories and products
+- **Categories**: bot admin → 🏬 تنظیمات فروشگاه → 🗂 مدیریت دسته بندی → **🚦 وضعیت فروش دسته بندی**; tap a category to switch 🟢 موجود ↔ 🔴 ناموجود.
+  A sold-out category stays in the buy list with the label «ناموجود», cannot be opened, and none of its products can be bought. Renewals of existing services are unaffected.
+- **Products**: ✏️ ویرایش محصول → choose panel, customer type, product → **🚦 وضعیت فروش** (bottom keyboard).
+- **Web panel**: both have a «وضعیت فروش» column (dropdown) in the Products / Categories tables.
+Tests: `php tests/category_status_test.php`, `python3 tests/api_test.py URL admin PASS`.

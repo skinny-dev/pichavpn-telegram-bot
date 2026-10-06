@@ -985,6 +985,42 @@ function addBalance($userId, $amount)
     $stmt = $pdo->prepare("UPDATE user SET Balance = Balance + ? WHERE id = ?");
     $stmt->execute([$amount, $userId]);
 }
+/** Category sale status ("disable" = sold out): normalised name used to match product.category */
+function categoryOffKey($remark)
+{
+    return mb_strtolower(trim((string) $remark), 'UTF-8');
+}
+
+/** Normalised names of the categories that are switched to sold out. */
+function soldOutCategoryKeys()
+{
+    global $pdo;
+    try {
+        $rows = $pdo->query("SELECT remark FROM category WHERE status = 'disable'")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        return [];
+    }
+    return array_map('categoryOffKey', $rows);
+}
+
+function categoryIsSoldOut($remark)
+{
+    return in_array(categoryOffKey($remark), soldOutCategoryKeys(), true);
+}
+
+/** A product cannot be bought when it is sold out itself or its category is. */
+function productIsSoldOutByCode($code)
+{
+    global $pdo;
+    $st = $pdo->prepare("SELECT status_product, category FROM product WHERE code_product = ? ORDER BY id LIMIT 1");
+    $st->execute([$code]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return false;
+    }
+    return ($row['status_product'] ?? '') === 'disable' || categoryIsSoldOut($row['category'] ?? '');
+}
+
 function claimPaymentPaid($order_id)
 {
     global $pdo;
