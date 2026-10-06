@@ -107,12 +107,12 @@ switch ($cmd) {
         $live = [];
         foreach (startGuideButtons() as $row) {
             foreach ($row as $b) {
-                $live[$b['text']] = true;
+                $live[$b['text']] = ($b['callback_data'] ?? '') === 'helpsoon' ? 'soon' : true;
             }
         }
         foreach ($cfg['buttons'] as $b) {
             $t = $b['text'] ?? '?';
             $target = isset($b['url']) ? 'link ' . $b['url'] : (isset($b['callback']) ? 'opens ' . $b['callback'] : 'help category «' . ($b['help'] ?? '?') . '»');
-            echo '  ' . (isset($live[$t]) ? '[shown]  ' : '[hidden] ') . "$t -> $target" . (isset($live[$t]) || empty($cfg['enabled']) ? '' : '   (no articles in that category: run seed or add articles)') . "\n";
+            echo '  ' . (isset($live[$t]) ? '[shown]  ' : '[hidden] ') . "$t -> $target" . (($live[$t] ?? null) === 'soon' ? '   (no articles yet: shows «coming soon»)' : '') . "\n";
         }
 }

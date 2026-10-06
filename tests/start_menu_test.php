@@ -14,7 +14,7 @@ ok(startGuideButtons() === [] || true, 'no crash with an empty help table');
 $flatOf = fn($rows) => $rows ? array_merge(...$rows) : [];
 $ins = $pdo->prepare("INSERT INTO help (name_os, Media_os, type_Media_os, category, Description_os) VALUES (?, '', '', ?, 'x')");
 $rows = startGuideButtons();
-ok(count($rows) === 1 && count($rows[0]) === 1 && $rows[0][0]['callback_data'] === 'helpbtn', 'no quick-start articles yet: only the 📚 آموزش button (never a dead button)');
+ok(count($rows) === 1 && count($rows[0]) === 2 && $rows[0][0]['callback_data'] === 'helpsoon' && $rows[0][1]['callback_data'] === 'helpbtn', 'no articles yet: both buttons stay; شروع سریع says «coming soon»');
 $ins->execute(['sm-test 1', 'شروع سریع']);
 $rows = startGuideButtons();
 ok(count($rows) === 1 && count($rows[0]) === 2, 'two buttons side by side in ONE row');

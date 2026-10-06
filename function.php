@@ -1049,7 +1049,7 @@ function startMenuConfig()
     return is_array($raw) ? array_replace($default, $raw) : $default;
 }
 
-/** Inline rows (2 per row). A help-category button only appears when that category really has articles, so nothing is ever dead. */
+/** Inline rows (2 per row). A help-category button opens its articles, or says «coming soon» while the category is empty. */
 function startGuideButtons()
 {
     global $pdo;
@@ -1071,8 +1071,9 @@ function startGuideButtons()
             $buttons[] = ['text' => $b['text'], 'url' => $b['url']];
         } elseif (!empty($b['callback']) && in_array($b['callback'], ['helpbtn', 'supportbtns'], true)) {
             $buttons[] = ['text' => $b['text'], 'callback_data' => $b['callback']];
-        } elseif (!empty($b['help']) && in_array($b['help'], $cats, true)) {
-            $buttons[] = ['text' => $b['text'], 'callback_data' => 'helpctg_' . dechex(crc32($b['help']))];
+        } elseif (!empty($b['help'])) {
+            // no articles yet: the button stays and says «coming soon» (it opens the articles as soon as the category has some)
+            $buttons[] = ['text' => $b['text'], 'callback_data' => in_array($b['help'], $cats, true) ? 'helpctg_' . dechex(crc32($b['help'])) : 'helpsoon'];
         }
     }
     return array_chunk($buttons, 2);

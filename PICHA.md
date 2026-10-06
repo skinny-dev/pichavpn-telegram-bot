@@ -103,7 +103,7 @@ Tests: `php tests/premium_emoji_test.php`.
 
 ## Welcome message with guide buttons
 `/start` sends the welcome text with two buttons side by side under it: **🚀 شروع سریع** (opens the quick-start articles) and **📚 آموزش** (the full guide list: quick start, install and connect, renew, troubleshooting),
-then a short line with the normal bottom menu. The quick-start button only appears when that category has articles.
+then a short line with the normal bottom menu. While there are no tutorials yet, both buttons answer «📚 این آموزش به‌زودی منتشر می‌شود!» (text `users.helpComingSoon` in lang/fa.php); as soon as tutorials exist (آموزش management in the bot) they open them. `seed` (starter articles) is optional and not needed.
     php scripts/start_menu.php seed      # creates the 4 categories with starter articles (edit them in the bot: آموزش management)
     php scripts/start_menu.php reset     # back to the default two buttons
     php scripts/start_menu.php status | on | off | set "TEXT" "CATEGORY" | url "TEXT" https://... | remove "TEXT"

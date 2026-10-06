@@ -3081,9 +3081,19 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             'reply_markup' => $Response
         ]);
     }
+} elseif ($datain == "helpsoon") {
+    sendmessage($from_id, $textbotlang['users']['helpComingSoon'] ?? "📚 این آموزش به‌زودی منتشر می‌شود!", json_encode(['inline_keyboard' => [[['text' => $textbotlang['users']['backmenu'], 'callback_data' => "backuser"]]]], JSON_UNESCAPED_UNICODE), 'HTML');
+    telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id]);
 } elseif ($text == $textbotlang['textbot']['help'] || $datain == "helpbtn" || $datain == "helpbtns" || $text == "/help" || $text == "help") {
     if (!check_active_btn($setting['keyboardmain'], "text_help")) {
         sendmessage($from_id, $textbotlang['users']['help']['disablehelp'], null, 'HTML');
+        return;
+    }
+    if ((int) $pdo->query("SELECT COUNT(*) FROM help")->fetchColumn() === 0) {
+        sendmessage($from_id, $textbotlang['users']['helpComingSoon'] ?? "📚 این آموزش به‌زودی منتشر می‌شود!", json_encode(['inline_keyboard' => [[['text' => $textbotlang['users']['backmenu'], 'callback_data' => "backuser"]]]], JSON_UNESCAPED_UNICODE), 'HTML');
+        if ($datain != "") {
+            telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id]);
+        }
         return;
     }
     if ($setting['categoryhelp'] == "1") {
