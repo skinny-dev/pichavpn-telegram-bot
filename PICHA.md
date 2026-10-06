@@ -117,3 +117,10 @@ Customers' product lists are sorted by the bot (they used to follow creation ord
 Unlimited / zero-volume products always come last. Categories follow the web panel's order numbers.
 `php scripts/sort_products.php --by=volume --dir=asc [--apply]` writes clean order numbers (1..n per category) to start a manual order from.
 Tests: `php tests/product_order_test.php`.
+
+## Accounting: expense kinds, advertising, date/time
+Expenses now have a **kind** (📣 تبلیغات · 🖥 سرور و زیرساخت · سایر هزینه‌ها), a name, an amount and an editable **date/time** (empty = now).
+Every expense counts in the expenses of ITS OWN day; advertising also has its own line («↳ 📣 تبلیغات») in the bot's statistics and the web panel's stats.
+- **Web panel → Accounting/Expenses → Add**: نوع هزینه = تبلیغات, نام, مبلغ, تاریخ و ساعت (`1405/07/14 15:30`, Gregorian `2026-10-06 15:30` also works; date alone = 12:00; empty = now). Dates are editable afterwards.
+- **Bot** (administrator): `/ad 500000 کمپین اینستاگرام` (now) · `/ad 500000 کمپین اینستاگرام @1405/07/14 15:30` (that moment) · `/expense 120000 سرور` · `/capital 5000000 سرمایه` (all accept the `@date` suffix).
+Tests: `php tests/accounting_dt_test.php`, `python3 tests/api_test.py URL admin PASS`.

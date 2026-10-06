@@ -111,6 +111,24 @@ for p in ['all', 'hour', 'yesterday', 'month', 'lastmonth']:
 s, r = call('overview'); check('overview', s == 200 and r['users'] == 3 and len(r['series']) == 30 and r['active_services'] >= 2, r)
 s, r = call('export', res='users'); check('export users', len(r['rows']) == 3, r)
 s, r = call('delete', {'res': 'expenses', 'id': eid}); check('delete expense', s == 200, (s, r))
+# advertising expense: kind, editable date/time (default now), counted in that day's expenses
+s, r = call('stats', period='today'); exp_before = r['data']['exp_sum']; ads_before = r['data']['exp_ads_sum']
+s, r = call('create', {'res': 'expenses', 'row': {'description': 'کمپین تست', 'amount': '250,000', 'kind': 'advertising', 'created_at': ''}}); check('create advertising expense (date empty = now)', s == 200 and r['ok'], (s, r)); adid = r.get('id')
+s, r = call('stats', period='today'); d = r['data']
+check('advertising expense counts in today\'s expenses', d['exp_sum'] == exp_before + 250000 and d['exp_ads_sum'] == ads_before + 250000, d)
+s, r = call('list', res='expenses', q='کمپین تست'); row = r['rows'][0] if r.get('rows') else {}
+check('expense date is shown as Jalali text', isinstance(row.get('created_at'), str) and len(row['created_at']) == 16 and row['created_at'][4] == '/', row)
+check('expense kind saved', row.get('kind') == 'advertising', row)
+s, r = call('create', {'res': 'expenses', 'row': {'description': 'قدیمی', 'amount': 1000, 'kind': 'advertising', 'created_at': '2020-01-05 10:00'}}); check('create expense on a past date', s == 200, (s, r)); oldid = r.get('id')
+s, r = call('list', res='expenses', q='قدیمی'); check('past date stored and shown as Jalali (2020-01-05 = 1398/10/15)', r['rows'][0]['created_at'] == '1398/10/15 10:00', r)
+s, r = call('stats', period='today'); check('a past-dated expense does NOT count in today', r['data']['exp_ads_sum'] == ads_before + 250000, r['data'])
+s, r = call('create', {'res': 'expenses', 'row': {'description': 'بد', 'amount': 5, 'created_at': 'فردا'}}); check('bad date rejected 422', s == 422, (s, r))
+s, r = call('create', {'res': 'expenses', 'row': {'description': 'بدون نوع', 'amount': 5}}); check('kind defaults to general', s == 200, (s, r)); gid = r.get('id')
+s, r = call('update', {'res': 'expenses', 'id': str(adid), 'field': 'created_at', 'value': '1398/10/15 08:30'}); check('date can be edited', s == 200 and r['ok'], (s, r))
+s, r = call('update', {'res': 'expenses', 'id': str(adid), 'field': 'kind', 'value': 'zzz'}); check('bad kind rejected', s == 422, (s, r))
+for i in (adid, oldid, gid):
+    call('delete', {'res': 'expenses', 'id': str(i)})
+
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
 print('\nFAILED:', fails); sys.exit(1 if fails else 0)

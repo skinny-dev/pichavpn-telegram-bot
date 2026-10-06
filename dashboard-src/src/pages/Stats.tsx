@@ -81,6 +81,7 @@ export default function Stats() {
               <Row label="ثبت‌شده توسط ادمین" count={d.admin_in} sum={d.admin_in_sum} />
               <Row label="جمع پرداخت‌های موفق" count={d.count_all} />
               <Row label="هزینه‌ها" count={d.exp} sum={d.exp_sum} />
+              <Row label="↳ تبلیغات" count={d.exp_ads ?? 0} sum={d.exp_ads_sum ?? 0} />
               <Row label="برداشت از کیف پول" count={d.wallet_out} sum={d.wallet_out_sum} />
               <Row label="ورود سرمایه" count={d.cap} sum={d.cap_sum} />
             </Section>

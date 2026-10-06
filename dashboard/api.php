@@ -139,17 +139,19 @@ function picha_resources(): array
             'search' => ['description'], 'order' => 'created_at', 'dir' => 'DESC', 'autots' => 'created_at',
             'cols' => [
                 ['id', 'شناسه', 'int'],
-                ['created_at', 'زمان', 'ts'],
+                ['created_at', 'تاریخ و ساعت (خالی = همین الان)', 'dt', 'edit' => true],
+                ['kind', 'نوع هزینه', 'enum', 'edit' => true, 'options' => accExpenseKinds()],
+                ['description', 'نام / توضیحات', 'text', 'edit' => true, 'req' => true],
                 ['amount', 'مبلغ (تومان)', 'int', 'edit' => true, 'req' => true],
-                ['description', 'توضیحات', 'text', 'edit' => true],
             ],
+            'defaults' => ['kind' => 'general'],
         ],
         'capital' => [
             'table' => 'capital_entries', 'pk' => 'id', 'title' => 'ورود سرمایه', 'create' => true, 'delete' => true, 'import' => true,
             'search' => ['description'], 'order' => 'created_at', 'dir' => 'DESC', 'autots' => 'created_at',
             'cols' => [
                 ['id', 'شناسه', 'int'],
-                ['created_at', 'زمان', 'ts'],
+                ['created_at', 'تاریخ و ساعت (خالی = همین الان)', 'dt', 'edit' => true],
                 ['amount', 'مبلغ (تومان)', 'int', 'edit' => true, 'req' => true],
                 ['description', 'توضیحات', 'text', 'edit' => true],
             ],
@@ -164,6 +166,26 @@ function picha_res(string $name): array
         fail('منبع نامعتبر است', 404);
     }
     return $all[$name] + ['name' => $name];
+}
+
+/** Editable date/time columns ('dt') are shown as Jalali text «1405/07/14 15:30» and parsed back on save. */
+function picha_format_dt(array $res, array $rows): array
+{
+    $dtCols = [];
+    foreach ($res['cols'] as $c) {
+        if ($c[2] === 'dt') {
+            $dtCols[] = $c[0];
+        }
+    }
+    foreach ($rows as &$r) {
+        foreach ($dtCols as $k) {
+            if (isset($r[$k]) && $r[$k] !== '') {
+                $r[$k] = accFormatDateTime((int) $r[$k]);
+            }
+        }
+    }
+    unset($r);
+    return $rows;
 }
 
 function picha_col(array $res, string $key): ?array
@@ -194,6 +216,12 @@ function picha_value(array $col, $value)
                 throw new InvalidArgumentException("«{$label}» باید عدد باشد");
             }
             return (int) $s;
+        case 'dt':
+            $ts = accParseDateTime($value);
+            if ($ts === null) {
+                throw new InvalidArgumentException("«{$label}» را به‌صورت 1405/07/14 15:30 (یا خالی = الان) بنویسید");
+            }
+            return $ts;
         case 'enum':
             $v = (string) $value;
             if (!array_key_exists($v, $col['options'] ?? [])) {
@@ -302,7 +330,7 @@ function picha_insert(PDO $pdo, array $res, array $row): string
             throw new InvalidArgumentException("«{$col['label']}» الزامی است");
         }
     }
-    if (!empty($res['autots'])) {
+    if (!empty($res['autots']) && !isset($data[$res['autots']])) {
         $data[$res['autots']] = time();
     }
     if ($res['name'] === 'products') {
@@ -460,7 +488,7 @@ try {
                 $sortCol = picha_col($res, $sortKey);
             }
             $dir = strtoupper((string) ($_GET['dir'] ?? $res['dir'])) === 'ASC' ? 'ASC' : 'DESC';
-            $orderExpr = in_array($sortCol['type'] ?? '', ['int', 'ts'], true) ? "CAST(`$sortKey` AS SIGNED)" : "`$sortKey`";
+            $orderExpr = in_array($sortCol['type'] ?? '', ['int', 'ts', 'dt'], true) ? "CAST(`$sortKey` AS SIGNED)" : "`$sortKey`";
             // rows created before the sale-status column existed (or by the bot's own add flows) have an empty status = available
             $names = implode(',', array_map(function ($c) {
                 $isSaleStatus = in_array($c[0], ['status', 'status_product'], true) && isset($c['options']['active']);
@@ -470,7 +498,7 @@ try {
             if ($route === 'export') {
                 $st = $pdo->prepare("SELECT $names FROM `$table`$wsql ORDER BY $orderExpr $dir, `{$res['pk']}` LIMIT " . PICHA_MAX_EXPORT);
                 $st->execute($params);
-                out(['ok' => true, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+                out(['ok' => true, 'rows' => picha_format_dt($res, $st->fetchAll(PDO::FETCH_ASSOC))]);
             }
             $per = max(1, min(200, (int) ($_GET['per'] ?? 50)));
             $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -479,7 +507,7 @@ try {
             $total = (int) $cnt->fetchColumn();
             $st = $pdo->prepare("SELECT $names FROM `$table`$wsql ORDER BY $orderExpr $dir, `{$res['pk']}` LIMIT $per OFFSET " . (($page - 1) * $per));
             $st->execute($params);
-            out(['ok' => true, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total, 'page' => $page, 'per' => $per]);
+            out(['ok' => true, 'rows' => picha_format_dt($res, $st->fetchAll(PDO::FETCH_ASSOC)), 'total' => $total, 'page' => $page, 'per' => $per]);
 
         case 'update':
             $b = body();

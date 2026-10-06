@@ -36,6 +36,7 @@ export function displayValue(col: Col, v: unknown): React.ReactNode {
     case 'int': return <span className="tabular" dir="ltr">{fmtNum(v)}</span>
     case 'ts': return <span className="tabular" dir="ltr">{fmtTs(v)}</span>
     case 'str': return <span className="tabular" dir="ltr">{fmtStr(v)}</span>
+    case 'dt': return <span className="tabular" dir="ltr">{String(v)}</span>
     case 'enum': {
       const label = col.options?.[String(v)] ?? String(v)
       const bad = ['block', 'مسدود'].includes(String(v))

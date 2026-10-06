@@ -24,7 +24,8 @@ export function FieldInput({ col, value, onChange, autoFocus }: { col: Col; valu
       onChange={(e) => onChange(e.target.value)}
       inputMode={col.type === 'int' ? 'numeric' : 'text'}
       aria-label={col.label}
-      dir={col.type === 'int' ? 'ltr' : undefined}
+      dir={col.type === 'int' || col.type === 'dt' ? 'ltr' : undefined}
+      placeholder={col.type === 'dt' ? '1405/07/14 15:30' : undefined}
     />
   )
 }

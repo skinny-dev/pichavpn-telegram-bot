@@ -73,6 +73,55 @@ const STATS_ADMIN_SALE = "'manual invoice','add order by admin','extend by admin
 const STATS_BAD_INVOICE = "('unpaid','expire','unsuccessful','reject')";
 
 // Raw numbers for [$start, $end] (unix timestamps).
+
+/** Expense kinds (accounting). «advertising» is what the owner tracks for ad campaigns. */
+function accExpenseKinds()
+{
+    return ['advertising' => 'تبلیغات', 'server' => 'سرور و زیرساخت', 'general' => 'سایر هزینه‌ها'];
+}
+
+/**
+ * Date/time typed by a person -> unix time. '' = now. Accepts Jalali (1405/07/14 15:30) or Gregorian (2026-10-06 15:30),
+ * Persian or Latin digits, / - . separators; a date without a time means 12:00 (Tehran). null = not understood.
+ */
+function accParseDateTime($input, $now = null)
+{
+    $now = $now ?? time();
+    $s = trim((string) $input);
+    if ($s === '') {
+        return $now;
+    }
+    $s = strtr($s, ['۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9', '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9', '٫' => ':', '،' => ' ']);
+    if (ctype_digit($s) && strlen($s) >= 9) {
+        return (int) $s; // already a unix time
+    }
+    if (!preg_match('#^(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$#', $s, $m)) {
+        return null;
+    }
+    [$y, $mo, $d] = [(int) $m[1], (int) $m[2], (int) $m[3]];
+    if ($y >= 1300 && $y < 1700) {
+        if ($mo < 1 || $mo > 12 || $d < 1 || $d > ($mo <= 6 ? 31 : 30)) {
+            return null;
+        }
+        require_once __DIR__ . '/jdf.php';
+        [$y, $mo, $d] = jalali_to_gregorian($y, $mo, $d);
+    }
+    $h = isset($m[4]) && $m[4] !== '' ? (int) $m[4] : 12;
+    $i = isset($m[5]) && $m[5] !== '' ? (int) $m[5] : 0;
+    if (!checkdate($mo, $d, $y) || $h > 23 || $i > 59) {
+        return null;
+    }
+    $dt = new DateTime(sprintf('%04d-%02d-%02d %02d:%02d:00', $y, $mo, $d, $h, $i), new DateTimeZone('Asia/Tehran'));
+    return $dt->getTimestamp();
+}
+
+/** unix time -> «1405/07/14 15:30» (Jalali, Tehran, Latin digits) */
+function accFormatDateTime($ts)
+{
+    require_once __DIR__ . '/jdf.php';
+    return jdate('Y/m/d H:i', (int) $ts, '', 'Asia/Tehran', 'en');
+}
+
 function statsCollect(PDO $pdo, $start, $end)
 {
     $pdo->exec("SET time_zone = '+03:30'"); // bot times are Tehran local; Iran has no DST
@@ -155,6 +204,16 @@ function statsCollect(PDO $pdo, $start, $end)
             $r[$key] += (int) $n($row['c']);
             $r[$key . '_sum'] += $n($row['p']);
         }
+    }
+
+    // advertising spend (already part of the expenses above; shown on its own line)
+    $r['exp_ads'] = 0;
+    $r['exp_ads_sum'] = 0;
+    try {
+        $row = $one("SELECT COUNT(*) c, SUM(amount) p FROM expenses WHERE kind = 'advertising' AND created_at BETWEEN :s AND :e", $p);
+        $r['exp_ads'] = (int) $n($row['c']);
+        $r['exp_ads_sum'] = $n($row['p']);
+    } catch (Throwable $e) {
     }
 
     // users / tests
@@ -281,6 +340,7 @@ function statsReport(PDO $pdo, $key)
     $L[] = '';
     $L[] = '🧾 <b>هزینه و سرمایه</b>';
     $L[] = '• هزینه‌ها : ' . $n($d['exp']) . ' عدد — ' . $n($d['exp_sum']) . ' تومان';
+    $L[] = '   ↳ 📣 تبلیغات : ' . $n($d['exp_ads']) . ' عدد — ' . $n($d['exp_ads_sum']) . ' تومان';
     $L[] = '• برداشت از کیف پول : ' . $n($d['wallet_out']) . ' عدد — ' . $n($d['wallet_out_sum']) . ' تومان';
     $L[] = '• ورود سرمایه : ' . $n($d['cap']) . ' عدد — ' . $n($d['cap_sum']) . ' تومان';
     $L[] = '';

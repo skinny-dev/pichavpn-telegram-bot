@@ -315,11 +315,30 @@ if ($datain == "paygwback") {
     } else {
         sendmessage($from_id, $statsText, statsKeyboard('all'), 'HTML');
     }
-} elseif (preg_match('/^\/(expense|capital)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
-    $accTable = $acc[1] == 'expense' ? 'expenses' : 'capital_entries';
-    $stmt = $pdo->prepare("INSERT INTO $accTable (amount, description, created_at, admin_id) VALUES (?,?,?,?)");
-    $stmt->execute([(int) $acc[2], trim($acc[3]), time(), $from_id]);
-    sendmessage($from_id, ($acc[1] == 'expense' ? '🧾 هزینه ثبت شد: ' : '🏦 ورود سرمایه ثبت شد: ') . number_format((int) $acc[2]) . ' تومان', null, 'HTML');
+} elseif (preg_match('/^\/(expense|capital|ad)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
+    // /ad 500000 کمپین اینستاگرام            -> advertising expense, now
+    // /ad 500000 کمپین اینستاگرام @1405/07/14 15:30   -> same, on that date/time (date alone = 12:00)
+    require_once __DIR__ . '/stats_report.php';
+    $accName = trim($acc[3]);
+    $accTime = time();
+    if (preg_match('/^(.*?)\s*@\s*(\S+(?:\s+\d{1,2}[:٫]\d{2}(?::\d{2})?)?)\s*$/su', $accName, $accDt)) {
+        $parsedAt = accParseDateTime($accDt[2]);
+        if ($parsedAt === null) {
+            sendmessage($from_id, "❌ تاریخ را به‌صورت 1405/07/14 یا 1405/07/14 15:30 بنویسید.", null, 'HTML');
+            return;
+        }
+        $accName = trim($accDt[1]);
+        $accTime = $parsedAt;
+    }
+    if ($acc[1] == 'capital') {
+        $pdo->prepare("INSERT INTO capital_entries (amount, description, created_at, admin_id) VALUES (?,?,?,?)")->execute([(int) $acc[2], $accName, $accTime, $from_id]);
+        $accLabel = '🏦 ورود سرمایه ثبت شد: ';
+    } else {
+        $accKind = $acc[1] == 'ad' ? 'advertising' : 'general';
+        $pdo->prepare("INSERT INTO expenses (amount, description, created_at, admin_id, kind) VALUES (?,?,?,?,?)")->execute([(int) $acc[2], $accName, $accTime, $from_id, $accKind]);
+        $accLabel = $acc[1] == 'ad' ? '📣 هزینه تبلیغات ثبت شد: ' : '🧾 هزینه ثبت شد: ';
+    }
+    sendmessage($from_id, $accLabel . number_format((int) $acc[2]) . ' تومان' . ($accName !== '' ? "\n📝 " . htmlspecialchars($accName, ENT_NOQUOTES, 'UTF-8') : '') . "\n🕒 " . accFormatDateTime($accTime), null, 'HTML');
 } elseif (strpos((string) $datain, "pstat_") === 0) {
     require_once __DIR__ . '/stats_report.php';
     $statsKey = substr($datain, 6);

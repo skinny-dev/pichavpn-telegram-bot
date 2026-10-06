@@ -9,5 +9,7 @@ return [
         created_at INT NOT NULL,
         admin_id VARCHAR(100) NULL
         SQL,
-    'columns' => [],
+    'columns' => [
+        ['kind', 'general', 'VARCHAR(30)'],
+    ],
 ];

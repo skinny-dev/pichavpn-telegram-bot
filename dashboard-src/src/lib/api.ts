@@ -1,4 +1,4 @@
-export type ColType = 'int' | 'text' | 'ts' | 'str' | 'enum'
+export type ColType = 'int' | 'text' | 'ts' | 'str' | 'enum' | 'dt'
 export interface Col {
   key: string
   label: string
