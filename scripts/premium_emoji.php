@@ -6,6 +6,8 @@
 //   php scripts/premium_emoji.php preview "🔥 خرید سرویس"                 # see what a text becomes
 //   php scripts/premium_emoji.php test 123456789                         # send a real test message + button to a chat id
 //   php scripts/premium_emoji.php buttons on|off                         # show premium ICONS on buttons (off = buttons keep a normal emoji; recommended until `test` proves it)
+//   php scripts/premium_emoji.php reply on|off                           # premium icons on the BOTTOM menu (reply keyboard); try `replytest` first
+//   php scripts/premium_emoji.php replytest 123456789                    # sends a real bottom keyboard with premium icons so you can SEE if your Telegram draws them
 //   php scripts/premium_emoji.php catalog preview                        # how your products/categories look with emoji (reads the database)
 //   php scripts/premium_emoji.php catalog on|off                         # show emoji on product and category buttons (display only)
 //   php scripts/premium_emoji.php alias list | set ✅ ✔ | unset ✅ | defaults on|off   # borrow a close premium emoji when a pack lacks one
@@ -271,9 +273,38 @@ switch ($cmd) {
         echo 'premium icons on buttons: ' . $sub . ($sub === 'on' ? "\nAfter this, buttons show the premium emoji as an icon in front of the text. If a button then looks wrong or has no emoji on your phone, run: buttons off\n" : "\nButtons now keep their normal emoji.\n") . "\n";
         break;
 
+    case 'reply':
+        $sub = $argv[2] ?? '';
+        if ($sub !== 'on' && $sub !== 'off') {
+            echo 'premium icons on the bottom menu: ' . (!empty($cfg['reply_buttons']) ? 'on' : 'off') . "\nuse: reply on | reply off\n";
+            break;
+        }
+        $cfg['reply_buttons'] = $sub === 'on';
+        pe_save($file, $cfg);
+        echo 'premium icons on the bottom menu: ' . $sub . ($sub === 'on' ? "\nThe bottom menu buttons now carry the premium emoji as an icon, and labels you edit with a premium emoji apply too.\nTaps are matched back to the original labels automatically. If the menu looks wrong, run: reply off (instant)\n" : "\nThe bottom menu keeps normal emoji.\n");
+        break;
+
+    case 'replytest':
+        $chat = $argv[2] ?? '';
+        if (!preg_match('/^-?\d{5,}$/', $chat) || empty($cfg['map'])) {
+            echo "usage: replytest YOUR_NUMERIC_TELEGRAM_ID   (press Start on the bot first; needs imported packs)\n";
+            break;
+        }
+        $ids = $cfg['map'];
+        $pairs = array_slice($ids, 0, 2, true);
+        $kb = [[]];
+        $n = 0;
+        foreach ($pairs as $emo => $emoId) {
+            $kb[0][] = ['text' => 'دکمه آزمایشی ' . (++$n), 'icon_custom_emoji_id' => (string) $emoId];
+        }
+        $r = pe_api('sendMessage', ['chat_id' => $chat, 'text' => "کیبورد آزمایشی پایین صفحه فرستاده شد.\nاگر جلوی متن دکمه‌ها ایموجی پریمیوم می‌بینید، دستور «reply on» را بزنید.\nبرای برگشت منوی اصلی، /start را بفرستید.", 'reply_markup' => json_encode(['keyboard' => $kb, 'resize_keyboard' => true], JSON_UNESCAPED_UNICODE)]);
+        echo $r['ok'] ? "sent. Look at the bottom keyboard: do the two buttons show an emoji ICON in front of the text? If yes: reply on. Send /start to the bot to restore the normal menu.\n" : 'REFUSED: ' . ($r['description'] ?? '?') . "\nTelegram does not accept button icons for this bot; leave reply off.\n";
+        break;
+
     case 'status':
         echo 'enabled: ' . (!empty($cfg['enabled']) ? 'yes' : 'no') . "\n";
         echo 'premium icons on buttons: ' . (!empty($cfg['buttons']) ? 'on' : 'off (buttons show a normal emoji)') . "\n";
+        echo 'premium icons on the bottom menu: ' . (!empty($cfg['reply_buttons']) ? 'on' : 'off (normal emoji)') . "\n";
         echo 'catalog emoji on products/categories: ' . (!empty($cfg['catalog']) ? 'on' : 'off') . "\n";
         echo 'mapped emoji: ' . count($cfg['map']) . "\n";
         foreach ($cfg['packs'] as $n => $t) {

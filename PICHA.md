@@ -89,3 +89,14 @@ Change the delay: `UPDATE PaySetting SET ValuePay='10' WHERE NamePay='variza_rec
 - **Products**: ✏️ ویرایش محصول → choose panel, customer type, product → **🚦 وضعیت فروش** (bottom keyboard).
 - **Web panel**: both have a «وضعیت فروش» column (dropdown) in the Products / Categories tables.
 Tests: `php tests/category_status_test.php`, `python3 tests/api_test.py URL admin PASS`.
+
+### Premium emoji on the bottom menu (reply keyboard) — opt-in
+    php scripts/premium_emoji.php replytest YOUR_ID   # sends a bottom keyboard with 2 premium icons: do you SEE them?
+    php scripts/premium_emoji.php reply on            # yes -> the whole bottom menu gets premium icons
+    php scripts/premium_emoji.php reply off           # instant way back
+With `reply on`: every bottom-menu label that starts with a mapped emoji gets that emoji as its premium icon, and a label you edit in
+the bot (button text editor) with a premium emoji applies as well. Taps come back as the text without the emoji; the bot remembers every
+converted label (`storage/premium_reply_labels.json`) and the edited labels (existing label map) and matches them back, so every handler still works.
+Whether the icon is actually drawn depends on Telegram (bot allowance and app version): that is why `replytest` exists. Inline buttons use `buttons on|off`.
+Tests: `php tests/premium_emoji_test.php`.
+

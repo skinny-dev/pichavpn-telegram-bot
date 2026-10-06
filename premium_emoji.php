@@ -36,6 +36,37 @@ function premiumEmojiNormalize($emoji)
     return str_replace("\u{FE0F}", '', (string) $emoji);
 }
 
+/**
+ * Reply-keyboard taps come back as the button text WITHOUT the emoji that became its icon, so the handlers (which compare
+ * against the full label) would not recognise them. Every converted label is remembered here: stripped text -> original label.
+ */
+function premiumEmojiLabelIndexFile()
+{
+    return dirname(premiumEmojiFile()) . '/premium_reply_labels.json';
+}
+
+function premiumEmojiLabelIndex($add = null)
+{
+    static $index = null;
+    if ($index === null) {
+        $raw = is_file(premiumEmojiLabelIndexFile()) ? json_decode((string) @file_get_contents(premiumEmojiLabelIndexFile()), true) : null;
+        $index = is_array($raw) ? $raw : [];
+    }
+    if (is_array($add)) {
+        $changed = false;
+        foreach ($add as $stripped => $original) {
+            if ($stripped !== '' && $stripped !== $original && ($index[$stripped] ?? null) !== $original) {
+                $index[$stripped] = $original;
+                $changed = true;
+            }
+        }
+        if ($changed && count($index) < 5000) {
+            @file_put_contents(premiumEmojiLabelIndexFile(), json_encode($index, JSON_UNESCAPED_UNICODE), LOCK_EX);
+        }
+    }
+    return $index;
+}
+
 /** Loads and caches the config. Returns ['enabled' => bool, 'map' => [emoji => id], 'regex' => string|null]. */
 function premiumEmojiConfig($reload = false)
 {
@@ -43,7 +74,7 @@ function premiumEmojiConfig($reload = false)
     if ($cfg !== null && !$reload) {
         return $cfg;
     }
-    $cfg = ['enabled' => false, 'map' => [], 'regex' => null, 'catalog' => false, 'catalog_override' => [], 'buttons' => false];
+    $cfg = ['enabled' => false, 'map' => [], 'regex' => null, 'catalog' => false, 'catalog_override' => [], 'buttons' => false, 'reply_buttons' => false];
     $file = premiumEmojiFile();
     if (!is_file($file)) {
         return $cfg;
@@ -77,6 +108,7 @@ function premiumEmojiConfig($reload = false)
     }
     $cfg['catalog'] = !empty($raw['catalog']);
     $cfg['buttons'] = !empty($raw['buttons']); // premium ICONS on buttons: opt-in (see `php scripts/premium_emoji.php buttons on`)
+    $cfg['reply_buttons'] = !empty($raw['reply_buttons']); // premium icons on the bottom (reply) keyboard: opt-in (`php scripts/premium_emoji.php reply on`)
     $cfg['catalog_override'] = is_array($raw['catalog_override'] ?? null) ? $raw['catalog_override'] : [];
     $keys = array_keys($map);
     usort($keys, function ($a, $b) {
@@ -85,7 +117,7 @@ function premiumEmojiConfig($reload = false)
     $parts = array_map(function ($k) {
         return preg_quote($k, '/');
     }, $keys);
-    $cfg = ['enabled' => true, 'map' => $map, 'regex' => '/(?:' . implode('|', $parts) . ")\u{FE0F}?/u", 'catalog' => $cfg['catalog'], 'catalog_override' => $cfg['catalog_override'], 'buttons' => $cfg['buttons']];
+    $cfg = ['enabled' => true, 'map' => $map, 'regex' => '/(?:' . implode('|', $parts) . ")\u{FE0F}?/u", 'catalog' => $cfg['catalog'], 'catalog_override' => $cfg['catalog_override'], 'buttons' => $cfg['buttons'], 'reply_buttons' => $cfg['reply_buttons']];
     return $cfg;
 }
 
@@ -157,11 +189,19 @@ function premiumEmojiApplyPayload(array $datas, $method = '')
             }
         }
     }
-    if ($cfg['buttons'] && isset($datas['reply_markup']) && is_string($datas['reply_markup']) && $datas['reply_markup'] !== '') {
+    if (($cfg['buttons'] || $cfg['reply_buttons']) && isset($datas['reply_markup']) && is_string($datas['reply_markup']) && $datas['reply_markup'] !== '') {
         $markup = json_decode($datas['reply_markup'], true);
         if (is_array($markup)) {
             $changed = false;
-            foreach (['inline_keyboard'] as $key) { // reply keyboards never get icons: Telegram does not draw them there
+            $keyboardKeys = [];
+            if ($cfg['buttons']) {
+                $keyboardKeys[] = 'inline_keyboard';
+            }
+            if ($cfg['reply_buttons']) { // opt-in: the bottom (reply) keyboard; see premiumEmojiLabelIndex() for how taps are matched back
+                $keyboardKeys[] = 'keyboard';
+            }
+            $learned = [];
+            foreach ($keyboardKeys as $key) {
                 if (!isset($markup[$key]) || !is_array($markup[$key])) {
                     continue;
                 }
@@ -177,10 +217,16 @@ function premiumEmojiApplyPayload(array $datas, $method = '')
                                 // botapi.php turns the first <tg-emoji> into the button icon and strips the rest
                                 $markup[$key][$r][$b]['text'] = htmlspecialchars_decode($wrapped, ENT_NOQUOTES);
                                 $changed = true;
+                                if ($key === 'keyboard' && function_exists('splitCustomEmojiLabel')) {
+                                    $learned[trim(splitCustomEmojiLabel($markup[$key][$r][$b]['text'])['text'])] = $button['text'];
+                                }
                             }
                         }
                     }
                 }
+            }
+            if ($learned) {
+                premiumEmojiLabelIndex($learned);
             }
             if ($changed) {
                 $encoded = json_encode($markup, JSON_UNESCAPED_UNICODE);
@@ -210,9 +256,10 @@ function premiumEmojiPrepareButtons(array $datas)
     }
     $cfg = premiumEmojiConfig();
     $iconsOn = $cfg['enabled'] && $cfg['buttons'];
+    $replyIconsOn = $cfg['enabled'] && $cfg['reply_buttons'];
     $changed = false;
     foreach (['keyboard', 'inline_keyboard'] as $key) {
-        if ($key === 'inline_keyboard' && $iconsOn) {
+        if (($key === 'inline_keyboard' && $iconsOn) || ($key === 'keyboard' && $replyIconsOn)) {
             continue; // botapi.php turns the first emoji into the icon
         }
         if (!isset($markup[$key]) || !is_array($markup[$key])) {
@@ -274,7 +321,7 @@ function premiumEmojiRestoreName($text)
             }
         }
     }
-    return $index[$text] ?? $text;
+    return $index[$text] ?? (premiumEmojiLabelIndex()[$text] ?? $text);
 }
 
 function premiumEmojiStartsWithEmoji($label)

@@ -19,10 +19,10 @@ function t($name, $cond, $extra = '')
     echo ($cond ? 'PASS ' : 'FAIL ') . $name . ($cond ? '' : "  -> $extra") . "\n";
     $fails += !$cond;
 }
-function cfg($enabled, $map, $buttons = true)
+function cfg($enabled, $map, $buttons = true, $reply = false)
 {
     global $tmp;
-    file_put_contents($tmp, json_encode(['enabled' => $enabled, 'map' => $map, 'buttons' => $buttons]));
+    file_put_contents($tmp, json_encode(['enabled' => $enabled, 'map' => $map, 'buttons' => $buttons, 'reply_buttons' => $reply]));
     premiumEmojiConfig(true);
 }
 
@@ -181,6 +181,31 @@ $off = premiumEmojiApplyPayload(['reply_markup' => $kb1, 'text' => '🔥 x', 'pa
 t('buttons OFF: labels keep the plain emoji', $off['reply_markup'] === $kb1);
 t('buttons OFF: message text still gets premium emoji', strpos($off['text'], '<tg-emoji emoji-id="50005">') === 0);
 cfg(true, ['🗓' => '70007', '🔥' => '50005'], true);
+
+// --- bottom (reply) keyboard: opt-in icons, taps matched back, edited labels
+@unlink(dirname($tmp) . '/premium_reply_labels.json');
+$reply = json_encode(['keyboard' => [[['text' => '🔥 خرید اشتراک'], ['text' => '🗓 تمدید']]], 'resize_keyboard' => true], JSON_UNESCAPED_UNICODE);
+cfg(true, ['🗓' => '70007', '🔥' => '50005'], true, false);
+$r0 = premiumEmojiApplyPayload(['reply_markup' => $reply, 'text' => 'x', 'parse_mode' => 'HTML'], 'sendMessage');
+t('reply OFF: bottom keyboard untouched', $r0['reply_markup'] === $reply);
+cfg(true, ['🗓' => '70007', '🔥' => '50005'], true, true);
+$r1 = premiumEmojiApplyPayload(['reply_markup' => $reply, 'text' => 'x', 'parse_mode' => 'HTML'], 'sendMessage');
+$k1 = json_decode($r1['reply_markup'], true)['keyboard'][0];
+t('reply ON: bottom keyboard labels carry the premium emoji', strpos($k1[0]['text'], '<tg-emoji emoji-id="50005">') === 0 && strpos($k1[1]['text'], '<tg-emoji emoji-id="70007">') === 0, $r1['reply_markup']);
+$sp = splitCustomEmojiLabel($k1[0]['text']);
+t('reply ON: botapi turns it into an icon and a clean label', $sp['icon'] === '50005' && $sp['text'] === 'خرید اشتراک', json_encode($sp, JSON_UNESCAPED_UNICODE));
+t('reply ON: the tap (text without the emoji) maps back to the original label', premiumEmojiRestoreName('خرید اشتراک') === '🔥 خرید اشتراک' && premiumEmojiRestoreName('تمدید') === '🗓 تمدید');
+t('reply ON: unrelated text is left alone', premiumEmojiRestoreName('سلام') === 'سلام');
+$again = premiumEmojiApplyPayload(['reply_markup' => $r1['reply_markup'], 'text' => 'x', 'parse_mode' => 'HTML'], 'sendMessage');
+t('reply ON: idempotent (already converted labels are not wrapped twice)', $again['reply_markup'] === $r1['reply_markup']);
+// a label an admin edited to contain a premium emoji (tag stored in the label)
+$edited = json_encode(['keyboard' => [[['text' => '<tg-emoji emoji-id="99999">⭐</tg-emoji> پشتیبانی ویژه']]], 'resize_keyboard' => true], JSON_UNESCAPED_UNICODE);
+$pb = premiumEmojiPrepareButtons(['reply_markup' => $edited]);
+t('reply ON: an edited label with a premium emoji keeps its tag (becomes an icon)', $pb['reply_markup'] === $edited);
+cfg(true, ['🗓' => '70007', '🔥' => '50005'], true, false);
+$pb2 = premiumEmojiPrepareButtons(['reply_markup' => $edited]);
+t('reply OFF: the same edited label falls back to the plain emoji', strpos($pb2['reply_markup'], '<tg-emoji') === false && strpos($pb2['reply_markup'], '⭐') !== false);
+@unlink(dirname($tmp) . '/premium_reply_labels.json');
 
 unlink($tmp);
 echo "\nFAILED: $fails\n";
