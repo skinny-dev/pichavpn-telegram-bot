@@ -1041,7 +1041,7 @@ function sortProductRows(array $rows, $mode = null)
 function startMenuConfig()
 {
     $default = ['enabled' => true, 'buttons' => [
-        ['text' => '🚀 شروع سریع', 'help' => 'شروع سریع'],
+        ['text' => '🛍 خرید اشتراک', 'callback' => 'buy'],
         ['text' => '📚 آموزش', 'callback' => 'helpbtn'],
     ]];
     $file = getenv('PICHA_START_MENU_FILE') ?: __DIR__ . '/storage/start_menu.json';
@@ -1069,7 +1069,7 @@ function startGuideButtons()
         }
         if (!empty($b['url']) && preg_match('#^https?://#i', (string) $b['url'])) {
             $buttons[] = ['text' => $b['text'], 'url' => $b['url']];
-        } elseif (!empty($b['callback']) && in_array($b['callback'], ['helpbtn', 'supportbtns'], true)) {
+        } elseif (!empty($b['callback']) && in_array($b['callback'], ['buy', 'helpbtn', 'supportbtns'], true)) {
             $buttons[] = ['text' => $b['text'], 'callback_data' => $b['callback']];
         } elseif (!empty($b['help'])) {
             // no articles yet: the button stays and says «coming soon» (it opens the articles as soon as the category has some)
@@ -1079,7 +1079,7 @@ function startGuideButtons()
     return array_chunk($buttons, 2);
 }
 
-/** Welcome text with the guide buttons under it, then the main menu keyboard. Without guide buttons: the old single message. */
+/** Welcome text with the two buttons under it (one message). The bottom menu keyboard is sent once, to users who never got it. Without buttons: the old single message with the menu. */
 function sendStartMessage($chat_id, $keyboard)
 {
     global $textbotlang;
@@ -1087,8 +1087,23 @@ function sendStartMessage($chat_id, $keyboard)
     if (!$rows) {
         return sendmessage($chat_id, $textbotlang['users']['text_start'], $keyboard, 'html');
     }
+    global $pdo;
     $sent = sendmessage($chat_id, $textbotlang['users']['text_start'], json_encode(['inline_keyboard' => $rows], JSON_UNESCAPED_UNICODE), 'html');
-    sendmessage($chat_id, $textbotlang['users']['startMenuPrompt'] ?? '👇 خرید، تمدید و پیگیری سرویس‌هات رو از منوی پایین انجام بده.', $keyboard, 'html');
+    // Telegram allows one keyboard per message: the bottom menu is sent once (first /start); after that the welcome is a single message
+    try {
+        $st = $pdo->prepare("SELECT menu_sent FROM user WHERE id = ?");
+        $st->execute([$chat_id]);
+        $menuSent = $st->fetchColumn();
+    } catch (Throwable $e) {
+        $menuSent = '1';
+    }
+    if ((string) $menuSent !== '1') {
+        sendmessage($chat_id, $textbotlang['users']['startMenuPrompt'] ?? '👇 از منوی پایین هم می‌تونی خرید، تمدید و پیگیری سرویس‌هات رو انجام بدی.', $keyboard, 'html');
+        try {
+            $pdo->prepare("UPDATE user SET menu_sent = '1' WHERE id = ?")->execute([$chat_id]);
+        } catch (Throwable $e) {
+        }
+    }
     return $sent;
 }
 

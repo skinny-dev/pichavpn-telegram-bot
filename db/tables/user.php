@@ -49,6 +49,7 @@ return [
         ['message_count', '0'],
         ['last_message_time', '0'],
         ['agent', 'f'],
+        ['menu_sent', '0', 'VARCHAR(5)'],
         ['affiliatescount', '0'],
         ['affiliates', '0'],
         ['namecustom', 'none'],
