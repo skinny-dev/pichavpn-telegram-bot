@@ -100,3 +100,11 @@ converted label (`storage/premium_reply_labels.json`) and the edited labels (exi
 Whether the icon is actually drawn depends on Telegram (bot allowance and app version): that is why `replytest` exists. Inline buttons use `buttons on|off`.
 Tests: `php tests/premium_emoji_test.php`.
 
+
+## Welcome message with guide buttons
+`/start` sends the welcome text with **🚀 شروع سریع | 📥 نصب و اتصال | 🔄 تمدید | 🛠 رفع مشکل** under it (each opens the matching آموزش category),
+then a short line with the normal bottom menu. A guide button only appears when its category has articles.
+    php scripts/start_menu.php seed      # creates the 4 categories with starter articles (edit them in the bot: آموزش management)
+    php scripts/start_menu.php status | on | off | set "TEXT" "CATEGORY" | url "TEXT" https://... | remove "TEXT"
+The welcome text is editable in the bot's text editor (`users.text_start`); premium emoji typed there are kept (see below).
+Tests: `php tests/start_menu_test.php`.

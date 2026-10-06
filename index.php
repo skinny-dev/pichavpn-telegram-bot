@@ -237,7 +237,7 @@ if (strpos($text, "/start ") !== false && $user['step'] != "gettextSystemMessage
             $type_gift = false;
             $stmt->execute([$from_id, $type_gift, $dateacc, $affiliatesid]);
         } else {
-            sendmessage($from_id, $textbotlang['users']['text_start'], $keyboard, 'html');
+            sendStartMessage($from_id, $keyboard);
             update("user", "Processing_value", "0", "id", $from_id);
             update("user", "Processing_value_one", "0", "id", $from_id);
             update("user", "Processing_value_tow", "0", "id", $from_id);
@@ -281,7 +281,7 @@ if ($user['joinchannel'] != "active") {
         if ($datain == "confirmchannel") {
             if (count($channels) == 0) {
                 deletemessage($from_id, $message_id);
-                sendmessage($from_id, $textbotlang['users']['text_start'], $keyboard, 'html');
+                sendStartMessage($from_id, $keyboard);
                 telegram('answerCallbackQuery', [
                     'callback_query_id' => $callback_query_id,
                     'text' => $textbotlang['users']['channel']['confirmed'],
@@ -335,7 +335,7 @@ if ($user['joinchannel'] != "active") {
                     $addbalancediscount = number_format($marzbanDiscountaffiliates['price_Discount'], 0);
                     sendmessage($affiliatesid, strtr($textbotlang['users']['affiliates']['balanceGift'], ['{addbalancediscount}' => $addbalancediscount, '{from_id}' => $from_id]), null, 'html');
                 }
-                sendmessage($from_id, $textbotlang['users']['text_start'], $keyboard, 'html');
+                sendStartMessage($from_id, $keyboard);
                 $addcountaffiliates = intval($useraffiliates['affiliatescount']) + 1;
                 update("user", "affiliates", $affiliatesid, "id", $from_id);
                 update("user", "Processing_value_four", "none", "id", $from_id);
@@ -368,7 +368,7 @@ if ($user['joinchannel'] != "active") {
     }
 }
 if ($text == "/start" || $datain == "start" || $text == "start") {
-    sendmessage($from_id, $textbotlang['users']['text_start'], $keyboard, "html");
+    sendStartMessage($from_id, $keyboard);
     update("user", "Processing_value", "0", "id", $from_id);
     update("user", "Processing_value_one", "0", "id", $from_id);
     update("user", "Processing_value_tow", "0", "id", $from_id);
@@ -401,7 +401,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         return;
     }
     sendmessage($from_id, $textbotlang['users']['number']['active'], json_encode(['inline_keyboard' => [], 'remove_keyboard' => true]), 'html');
-    sendmessage($from_id, $textbotlang['users']['text_start'], $keyboard, 'html');
+    sendStartMessage($from_id, $keyboard);
     update("user", "number", $user_phone, "id", $from_id);
     step('home', $from_id);
 } elseif ($text == $textbotlang['textbot']['purchasedServices'] || $datain == "backorder" || $text == "/services") {

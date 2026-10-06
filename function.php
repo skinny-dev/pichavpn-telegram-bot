@@ -985,6 +985,60 @@ function addBalance($userId, $amount)
     $stmt = $pdo->prepare("UPDATE user SET Balance = Balance + ? WHERE id = ?");
     $stmt->execute([$amount, $userId]);
 }
+/** Welcome-message guide buttons. Config: storage/start_menu.json (managed by scripts/start_menu.php). */
+function startMenuConfig()
+{
+    $default = ['enabled' => true, 'buttons' => [
+        ['text' => '🚀 شروع سریع', 'help' => 'شروع سریع'],
+        ['text' => '📥 نصب و اتصال', 'help' => 'نصب و اتصال'],
+        ['text' => '🔄 تمدید', 'help' => 'تمدید'],
+        ['text' => '🛠 رفع مشکل', 'help' => 'رفع مشکل'],
+    ]];
+    $file = getenv('PICHA_START_MENU_FILE') ?: __DIR__ . '/storage/start_menu.json';
+    $raw = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
+    return is_array($raw) ? array_replace($default, $raw) : $default;
+}
+
+/** Inline rows (2 per row). A guide button only appears when its help category really has articles, so nothing is ever dead. */
+function startGuideButtons()
+{
+    global $pdo;
+    $cfg = startMenuConfig();
+    if (empty($cfg['enabled']) || !is_array($cfg['buttons'])) {
+        return [];
+    }
+    try {
+        $cats = $pdo->query("SELECT DISTINCT category FROM help WHERE category IS NOT NULL AND category <> ''")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        $cats = [];
+    }
+    $buttons = [];
+    foreach ($cfg['buttons'] as $b) {
+        if (!is_array($b) || empty($b['text'])) {
+            continue;
+        }
+        if (!empty($b['url']) && preg_match('#^https?://#i', (string) $b['url'])) {
+            $buttons[] = ['text' => $b['text'], 'url' => $b['url']];
+        } elseif (!empty($b['help']) && in_array($b['help'], $cats, true)) {
+            $buttons[] = ['text' => $b['text'], 'callback_data' => 'helpctg_' . dechex(crc32($b['help']))];
+        }
+    }
+    return array_chunk($buttons, 2);
+}
+
+/** Welcome text with the guide buttons under it, then the main menu keyboard. Without guide buttons: the old single message. */
+function sendStartMessage($chat_id, $keyboard)
+{
+    global $textbotlang;
+    $rows = startGuideButtons();
+    if (!$rows) {
+        return sendmessage($chat_id, $textbotlang['users']['text_start'], $keyboard, 'html');
+    }
+    $sent = sendmessage($chat_id, $textbotlang['users']['text_start'], json_encode(['inline_keyboard' => $rows], JSON_UNESCAPED_UNICODE), 'html');
+    sendmessage($chat_id, $textbotlang['users']['startMenuPrompt'] ?? '👇 خرید، تمدید و پیگیری سرویس‌هات رو از منوی پایین انجام بده.', $keyboard, 'html');
+    return $sent;
+}
+
 /** Category sale status ("disable" = sold out): normalised name used to match product.category */
 function categoryOffKey($remark)
 {
