@@ -39,6 +39,20 @@ function fail(string $msg, int $code = 400, array $extra = []): void
     out(['ok' => false, 'error' => $msg] + $extra, $code);
 }
 
+function picha_admin_roles(): array
+{
+    return [
+        'administrator' => 'مدیر کل (همه‌ی بخش‌ها + پنل وب)',
+        'Seller' => 'فروشنده (دسترسی محدود در ربات)',
+        'support' => 'پشتیبان (بدون رسید پرداخت‌ها)',
+    ];
+}
+
+function picha_admin_count(PDO $pdo): int
+{
+    return (int) $pdo->query("SELECT COUNT(*) FROM admin WHERE rule = 'administrator'")->fetchColumn();
+}
+
 function body(): array
 {
     static $b = null;
@@ -692,6 +706,100 @@ try {
             }
             $recent = $pdo->query("SELECT id_invoice, username, name_product, price_product, time_sell, Status FROM invoice ORDER BY CAST(time_sell AS UNSIGNED) DESC LIMIT 8")->fetchAll(PDO::FETCH_ASSOC);
             out(['ok' => true, 'today' => $today, 'month' => $month, 'users' => $users, 'balance' => $balance, 'active_services' => $active, 'pending_payments' => $pending, 'series' => $series, 'recent' => $recent]);
+
+        case 'admins':
+            $rows = $pdo->query("SELECT a.id_admin, a.username, a.rule, (a.password LIKE '\$2%' OR a.password LIKE '\$argon2%') AS hp, u.username AS tg_username, u.namecustom FROM admin a LEFT JOIN user u ON u.id = a.id_admin ORDER BY FIELD(a.rule,'administrator','Seller','support'), a.id_admin")->fetchAll(PDO::FETCH_ASSOC);
+            $selfName = (string) $_SESSION['admin_user'];
+            $list = array_map(fn($r) => [
+                'id_admin' => (string) $r['id_admin'], 'username' => (string) $r['username'], 'rule' => (string) $r['rule'],
+                'tg_username' => (string) ($r['tg_username'] ?? ''), 'name' => (string) ($r['namecustom'] ?? ''),
+                // "bot-only" admins carry a random unusable hash; only the web login name differs from the id
+                'web_login' => (string) $r['rule'] === 'administrator' && (string) $r['username'] !== (string) $r['id_admin'],
+                'self' => (string) $r['username'] === $selfName,
+            ], $rows);
+            out(['ok' => true, 'rows' => $list, 'roles' => picha_admin_roles()]);
+
+        case 'admin_save':
+            // body: {id?: existing id_admin, id_admin?: telegram id (create), username, rule, password?}
+            $b = body();
+            $rule = (string) ($b['rule'] ?? '');
+            if (!isset(picha_admin_roles()[$rule])) {
+                fail('نقش نامعتبر است', 422);
+            }
+            $username = trim((string) ($b['username'] ?? ''));
+            $password = (string) ($b['password'] ?? '');
+            $editId = trim((string) ($b['id'] ?? ''));
+            if ($password !== '' && strlen($password) < 8) {
+                fail('رمز عبور باید حداقل ۸ کاراکتر باشد', 422);
+            }
+            $pdo->beginTransaction();
+            if ($editId === '') {
+                $newId = trim((string) ($b['id_admin'] ?? ''));
+                if (!preg_match('/^\d{5,15}$/', $newId)) {
+                    fail('آیدی عددی تلگرام نامعتبر است', 422);
+                }
+                $ex = $pdo->prepare("SELECT COUNT(*) FROM admin WHERE id_admin = ?");
+                $ex->execute([$newId]);
+                if ((int) $ex->fetchColumn() > 0) {
+                    fail('این آیدی قبلاً ادمین است', 409);
+                }
+                $username = $username === '' ? $newId : $username;
+            } else {
+                $cur = $pdo->prepare("SELECT * FROM admin WHERE id_admin = ? FOR UPDATE");
+                $cur->execute([$editId]);
+                $row = $cur->fetch(PDO::FETCH_ASSOC);
+                if (!$row) {
+                    fail('ادمین پیدا نشد', 404);
+                }
+                $newId = $editId;
+                $username = $username === '' ? (string) $row['username'] : $username;
+                $isSelf = (string) $row['username'] === (string) $_SESSION['admin_user'];
+                if ($isSelf && $rule !== 'administrator') {
+                    fail('نقش حساب خودتان را نمی‌توانید کاهش دهید', 409);
+                }
+                if ($row['rule'] === 'administrator' && $rule !== 'administrator' && picha_admin_count($pdo) <= 1) {
+                    fail('حداقل یک مدیر کل باید بماند', 409);
+                }
+            }
+            if (!preg_match('/^[A-Za-z0-9_.@-]{3,64}$/', $username)) {
+                fail('نام کاربری فقط حروف انگلیسی، عدد و _ . - @ (۳ تا ۶۴ کاراکتر)', 422);
+            }
+            $dup = $pdo->prepare("SELECT COUNT(*) FROM admin WHERE username = ? AND id_admin != ?");
+            $dup->execute([$username, $newId]);
+            if ((int) $dup->fetchColumn() > 0) {
+                fail('این نام کاربری قبلاً استفاده شده است', 409);
+            }
+            if ($editId === '') {
+                $hash = password_hash($password !== '' ? $password : bin2hex(random_bytes(16)), PASSWORD_BCRYPT, ['cost' => 12]);
+                $pdo->prepare("INSERT INTO admin (id_admin, username, password, rule) VALUES (?,?,?,?)")->execute([$newId, $username, $hash, $rule]);
+            } else {
+                $pdo->prepare("UPDATE admin SET username = ?, rule = ? WHERE id_admin = ?")->execute([$username, $rule, $newId]);
+                if ($password !== '') {
+                    $pdo->prepare("UPDATE admin SET password = ? WHERE id_admin = ?")->execute([password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]), $newId]);
+                }
+                if (!empty($isSelf)) {
+                    $_SESSION['admin_user'] = $username;
+                }
+            }
+            $pdo->commit();
+            out(['ok' => true, 'id' => $newId]);
+
+        case 'admin_delete':
+            $id = trim((string) (body()['id'] ?? ''));
+            $cur = $pdo->prepare("SELECT * FROM admin WHERE id_admin = ?");
+            $cur->execute([$id]);
+            $row = $cur->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                fail('ادمین پیدا نشد', 404);
+            }
+            if ((string) $row['username'] === (string) $_SESSION['admin_user']) {
+                fail('حساب خودتان را نمی‌توانید حذف کنید', 409);
+            }
+            if ($row['rule'] === 'administrator' && picha_admin_count($pdo) <= 1) {
+                fail('حداقل یک مدیر کل باید بماند', 409);
+            }
+            $pdo->prepare("DELETE FROM admin WHERE id_admin = ?")->execute([$id]);
+            out(['ok' => true]);
 
         default:
             fail('مسیر پیدا نشد', 404);

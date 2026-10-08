@@ -131,3 +131,10 @@ Tests: `php tests/accounting_dt_test.php`, `python3 tests/api_test.py URL admin 
 - Every admin in the admin table gets payment receipts (with ✅/❌ buttons), support messages and alerts — the table is read live, so a newly added admin starts receiving them at once, if they pressed Start on the bot. «support» admins do not get payment receipts.
 - Adding an admin in the bot now tells you at once if the new admin never pressed Start (the message could not be delivered).
 Tests: `php tests/admin_test_test.php`.
+
+## Admin management in the web panel
+Sidebar → «ادمین‌ها» (`/dashboard/#/admins`). Only an `administrator` can open the panel.
+- **Add**: Telegram numeric id + role. Roles: `administrator` (everything + web panel), `Seller` (limited bot menu), `support` (limited, no payment receipts). The new admin must press /start in the bot once.
+- **Web login**: only for `administrator`; set a username and a password (≥ 8 chars). Leave the password empty on edit = unchanged. Seller/support (or an administrator without a login name) are bot-only.
+- **Edit/delete**: change role, rename login, reset password, remove. Guards: you cannot delete or demote yourself, and the last administrator can never be removed/demoted. A demoted admin loses panel access immediately (role is checked on every request).
+- API: `admins`, `admin_save`, `admin_delete` in `dashboard/api.php`; covered by `tests/api_test.py`.

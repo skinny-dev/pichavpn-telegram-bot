@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { BarChart3, LayoutDashboard, LogOut, Menu, Moon, Package, Receipt, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { BarChart3, LayoutDashboard, LogOut, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,7 @@ const ITEMS: Item[] = [
   { to: '/orders', label: 'سفارشات', icon: ShoppingCart },
   { to: '/products', label: 'محصولات', icon: Package },
   { to: '/accounting', label: 'حسابداری', icon: Wallet },
+  { to: '/admins', label: 'ادمین‌ها', icon: ShieldCheck },
 ]
 const PRIMARY_MOBILE = ITEMS.slice(0, 4)
 

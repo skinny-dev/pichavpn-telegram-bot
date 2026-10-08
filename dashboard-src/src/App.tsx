@@ -6,6 +6,7 @@ import { lazy, Suspense } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const Overview = lazy(() => import('@/pages/Overview'))
+const Admins = lazy(() => import('@/pages/Admins'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Users = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Users })))
 const Orders = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Orders })))
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="users" element={<Users />} />
           <Route path="orders" element={<Orders />} />
           <Route path="products" element={<Products />} />
+          <Route path="admins" element={<Admins />} />
           <Route path="accounting" element={<Accounting />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

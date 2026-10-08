@@ -129,6 +129,36 @@ s, r = call('update', {'res': 'expenses', 'id': str(adid), 'field': 'kind', 'val
 for i in (adid, oldid, gid):
     call('delete', {'res': 'expenses', 'id': str(i)})
 
+# ---- admin management
+s, r = call('admins'); check('admins list', s == 200 and any(a['self'] for a in r['rows']) and set(r['roles']) == {'administrator', 'Seller', 'support'}, (s, r))
+me = [a for a in r['rows'] if a['self']][0]
+s, r = call('admin_save', {'id_admin': '109617420', 'username': '', 'rule': 'support'}); check('create support admin (bot-only)', s == 200, (s, r))
+s, r = call('admin_save', {'id_admin': '109617420', 'username': '', 'rule': 'support'}); check('duplicate id rejected 409', s == 409, (s, r))
+s, r = call('admin_save', {'id_admin': 'abc', 'rule': 'support'}); check('bad telegram id 422', s == 422, (s, r))
+s, r = call('admin_save', {'id_admin': '222333444', 'rule': 'root'}); check('bad role 422', s == 422, (s, r))
+s, r = call('admin_save', {'id_admin': '222333444', 'username': 'ab', 'rule': 'Seller'}); check('short username 422', s == 422, (s, r))
+s, r = call('admin_save', {'id_admin': '222333444', 'username': me['username'], 'rule': 'Seller'}); check('duplicate username 409', s == 409, (s, r))
+s, r = call('admin_save', {'id_admin': '222333444', 'username': 'webadm1', 'rule': 'administrator', 'password': 'short'}); check('short password 422', s == 422, (s, r))
+s, r = call('admin_save', {'id_admin': '222333444', 'username': 'webadm1', 'rule': 'administrator', 'password': 'longenough1'}); check('create administrator with web login', s == 200, (s, r))
+s, r = call('admin_save', {'id': '109617420', 'username': '', 'rule': 'administrator'}); check('promote to administrator', s == 200, (s, r))
+s, r = call('admin_save', {'id': '109617420', 'username': '', 'rule': 'Seller'}); check('demote to Seller', s == 200, (s, r))
+s, r = call('admin_save', {'id': me['id_admin'], 'username': me['username'], 'rule': 'support'}); check('cannot demote yourself 409', s == 409, (s, r))
+s, r = call('admin_delete', {'id': me['id_admin']}); check('cannot delete yourself 409', s == 409, (s, r))
+s, r = call('admin_delete', {'id': 'nope'}); check('delete unknown 404', s == 404, (s, r))
+# the new admin can log in on a second session; a Seller cannot
+def login_as(u, p):
+    global op, csrf
+    saved = (op, csrf)
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())); csrf = ''
+    st, rr = call('login', {'username': u, 'password': p})
+    op, csrf = saved
+    return st
+check('new administrator can log in', login_as('webadm1', 'longenough1') == 200)
+s, r = call('admin_save', {'id': '222333444', 'username': 'webadm1', 'rule': 'support'}); check('demote web admin', s == 200, (s, r))
+check('demoted admin cannot log in', login_as('webadm1', 'longenough1') == 401)
+for i in ('109617420', '222333444'):
+    s, r = call('admin_delete', {'id': i}); check('delete admin ' + i, s == 200, (s, r))
+
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
 print('\nFAILED:', fails); sys.exit(1 if fails else 0)
