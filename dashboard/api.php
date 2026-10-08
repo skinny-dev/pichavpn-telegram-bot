@@ -607,6 +607,10 @@ if ($role === 'support' && !in_array($route, ['logout', 'support_unread', 'suppo
 // ---------------------------------------------------------------- routes
 
 try {
+    if (strncmp($route, 'fin_', 4) === 0) {
+        require_once __DIR__ . '/finance_api.php';
+        picha_finance_route($route, $pdo, $role, (string) $_SESSION['admin_user']);
+    }
     switch ($route) {
         case 'logout':
             $_SESSION = [];
@@ -1176,6 +1180,11 @@ try {
         default:
             fail('مسیر پیدا نشد', 404);
     }
+} catch (FinError $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    fail($e->getMessage(), $e->http);
 } catch (PichaError $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();

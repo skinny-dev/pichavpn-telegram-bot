@@ -285,6 +285,55 @@ s, r = call('update', {'res': 'orders', 'id': 'inv1', 'field': 'Status', 'value'
 s, r = call('update', {'res': 'orders', 'id': 'inv1', 'field': 'sgrp', 'value': 'active'}); check('virtual columns are read-only', s == 403, (s, r))
 call('update', {'res': 'orders', 'id': 'inv1', 'field': 'Status', 'value': 'active'})
 
+# ---- finance API (double-entry underneath, simple on top)
+sql("DELETE FROM fin_alloc; DELETE FROM fin_journal_lines; DELETE FROM fin_journal; DELETE FROM fin_txn; DELETE FROM fin_parties; DELETE FROM fin_ownership; DELETE FROM fin_loans; DELETE FROM fin_assets; DELETE FROM fin_audit; DELETE FROM fin_settings; DELETE FROM expenses; DELETE FROM capital_entries; DELETE FROM Payment_report; DELETE FROM fin_accounts WHERE code='5333'")
+s, r = call('fin_meta'); check('finance meta lists accounts and categories', s == 200 and len(r['money_accounts']) >= 4 and len(r['expense_accounts']) >= 10 and 'sale.create' in r['permissions'], (s, str(r)[:200]))
+cash = [a for a in r['money_accounts'] if a['system_key'] == 'cash'][0]['id']; bank = [a for a in r['money_accounts'] if a['system_key'] == 'bank_main'][0]['id']
+adv = [a for a in r['expense_accounts'] if a['system_key'] == 'exp_advertising'][0]['id']
+s, r = call('fin_party_save', {'name': 'علی رضایی', 'roles': ['customer', 'partner']}); check('create a party', s == 200 and r['id'] > 0, (s, r)); ali = r['id']
+s, r = call('fin_capital', {'amount': '20,000,000', 'money_account': bank, 'party_id': ali, 'direction': 'in', 'date': ''}); check('capital in (thousand separators accepted)', s == 200, (s, r))
+s, r = call('fin_expense', {'amount': 999999999, 'category_account': adv, 'money_account': cash}); check('expense above the account balance is refused with a clear message', s == 422 and 'کافی نیست' in r['error'], (s, r))
+s, r = call('fin_transfer', {'from_account': bank, 'to_account': cash, 'amount': 3000000}); check('transfer bank → cash', s == 200, (s, r))
+s, r = call('fin_expense', {'amount': 500000, 'category_account': adv, 'money_account': cash, 'memo': 'کمپین تست'}); check('expense recorded', s == 200 and r['ref'].startswith('EXP-'), (s, r)); expid = r['id']
+s, r = call('fin_sale', {'party_id': ali, 'items': [{'name': 'اشتراک', 'qty': 2, 'price': 1500000}], 'paid_now': 1000000, 'money_account': bank, 'due_date': ''}); check('sale with a part payment', s == 200 and r['total'] == 3000000, (s, r)); saleid = r['id']
+s, r = call('fin_overview', range='all'); o = r['overview']
+check('overview: revenue, expense, profit, receivable, money', o['sales'] == 3000000 and o['expenses'] == 500000 and o['net_profit'] == 2500000 and o['receivables'] == 2000000 and o['money_total'] == 20000000 - 500000 + 1000000, o)
+s, r = call('fin_receipt', {'party_id': ali, 'amount': 2000001, 'money_account': bank}); check('cannot receive more than owed', s == 422 and 'بیشتر' in r['error'], (s, r))
+s, r = call('fin_receipt', {'party_id': ali, 'amount': 2000000, 'money_account': bank}); check('settle the rest', s == 200, (s, r))
+s, r = call('fin_aging', kind='sale'); check('receivables empty after settlement', r['summary']['total'] == 0, r)
+s, r = call('fin_pl', range='all'); check('P&L endpoint', r['report']['net_profit'] == 2500000 and r['report']['gross_margin'] == 100.0, r['report'])
+s, r = call('fin_bs'); check('balance sheet balances', r['report']['balanced'] and r['report']['totals']['assets'] == r['report']['totals']['liabilities_and_equity'], r['report']['totals'])
+s, r = call('fin_cf', range='all'); check('cash flow reconciles', r['report']['reconciled'], r['report'])
+s, r = call('fin_tb'); check('trial balance balances', r['report']['balanced'] and r['report']['total_debit'] == r['report']['total_credit'], r['report'])
+s, r = call('fin_activity', per=50); check('activity timeline lists everything with titles and direction', r['total'] >= 6 and r['rows'][0].get('title') and {x['direction'] for x in r['rows']} >= {'in', 'out'}, r['rows'][:2])
+s, r = call('fin_activity', q='کمپین'); check('timeline search by memo', r['total'] == 1, r)
+s, r = call('fin_search', q='علی'); check('global search finds the party and its documents', len(r['parties']) == 1 and len(r['transactions']) >= 1, r)
+s, r = call('fin_txn', id=saleid); check('transaction detail links to the journal entry and receipts', r['journal']['lines'] and len(r['links']) >= 2 and r['txn']['state'] == 'paid', str(r)[:200])
+s, r = call('fin_cancel', {'id': saleid, 'reason': 'x'}); check('paid sale cannot be cancelled', s == 422, (s, r))
+s, r = call('fin_cancel', {'id': expid, 'reason': ''}); check('cancel needs a reason', s == 422, (s, r))
+s, r = call('fin_cancel', {'id': expid, 'reason': 'ثبت اشتباه'}); check('cancel reverses the expense', s == 200, (s, r))
+s, r = call('fin_overview', range='all'); check('after cancel the expense is gone from the numbers', r['overview']['expenses'] == 0, r['overview'])
+s, r = call('fin_integrity'); check('integrity clean', r['problems'] == [], r)
+# legacy bridge: an expense created by the bot's /expense command appears in the ledger
+sql("INSERT INTO expenses (amount,description,created_at,admin_id,kind) VALUES (777000,'سرور تست',UNIX_TIMESTAMP(),'1','server')")
+s, r = call('fin_sync', {}); check('legacy sync imports bot expenses', s == 200 and r['legacy_expense'] == 1, (s, r))
+s, r = call('fin_overview', range='all'); check('legacy expense counted in finance overview', r['overview']['expenses'] == 777000, r['overview'])
+s, r = call('fin_ledger', account=[a for a in call('fin_accounts')[1]['accounts'] if a['system_key'] == 'cash'][0]['id']); check('ledger endpoint with running balance', r['report']['rows'] and r['report']['closing'] == r['report']['rows'][-1]['balance'], str(r)[:200])
+s, r = call('fin_account_save', {'code': '5333', 'name': 'دسته جدید', 'type': 'expense', 'parent_code': '5000'}); check('add a custom category', s == 200, (s, r))
+s, r = call('fin_partners'); check('partners endpoint', s == 200, (s, r))
+s, r = call('fin_ownership', {'shares': [{'party_id': ali, 'percent': 60}], 'date': ''}); check('ownership must total 100%', s == 422 and '۱۰۰' in r['error'], (s, r))
+s, r = call('fin_ownership', {'shares': [{'party_id': ali, 'percent': 100}], 'date': ''}); check('ownership saved', s == 200, (s, r))
+s, r = call('fin_nope'); check('unknown finance route 404', s == 404, (s, r))
+# a support account never reaches finance
+op_saved, csrf_saved = op, csrf
+call('admin_save', {'id_admin': '555666779', 'username': 'sup3', 'rule': 'support', 'password': 'supportpass3'})
+op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())); csrf = ''
+s, r = call('login', {'username': 'sup3', 'password': 'supportpass3'}); csrf = r.get('csrf', '')
+s, r = call('fin_overview'); check('support role is denied finance (403)', s == 403, (s, r))
+op, csrf = op_saved, csrf_saved
+call('admin_delete', {'id': '555666779'})
+sql("DELETE FROM expenses WHERE description='سرور تست'")
+
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
 print('\nFAILED:', fails); sys.exit(1 if fails else 0)
