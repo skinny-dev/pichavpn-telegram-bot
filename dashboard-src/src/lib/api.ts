@@ -6,6 +6,8 @@ export interface Col {
   edit?: boolean
   req?: boolean
   options?: Record<string, string>
+  /** badge colour per enum value */
+  tones?: Record<string, 'default' | 'secondary' | 'success' | 'destructive' | 'warning'>
 }
 export interface Resource {
   title: string

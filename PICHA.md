@@ -195,3 +195,10 @@ The bot link `/sub/<id>` used to rebuild the subscription from the user's `links
 - Files stay on Telegram (only ids are stored). The panel streams them through `api.php?r=support_file` (login required, the bot token never reaches the browser). Telegram bot downloads are limited to 20 MB (bigger files show «در تلگرام ببینید»). Only plain images/video/audio render inline; html/svg/pdf/etc. are download-only.
 - Upload size is also limited by PHP: raise `upload_max_filesize` and `post_max_size` (e.g. 25M / 26M) in the Apache php.ini and restart Apache; the panel prints the current limits when a file is too big.
 - Tests: `php tests/support_files_test.php`, `python3 tests/api_test.py …` (Telegram delivery itself needs the real API).
+
+### Orders list (panel «سفارشات»)
+- **Status groups** as chips with live counts: فعال · در انتظار اولین اتصال · منقضی‌شده · غیرفعال · حذف‌شده · پرداخت‌نشده/ناموفق · سایر (the raw `invoice.Status` values are mapped to Persian labels and coloured badges; the exact status is still a dropdown filter and editable).
+- **Summary cards** for the current selection (count, total amount, active, expired) that follow every filter, search and date range.
+- **Clean categories** per order: customer name, product category, order type (خرید / رایگان‌هدیه / تست), buyer type (کاربر / نماینده / نماینده پیشرفته), panel. All of them are filters and sortable; export (xlsx/csv/json) honours them.
+- **Date range**: همه · امروز · دیروز · ۷ روز · ۳۰ روز · ماه فعلی · ماه قبل.
+- Search covers order id, service name, customer id/name and product.

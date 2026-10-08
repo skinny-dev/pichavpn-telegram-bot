@@ -123,6 +123,75 @@ function body(): array
     return $b;
 }
 
+/** Status groups of an order (service lifecycle), in the order they are shown as chips. */
+function picha_order_groups(): array
+{
+    return ['active' => 'فعال', 'onhold' => 'در انتظار اولین اتصال', 'expired' => 'منقضی‌شده', 'disabled' => 'غیرفعال', 'removed' => 'حذف‌شده', 'unpaid' => 'پرداخت‌نشده / ناموفق', 'other' => 'سایر'];
+}
+
+/** raw invoice.Status value => [group, label] */
+function picha_order_status_map(): array
+{
+    return [
+        'active' => ['active', 'فعال'], 'sendedwarn' => ['active', 'فعال (هشدار ارسال شد)'], 'send_on_hold' => ['onhold', 'در انتظار اولین اتصال'],
+        'end_of_time' => ['expired', 'پایان زمان'], 'end_of_volume' => ['expired', 'پایان حجم'],
+        'disabledn' => ['disabled', 'غیرفعال'], 'disablebyadmin' => ['disabled', 'غیرفعال توسط ادمین'], 'disabled' => ['disabled', 'غیرفعال'],
+        'removebyuser' => ['removed', 'حذف توسط کاربر'], 'removebyadmin' => ['removed', 'حذف توسط ادمین'], 'removeTime' => ['removed', 'حذف خودکار (انقضا)'],
+        'unpaid' => ['unpaid', 'پرداخت‌نشده'], 'Unpaid' => ['unpaid', 'پرداخت‌نشده'], 'Unsuccessful' => ['unpaid', 'ناموفق'], 'expire' => ['unpaid', 'منقضی‌شده (پرداخت‌نشده)'], 'reject' => ['unpaid', 'رد شده'],
+    ];
+}
+
+function picha_order_statuses(): array
+{
+    return array_map(fn($v) => $v[1], picha_order_status_map());
+}
+
+function picha_order_status_tones(): array
+{
+    $tone = ['active' => 'success', 'onhold' => 'warning', 'expired' => 'destructive', 'disabled' => 'secondary', 'removed' => 'secondary', 'unpaid' => 'destructive', 'other' => 'secondary'];
+    return array_map(fn($v) => $tone[$v[0]], picha_order_status_map());
+}
+
+function picha_order_group_expr(): string
+{
+    $by = [];
+    foreach (picha_order_status_map() as $raw => [$g]) {
+        $by[$g][] = "'" . strtolower($raw) . "'";
+    }
+    $when = '';
+    foreach ($by as $g => $list) {
+        $when .= " WHEN LOWER(i.Status) IN (" . implode(',', $list) . ") THEN '$g'";
+    }
+    return "CASE$when ELSE 'other' END";
+}
+
+/** product categories and panels that appear in orders (filter dropdowns) */
+function picha_order_categories(): array
+{
+    global $pdo;
+    $o = [];
+    try {
+        foreach ($pdo->query("SELECT remark FROM category ORDER BY CAST(sort_order AS SIGNED), id")->fetchAll(PDO::FETCH_COLUMN) as $c) {
+            $o[(string) $c] = (string) $c;
+        }
+    } catch (Throwable $e) {
+    }
+    return $o;
+}
+
+function picha_order_panels(): array
+{
+    global $pdo;
+    $o = [];
+    try {
+        foreach ($pdo->query("SELECT DISTINCT Service_location FROM invoice WHERE Service_location IS NOT NULL AND Service_location != '' ORDER BY 1")->fetchAll(PDO::FETCH_COLUMN) as $c) {
+            $o[(string) $c] = (string) $c;
+        }
+    } catch (Throwable $e) {
+    }
+    return $o;
+}
+
 /**
  * Column types: int | text | ts (unix seconds) | str (date string) | enum
  * 'edit' => editable inline; 'req' => required on create.
@@ -151,18 +220,26 @@ function picha_resources(): array
         ],
         'orders' => [
             'table' => 'invoice', 'pk' => 'id_invoice', 'title' => 'سفارشات', 'create' => false, 'delete' => false, 'import' => true,
-            'search' => ['id_invoice', 'username', 'id_user', 'name_product'], 'order' => 'time_sell', 'dir' => 'DESC',
+            'from' => '`invoice` i LEFT JOIN `user` u ON u.id = i.id_user', 'alias' => 'i', 'datecol' => 'time_sell', 'summary' => true,
+            'search' => ['id_invoice', 'username', 'id_user', 'name_product', 'u_name'], 'order' => 'time_sell', 'dir' => 'DESC',
             'cols' => [
                 ['id_invoice', 'شماره سفارش', 'text'],
                 ['time_sell', 'زمان', 'ts'],
-                ['id_user', 'کاربر', 'text'],
+                ['u_name', 'نام کاربر', 'text', 'expr' => "COALESCE(NULLIF(u.namecustom,''), NULLIF(NULLIF(u.username,''),'none'), i.id_user)"],
+                ['id_user', 'آیدی کاربر', 'text'],
                 ['username', 'نام سرویس', 'text'],
                 ['name_product', 'محصول', 'text'],
+                ['cat', 'دسته‌بندی محصول', 'enum', 'options' => picha_order_categories(), 'expr' => "(SELECT p.category FROM product p WHERE p.name_product = i.name_product LIMIT 1)"],
+                ['otype', 'نوع سفارش', 'enum', 'options' => ['paid' => 'خرید', 'free' => 'رایگان / هدیه', 'test' => 'تست'], 'tones' => ['paid' => 'default', 'free' => 'secondary', 'test' => 'warning'],
+                    'expr' => "CASE WHEN i.name_product LIKE '%تست%' THEN 'test' WHEN CAST(i.price_product AS SIGNED) = 0 THEN 'free' ELSE 'paid' END"],
+                ['agent', 'نوع خریدار', 'enum', 'options' => ['f' => 'کاربر عادی', 'n' => 'نماینده عادی', 'n2' => 'نماینده پیشرفته'], 'expr' => "COALESCE(NULLIF(u.agent,''),'f')"],
                 ['price_product', 'مبلغ (تومان)', 'int', 'edit' => true],
                 ['Volume', 'حجم (GB)', 'int', 'edit' => true],
                 ['Service_time', 'مدت (روز)', 'int', 'edit' => true],
-                ['Service_location', 'پنل', 'text'],
-                ['Status', 'وضعیت', 'text', 'edit' => true],
+                ['Service_location', 'پنل', 'enum', 'options' => picha_order_panels()],
+                ['Status', 'وضعیت', 'enum', 'edit' => true, 'options' => picha_order_statuses(), 'tones' => picha_order_status_tones()],
+                ['sgrp', 'گروه وضعیت', 'enum', 'options' => picha_order_groups(), 'tones' => ['active' => 'success', 'onhold' => 'warning', 'expired' => 'destructive', 'disabled' => 'secondary', 'removed' => 'secondary', 'unpaid' => 'destructive', 'other' => 'secondary'],
+                    'expr' => picha_order_group_expr()],
                 ['note', 'یادداشت', 'text', 'edit' => true],
             ],
         ],
@@ -270,6 +347,15 @@ function picha_col(array $res, string $key): ?array
         }
     }
     return null;
+}
+
+/** SQL for a column: virtual columns use their expression, base columns are qualified with the resource alias if there is one. */
+function picha_cx(array $res, array $col): string
+{
+    if (isset($col['expr'])) {
+        return '(' . $col['expr'] . ')';
+    }
+    return isset($res['alias']) ? "`{$res['alias']}`.`{$col['key']}`" : "`{$col['key']}`";
 }
 
 /** Validate/normalise a value for a column. Throws InvalidArgumentException. */
@@ -532,7 +618,11 @@ try {
             foreach (picha_resources() as $name => $r) {
                 $res[$name] = [
                     'title' => $r['title'], 'pk' => $r['pk'], 'create' => $r['create'], 'delete' => $r['delete'], 'import' => $r['import'],
-                    'cols' => array_map(fn($c) => picha_col($r, $c[0]), $r['cols']),
+                    'cols' => array_map(function ($c) use ($r) {
+                        $col = picha_col($r, $c[0]);
+                        unset($col['expr']);
+                        return $col;
+                    }, $r['cols']),
                 ];
             }
             out(['ok' => true, 'resources' => $res]);
@@ -541,23 +631,49 @@ try {
         case 'export':
             $res = picha_res((string) ($_GET['res'] ?? ''));
             $table = $res['table'];
+            $from = $res['from'] ?? "`$table`";
+            $pkSql = isset($res['alias']) ? "`{$res['alias']}`.`{$res['pk']}`" : "`{$res['pk']}`";
             $where = [];
             $params = [];
             $q = trim((string) ($_GET['q'] ?? ''));
             if ($q !== '') {
                 $like = [];
                 foreach ($res['search'] as $s) {
-                    $like[] = "`$s` LIKE ?";
+                    $sc = picha_col($res, $s);
+                    $like[] = ($sc ? picha_cx($res, $sc) : "`$s`") . " LIKE ?";
                     $params[] = '%' . addcslashes($q, '%_\\') . '%';
                 }
                 $where[] = '(' . implode(' OR ', $like) . ')';
             }
+            // date window on the resource's date column: ?range=today|yesterday|7d|30d|month|lastmonth
+            if (!empty($res['datecol']) && !empty($_GET['range'])) {
+                $r = (string) $_GET['range'];
+                if (in_array($r, ['today', 'yesterday', 'month', 'lastmonth'], true)) {
+                    $pr = statsPeriod($r);
+                } elseif ($r === '7d' || $r === '30d') {
+                    $pr = ['start' => time() - ($r === '7d' ? 7 : 30) * 86400, 'end' => time()];
+                } else {
+                    fail('بازه نامعتبر است', 422);
+                }
+                $dcol = picha_col($res, $res['datecol']);
+                $where[] = 'CAST(' . picha_cx($res, $dcol) . ' AS UNSIGNED) BETWEEN ? AND ?';
+                $params[] = (int) $pr['start'];
+                $params[] = (int) $pr['end'];
+            }
+            $groupKey = $res['summary'] ?? false ? 'sgrp' : null; // chips are counted without their own filter
+            $whereNoGroup = $where;
+            $paramsNoGroup = $params;
             foreach ((array) ($_GET['f'] ?? []) as $fk => $fv) {
                 $col = picha_col($res, (string) $fk);
                 if ($col && $fv !== '') {
+                    $cx = picha_cx($res, $col);
                     $isSaleStatus = in_array($col['key'], ['status', 'status_product'], true) && isset($col['options']['active']);
-                    $where[] = $isSaleStatus ? "COALESCE(NULLIF(`{$col['key']}`,''),'active') = ?" : "`{$col['key']}` = ?";
+                    $where[] = $isSaleStatus ? "COALESCE(NULLIF($cx,''),'active') = ?" : "$cx = ?";
                     $params[] = (string) $fv;
+                    if ($col['key'] !== $groupKey) {
+                        $whereNoGroup[] = end($where);
+                        $paramsNoGroup[] = (string) $fv;
+                    }
                 }
             }
             $sortKey = (string) ($_GET['sort'] ?? $res['order']);
@@ -567,26 +683,44 @@ try {
                 $sortCol = picha_col($res, $sortKey);
             }
             $dir = strtoupper((string) ($_GET['dir'] ?? $res['dir'])) === 'ASC' ? 'ASC' : 'DESC';
-            $orderExpr = in_array($sortCol['type'] ?? '', ['int', 'ts', 'dt'], true) ? "CAST(`$sortKey` AS SIGNED)" : "`$sortKey`";
+            $sortSql = picha_cx($res, $sortCol);
+            $orderExpr = in_array($sortCol['type'] ?? '', ['int', 'ts', 'dt'], true) ? "CAST($sortSql AS SIGNED)" : $sortSql;
             // rows created before the sale-status column existed (or by the bot's own add flows) have an empty status = available
-            $names = implode(',', array_map(function ($c) {
+            $names = implode(',', array_map(function ($c) use ($res) {
+                $col = picha_col($res, $c[0]);
+                $cx = picha_cx($res, $col);
                 $isSaleStatus = in_array($c[0], ['status', 'status_product'], true) && isset($c['options']['active']);
-                return $isSaleStatus ? "COALESCE(NULLIF(`{$c[0]}`,''),'active') AS `{$c[0]}`" : "`{$c[0]}`";
+                return $isSaleStatus ? "COALESCE(NULLIF($cx,''),'active') AS `{$c[0]}`" : "$cx AS `{$c[0]}`";
             }, $res['cols']));
             $wsql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
             if ($route === 'export') {
-                $st = $pdo->prepare("SELECT $names FROM `$table`$wsql ORDER BY $orderExpr $dir, `{$res['pk']}` LIMIT " . PICHA_MAX_EXPORT);
+                $st = $pdo->prepare("SELECT $names FROM $from$wsql ORDER BY $orderExpr $dir, $pkSql LIMIT " . PICHA_MAX_EXPORT);
                 $st->execute($params);
                 out(['ok' => true, 'rows' => picha_format_dt($res, $st->fetchAll(PDO::FETCH_ASSOC))]);
             }
             $per = max(1, min(200, (int) ($_GET['per'] ?? 50)));
             $page = max(1, (int) ($_GET['page'] ?? 1));
-            $cnt = $pdo->prepare("SELECT COUNT(*) FROM `$table`$wsql");
+            $cnt = $pdo->prepare("SELECT COUNT(*) FROM $from$wsql");
             $cnt->execute($params);
             $total = (int) $cnt->fetchColumn();
-            $st = $pdo->prepare("SELECT $names FROM `$table`$wsql ORDER BY $orderExpr $dir, `{$res['pk']}` LIMIT $per OFFSET " . (($page - 1) * $per));
+            $st = $pdo->prepare("SELECT $names FROM $from$wsql ORDER BY $orderExpr $dir, $pkSql LIMIT $per OFFSET " . (($page - 1) * $per));
             $st->execute($params);
-            out(['ok' => true, 'rows' => picha_format_dt($res, $st->fetchAll(PDO::FETCH_ASSOC)), 'total' => $total, 'page' => $page, 'per' => $per]);
+            $outData = ['ok' => true, 'rows' => picha_format_dt($res, $st->fetchAll(PDO::FETCH_ASSOC)), 'total' => $total, 'page' => $page, 'per' => $per];
+            if (!empty($res['summary'])) {
+                // orders: revenue of the shown selection + counts per status group (other filters applied, the group filter itself not)
+                $priceSql = picha_cx($res, picha_col($res, 'price_product'));
+                $sum = $pdo->prepare("SELECT COALESCE(SUM(CAST($priceSql AS SIGNED)),0) FROM $from$wsql");
+                $sum->execute($params);
+                $groupSql = picha_cx($res, picha_col($res, 'sgrp'));
+                $gst = $pdo->prepare("SELECT $groupSql AS g, COUNT(*) AS c, COALESCE(SUM(CAST($priceSql AS SIGNED)),0) AS s FROM $from" . ($whereNoGroup ? ' WHERE ' . implode(' AND ', $whereNoGroup) : '') . " GROUP BY g");
+                $gst->execute($paramsNoGroup);
+                $byGroup = [];
+                foreach ($gst->fetchAll(PDO::FETCH_ASSOC) as $g) {
+                    $byGroup[$g['g']] = ['count' => (int) $g['c'], 'sum' => (int) $g['s']];
+                }
+                $outData['summary'] = ['sum' => (int) $sum->fetchColumn(), 'groups' => $byGroup];
+            }
+            out($outData);
 
         case 'update':
             $b = body();

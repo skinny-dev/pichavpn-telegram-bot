@@ -26,6 +26,12 @@ interface Props {
   toolbar?: React.ReactNode
   /** enum columns that get a filter dropdown */
   filterCols?: string[]
+  /** extra query parameters (e.g. a date range) */
+  extra?: Record<string, string>
+  /** filters controlled by the parent (e.g. status chips); they win over the dropdowns */
+  forced?: Record<string, string>
+  /** receives the `summary` block of the list response */
+  onSummary?: (s: any) => void
 }
 
 const PER_OPTIONS = [25, 50, 100, 200]
@@ -40,7 +46,8 @@ export function displayValue(col: Col, v: unknown): React.ReactNode {
     case 'enum': {
       const label = col.options?.[String(v)] ?? String(v)
       const bad = ['block', 'مسدود'].includes(String(v))
-      return <Badge variant={bad ? 'destructive' : String(v) === 'Active' ? 'success' : 'secondary'}>{label}</Badge>
+      const tone = col.tones?.[String(v)]
+      return <Badge variant={tone ?? (bad ? 'destructive' : String(v) === 'Active' ? 'success' : 'secondary')}>{label}</Badge>
     }
     default: return <span>{String(v)}</span>
   }
@@ -48,7 +55,7 @@ export function displayValue(col: Col, v: unknown): React.ReactNode {
 
 const rawText = (col: Col, v: unknown) => (v === null || v === undefined ? '' : String(v))
 
-export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [] }: Props) {
+export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], extra, forced, onSummary }: Props) {
   const qc = useQueryClient()
   const coarse = useCoarsePointer()
   const cols = useMemo(() => res.cols.filter((c) => !hide.includes(c.key)), [res, hide])
@@ -68,13 +75,15 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [] }: 
 
   useEffect(() => { setPage(1) }, [dq, filters, per, sort])
 
-  const params = { res: resName, page, per, q: dq, sort: sort?.key, dir: sort?.dir, f: filters }
+  const allFilters = { ...filters, ...(forced ?? {}) }
+  const params = { res: resName, page, per, q: dq, sort: sort?.key, dir: sort?.dir, f: allFilters, ...(extra ?? {}) }
   const queryKey = ['list', resName, params]
   const list = useQuery({
     queryKey,
-    queryFn: () => api<{ rows: Row[]; total: number }>('list', { query: params }),
+    queryFn: () => api<{ rows: Row[]; total: number; summary?: any }>('list', { query: params }),
     placeholderData: keepPreviousData,
   })
+  useEffect(() => { onSummary?.(list.data?.summary ?? null) }, [list.data?.summary]) // eslint-disable-line react-hooks/exhaustive-deps
   const rows = list.data?.rows ?? []
   const total = list.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / per))
@@ -165,14 +174,14 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [] }: 
   async function doExport(fmt: ExportFormat) {
     setExporting(true)
     try {
-      const out = await api<{ rows: Row[] }>('export', { query: { res: resName, q: dq, sort: sort?.key, dir: sort?.dir, f: filters } })
+      const out = await api<{ rows: Row[] }>('export', { query: { res: resName, q: dq, sort: sort?.key, dir: sort?.dir, f: allFilters, ...(extra ?? {}) } })
       await exportRows(res, out.rows, fmt, resName)
       toast.success(`${fmtNum(out.rows.length)} ردیف خروجی گرفته شد`)
     } catch (e) { toast.error(e instanceof ApiError ? e.message : 'خروجی ناموفق بود') } finally { setExporting(false) }
   }
 
   const enumFilters = cols.filter((c) => c.type === 'enum' && (filterCols.length === 0 || filterCols.includes(c.key)))
-  const anyFilter = Object.values(filters).some(Boolean)
+  const anyFilter = Object.values(filters).some(Boolean) || Object.values(forced ?? {}).some(Boolean)
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
