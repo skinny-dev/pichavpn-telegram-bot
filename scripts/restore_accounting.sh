@@ -5,11 +5,12 @@
 #   restore_accounting.sh BACKUP.tgz.enc            # dry run: shows how many rows would be added
 #   restore_accounting.sh BACKUP.tgz.enc --apply    # saves a copy of the live accounting tables, then adds the missing rows
 #   Options: --app DIR  --passfile FILE  --db-admin-args "-uroot"  --sql db.sql (use a plain dump instead of a backup file)
+#            --inspect  read-only: show what accounting data the backup holds (columns, categories, descriptions), restore nothing
 set -uo pipefail
 FILE="${1:-}"; shift || true
-APP_DIR="${APP_DIR:-/var/www/html/mirzaprobotconfig}"; PASSFILE="${PASSFILE:-/root/.picha-backup-pass}"; ADMIN_ARGS="${DB_ADMIN_ARGS:--uroot}"; APPLY=0; SQLFILE=""
+APP_DIR="${APP_DIR:-/var/www/html/mirzaprobotconfig}"; PASSFILE="${PASSFILE:-/root/.picha-backup-pass}"; ADMIN_ARGS="${DB_ADMIN_ARGS:--uroot}"; APPLY=0; SQLFILE=""; INSPECT=0
 while [ $# -gt 0 ]; do case "$1" in
-  --apply) APPLY=1; shift;; --app) APP_DIR="$2"; shift 2;; --passfile) PASSFILE="$2"; shift 2;;
+  --apply) APPLY=1; shift;; --inspect) INSPECT=1; shift;; --app) APP_DIR="$2"; shift 2;; --passfile) PASSFILE="$2"; shift 2;;
   --db-admin-args) ADMIN_ARGS="$2"; shift 2;; --sql) SQLFILE="$2"; shift 2;; *) echo "unknown option $1"; exit 64;; esac; done
 [ -n "$FILE" ] || { sed -n '2,7p' "$0"; exit 64; }
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -30,6 +31,23 @@ DBN="$(php -r "error_reporting(0); include '$APP_DIR/config.php'; echo \$dbname;
 [ -n "$DBN" ] || die "cannot read the database name from $APP_DIR/config.php"
 mysql $ADMIN_ARGS -e "CREATE DATABASE \`$TMPDB\` CHARACTER SET utf8mb4" || die "cannot create temporary database"
 mysql $ADMIN_ARGS --default-character-set=utf8mb4 "$TMPDB" < "$W/db.sql" || die "backup database failed to load"
+
+if [ "$INSPECT" -eq 1 ]; then
+  Q() { mysql $ADMIN_ARGS --default-character-set=utf8mb4 -t "$TMPDB" -e "$1" 2>&1; }
+  echo "=== backup: expenses table ==="
+  Q "SHOW COLUMNS FROM expenses" | head -20
+  Q "SELECT COUNT(*) rows_, COALESCE(SUM(amount),0) total FROM expenses"
+  Q "SELECT * FROM expenses ORDER BY created_at DESC LIMIT 60"
+  echo "=== backup: capital_entries ==="
+  Q "SELECT COUNT(*) rows_, COALESCE(SUM(amount),0) total FROM capital_entries"
+  Q "SELECT * FROM capital_entries ORDER BY created_at DESC LIMIT 30"
+  echo "=== backup: Payment_report cost / capital rows (Mirza Pro style) ==="
+  Q "SELECT Payment_Method, payment_Status, COUNT(*) n, SUM(CAST(price AS SIGNED)) total FROM Payment_report WHERE Payment_Method IN ('cost','capital_injection') GROUP BY 1,2"
+  Q "SELECT id, time, price, Payment_Method, payment_Status, id_order, LEFT(COALESCE(dec_not_confirmed,''),60) note FROM Payment_report WHERE Payment_Method IN ('cost','capital_injection') ORDER BY id DESC LIMIT 60"
+  echo "=== other tables in the backup that look like accounting ==="
+  Q "SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA='$TMPDB' AND (TABLE_NAME LIKE '%cost%' OR TABLE_NAME LIKE '%expense%' OR TABLE_NAME LIKE '%capital%' OR TABLE_NAME LIKE '%account%' OR TABLE_NAME LIKE '%categor%')"
+  exit 0
+fi
 
 # table | extra row filter (applied to both sides)
 SPECS=("expenses|1=1" "capital_entries|1=1" "Payment_report|Payment_Method IN ('cost','capital_injection')")

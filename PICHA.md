@@ -164,3 +164,7 @@ Categories (`expenses.kind`): `purchase` خرید · `salary` حقوق · `adver
 - Bot (administrator): `/finance` shows all commands: `/buy /salary /ad /server /tools /fee /tax /expense /dividend /capital AMOUNT description [@1405/07/14 15:30]`.
 - Panel: حسابداری → هزینه‌ها: the «نوع هزینه» column is a dropdown, so old rows (all «سایر») can be re-categorised in place, e.g. server purchases → «خرید».
 - Old rows keep working: Mirza-Pro «cost» payments count as «سایر هزینه‌ها»; `net` is unchanged for old data except that dividends no longer reduce expenses (they reduce retained profit).
+
+### Cleaning old expenses
+- `bash scripts/restore_accounting.sh BACKUP.tgz.enc --inspect` — read-only: shows which accounting data (expenses, capital, Pro cost rows) a backup holds.
+- `php scripts/categorize_expenses.php` — dry run: guesses the category of every «سایر» expense from its description (Farsi keywords); `--apply` saves a copy of the table and updates `kind`; `--all` also re-checks already categorised rows. Unmatched rows are listed to be set by hand in the panel.
