@@ -323,6 +323,7 @@ s, r = call('fin_account_save', {'code': '5333', 'name': 'دسته جدید', 't
 s, r = call('fin_partners'); check('partners endpoint', s == 200, (s, r))
 s, r = call('fin_ownership', {'shares': [{'party_id': ali, 'percent': 60}], 'date': ''}); check('ownership must total 100%', s == 422 and '۱۰۰' in r['error'], (s, r))
 s, r = call('fin_ownership', {'shares': [{'party_id': ali, 'percent': 100}], 'date': ''}); check('ownership saved', s == 200, (s, r))
+s, r = call('fin_remind', {'party_id': ali}); check('reminder needs a Telegram link', s == 422 and 'تلگرام' in r['error'], (s, r))
 s, r = call('fin_nope'); check('unknown finance route 404', s == 404, (s, r))
 # a support account never reaches finance
 op_saved, csrf_saved = op, csrf

@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 const Overview = lazy(() => import('@/pages/Overview'))
 const Admins = lazy(() => import('@/pages/Admins'))
+const Finance = lazy(() => import('@/pages/finance'))
 const Support = lazy(() => import('@/pages/Support'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Users = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Users })))
@@ -28,6 +29,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="support" element={<Support />} />
+          <Route path="finance/*" element={<Finance />} />
           <Route path="stats" element={<Stats />} />
           <Route path="users" element={<Users />} />
           <Route path="orders" element={<Orders />} />

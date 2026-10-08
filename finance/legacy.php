@@ -158,5 +158,5 @@ function finMaybeSync(PDO $pdo, int $every = 60): ?array
     if (time() - (int) finSetting($pdo, 'legacy_last_sync', 0) < $every) {
         return null;
     }
-    return finSyncLegacy($pdo);
+    return finSyncLegacy($pdo, 1500); // small batches inside web requests; scripts/fin_sync.php does the big first import
 }

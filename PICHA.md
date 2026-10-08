@@ -202,3 +202,7 @@ The bot link `/sub/<id>` used to rebuild the subscription from the user's `links
 - **Clean categories** per order: customer name, product category, order type (خرید / رایگان‌هدیه / تست), buyer type (کاربر / نماینده / نماینده پیشرفته), panel. All of them are filters and sortable; export (xlsx/csv/json) honours them.
 - **Date range**: همه · امروز · دیروز · ۷ روز · ۳۰ روز · ماه فعلی · ماه قبل.
 - Search covers order id, service name, customer id/name and product.
+
+## Finance system («مالی» in the panel)
+Double-entry engine + business layer + reports, integrated with the bot's existing expenses/capital/payments. Full description: `docs/FINANCE.md`.
+First run on the server: `php scripts/fin_sync.php --check`. Tests: `php tests/finance_test.php`, `python3 tests/api_test.py …`, `node tests/finance_e2e.mjs`.

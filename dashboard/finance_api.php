@@ -169,6 +169,45 @@ function picha_finance_routes(): array
             finAudit($pdo, $u, 'permissions', 'role', $role, $list);
             return ['ok' => true];
         }],
+        'fin_settings' => ['chart.manage', function ($pdo) {
+            $perms = [];
+            foreach (['Seller', 'support'] as $r) {
+                $perms[$r] = json_decode((string) finSetting($pdo, 'perm:' . $r, '[]'), true) ?: [];
+            }
+            return ['perms' => $perms, 'catalog' => finPermissionCatalog(), 'taxes' => $pdo->query("SELECT * FROM fin_taxes ORDER BY archived, name")->fetchAll(PDO::FETCH_ASSOC),
+                'accounts' => array_map(function ($a) use ($pdo) {
+                    $a['balance'] = finAccountBalance($pdo, (int) $a['id']);
+                    return $a;
+                }, finAllAccounts($pdo))];
+        }],
+        'fin_remind' => ['payment.manage', function ($pdo, $in, $u) {
+            // sends a payment reminder through the bot to a customer that is linked to a Telegram account
+            $party = finParty($pdo, $in['party_id'] ?? 0);
+            if (!$party['tg_user_id']) {
+                throw new FinError('این طرف حساب به تلگرام وصل نیست (آیدی عددی تلگرام را در پروفایلش ثبت کنید)');
+            }
+            $st = $pdo->prepare("SELECT COALESCE(SUM(total - paid - (returned - refunded)),0) FROM fin_txn WHERE party_id = ? AND type = 'sale' AND status = 'posted'");
+            $st->execute([$party['id']]);
+            $due = (int) $st->fetchColumn();
+            if ($due <= 0) {
+                throw new FinError('این مشتری طلب بازی ندارد');
+            }
+            $text = trim((string) ($in['text'] ?? ''));
+            if ($text === '') {
+                $text = "🔔 یادآوری پرداخت\n\nمانده‌ی حساب شما: " . number_format($due) . " تومان\nلطفاً در اولین فرصت پرداخت را انجام دهید. در صورت پرداخت قبلی، این پیام را نادیده بگیرید.";
+            }
+            $cwd = getcwd();
+            chdir(dirname(__DIR__));
+            require_once __DIR__ . '/../botapi.php';
+            require_once __DIR__ . '/../function.php';
+            $res = sendmessage($party['tg_user_id'], $text, null, 'HTML');
+            chdir($cwd);
+            if (empty($res['ok'])) {
+                throw new FinError('ارسال به تلگرام ناموفق بود: ' . ($res['description'] ?? 'نامشخص'), 502);
+            }
+            finAudit($pdo, $u, 'remind', 'party', $party['id'], ['due' => $due]);
+            return ['sent' => true, 'due' => $due];
+        }],
         'fin_sync' => ['accounts.manage', function ($pdo, $in, $u) {
             $stats = finSyncLegacy($pdo);
             finDepreciate($pdo, null, 'sync');

@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Headset, LayoutDashboard, LogOut, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { BarChart3, Banknote, Headset, LayoutDashboard, LogOut, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
@@ -12,12 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 interface Item { to: string; label: string; icon: LucideIcon }
 const ALL_ITEMS: Item[] = [
   { to: '/', label: 'نمای کلی', icon: LayoutDashboard },
+  { to: '/finance', label: 'مالی', icon: Banknote },
   { to: '/support', label: 'پشتیبانی', icon: Headset },
   { to: '/stats', label: 'آمار', icon: BarChart3 },
   { to: '/users', label: 'کاربران', icon: Users },
   { to: '/orders', label: 'سفارشات', icon: ShoppingCart },
   { to: '/products', label: 'محصولات', icon: Package },
-  { to: '/accounting', label: 'حسابداری', icon: Wallet },
+  { to: '/accounting', label: 'داده‌های حسابداری', icon: Wallet },
   { to: '/admins', label: 'ادمین‌ها', icon: ShieldCheck },
 ]
 
@@ -64,7 +65,7 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
-      <aside className="sticky top-0 hidden h-dvh flex-col gap-1 border-e bg-card p-3 md:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col gap-1 border-e bg-card p-3 md:flex print:!hidden">
         <div className="mb-3 flex items-center gap-2.5 px-2 pt-1">
           <div className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground"><Receipt className="size-5" /></div>
           <span className="font-bold">{brand}</span>
@@ -78,17 +79,17 @@ export function Layout() {
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur md:hidden print:hidden">
           <h1 className="flex-1 truncate font-semibold">{current?.label ?? brand}</h1>
           <Button variant="ghost" size="icon-sm" onClick={theme.toggle} aria-label="تغییر تم">{theme.dark ? <Sun /> : <Moon />}</Button>
         </header>
         <main className="mx-auto w-full max-w-[90rem] px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-8">
-          <h1 className="mb-6 hidden text-2xl font-bold md:block">{current?.label}</h1>
+          <h1 className="mb-6 hidden text-2xl font-bold md:block print:block">{current?.label}</h1>
           <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted" />}><Outlet /></Suspense>
         </main>
       </div>
 
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t bg-background/95 px-2 pt-1 backdrop-blur md:hidden" aria-label="منوی موبایل">
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t bg-background/95 px-2 pt-1 backdrop-blur md:hidden print:hidden" aria-label="منوی موبایل">
         {PRIMARY_MOBILE.map((i) => link(i, true))}
         <button onClick={() => setMore(true)} className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg py-2 text-[11px] text-muted-foreground"><Menu className="size-5" />بیشتر</button>
       </nav>
