@@ -2,8 +2,10 @@
 // php tests/sub_link_test.php
 chdir(__DIR__ . '/..');
 $src = file_get_contents('function.php');
-preg_match('/function panelSubscriptionLink\(.*?\n}\n/s', $src, $m);
-eval($m[0]);
+foreach (['panelNativeSubUrl', 'panelSubscriptionLink'] as $f) {
+    preg_match('/function ' . $f . '\(.*?\n}\n/s', $src, $m);
+    eval($m[0]);
+}
 $fail = 0;
 function ok($c, $msg) { global $fail; echo ($c ? 'ok   ' : 'FAIL ') . $msg . "\n"; if (!$c) $fail++; }
 $inv = ['id_invoice' => 'abc123'];

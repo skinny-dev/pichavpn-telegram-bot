@@ -20,6 +20,26 @@ try {
         echo "ERROR!";
         exit;
     }
+    // Marzban-family panels: relay the panel's OWN subscription (same app format, every host/location, real headers).
+    $panelRow = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
+    if (is_array($panelRow) && in_array($panelRow['type'], ['marzban', 'marzneshin'], true)) {
+        $raw = getuser($nameloc['username'], $panelRow['name_panel']);
+        $ud = is_array($raw) ? json_decode($raw['body'] ?? '', true) : null;
+        if (is_array($ud) && !empty($ud['subscription_url'])) {
+            $nativeUrl = panelNativeSubUrl($panelRow, absoluteSubscriptionUrl($ud['subscription_url'], $panelRow['url_panel']));
+            $relay = fetchNativeSubscription($nativeUrl, (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+            if ($relay !== null) {
+                foreach ($relay['headers'] as $hk => $hv) {
+                    header($hk . ': ' . $hv, true);
+                }
+                if (!isset($relay['headers']['content-type'])) {
+                    header('Content-Type: text/plain; charset=utf-8');
+                }
+                echo $relay['body'];
+                exit;
+            }
+        }
+    }
     $DataUserOut = $ManagePanel->DataUser($nameloc['Service_location'], $nameloc['username']);
     $config = "";
     if (is_array($DataUserOut)) {

@@ -185,3 +185,6 @@ Applies to new purchases and every later refresh of the service message. Links a
 
 ### Who receives support tickets
 A ticket from the bot's «پشتیبانی» used to go ONLY to the department's support id (the id set in مرکز پشتیبانی, by default the admin who installed the bot). Now it also goes to every `administrator` and `support` admin (Seller excluded; duplicates removed), for new tickets and for customer follow-ups (text, photo, video). Direct messages from users («ارسال پیام به ادمین») already went to all admins except Seller. Everyone needs to have pressed /start in the bot once. Whoever answers first closes the answer button for the rest.
+
+### «Subscription shows only one location»
+The bot link `/sub/<id>` used to rebuild the subscription from the user's `links` list, which can be a subset of what the panel's own subscription serves (hosts per client/format). For Marzban / PasarGuard / Marzneshin it now RELAYS the panel's own subscription (fetched with the customer's app User-Agent) and forwards its real headers (profile title, usage, expiry); only if that fetch fails it falls back to the old rebuild. If the panel reports another sub domain than you want, `php scripts/sub_mode.php domain PANEL https://dmc.example.com:8000`.

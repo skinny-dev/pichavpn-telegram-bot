@@ -2312,6 +2312,11 @@ function panelSubscriptionLink($panel, $nativeUrl, $invoice, $domainhosts)
     if ($native === '') {
         return $botLink; // nothing to show natively: keep the working bot link
     }
+    return panelNativeSubUrl($panel, $native);
+}
+/** The panel's own subscription URL; if «linksubx» names another host than the admin URL, that host replaces the reported one. */
+function panelNativeSubUrl($panel, $native)
+{
     $base = trim((string) ($panel['linksubx'] ?? ''));
     $baseHost = $base !== '' ? parse_url($base, PHP_URL_HOST) : null;
     $adminHost = parse_url((string) ($panel['url_panel'] ?? ''), PHP_URL_HOST);
@@ -2323,6 +2328,41 @@ function panelSubscriptionLink($panel, $nativeUrl, $invoice, $domainhosts)
         }
     }
     return $native;
+}
+/**
+ * Fetch a panel subscription exactly as the customer's app would (same User-Agent, so the panel returns the format that app
+ * understands and ALL hosts/locations of the user). Returns ['status','body','headers'] (only safe headers) or null on failure.
+ */
+function fetchNativeSubscription($url, $userAgent = '')
+{
+    if (!preg_match('#^https?://#i', (string) $url)) {
+        return null;
+    }
+    $keep = ['profile-title', 'subscription-userinfo', 'profile-update-interval', 'content-disposition', 'support-url', 'profile-web-page-url', 'announce', 'announce-url', 'routing', 'content-type'];
+    $headers = [];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3, CURLOPT_TIMEOUT => 12,
+        CURLOPT_SSL_VERIFYHOST => 0, CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT => $userAgent !== '' ? $userAgent : 'v2rayN/6.0',
+        CURLOPT_HEADERFUNCTION => function ($c, $line) use (&$headers, $keep) {
+            if (strpos($line, ':') !== false) {
+                [$k, $v] = explode(':', $line, 2);
+                $k = strtolower(trim($k));
+                if (in_array($k, $keep, true)) {
+                    $headers[$k] = trim(str_replace(["\r", "\n"], '', $v));
+                }
+            }
+            return strlen($line);
+        },
+    ]);
+    $body = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+    if ($body === false || $status !== 200 || trim((string) $body) === '') {
+        return null;
+    }
+    return ['status' => $status, 'body' => (string) $body, 'headers' => $headers];
 }
 /**
  * HTTP headers a v2ray client reads from a subscription link: the profile name shown in the app, traffic/expiry bars and the
