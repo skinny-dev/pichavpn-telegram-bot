@@ -148,3 +148,6 @@ Sidebar → «پشتیبانی» (badge = customers waiting). It reads the bot's
 - Accounts with role `support` can log in (create them in «ادمین‌ها» with a username/password) and see only this page; every other API route answers 403 for them.
 - Not synced: photos/videos customers send (still arrive in Telegram for the department admin; only text is shown in the panel).
 Tests: `python3 tests/api_test.py URL admin PASS` (successful Telegram delivery needs the real API and was not exercised offline).
+
+## Bring accounting rows back from a backup
+`scripts/restore_accounting.sh BACKUP.tgz.enc [--apply]` copies ONLY expenses, capital entries and the Mirza-Pro cost/investment payment rows from a backup into the live DB. Dry run by default (shows counts), `--apply` saves a copy of the live accounting tables to `/root/pre-accounting-*.sql` first, skips rows that already exist (safe to repeat) and never touches users, orders, products or settings.
