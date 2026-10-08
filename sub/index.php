@@ -22,7 +22,7 @@ try {
     }
     // Marzban-family panels: relay the panel's OWN subscription (same app format, every host/location, real headers).
     $panelRow = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
-    if (is_array($panelRow) && in_array($panelRow['type'], ['marzban', 'marzneshin'], true)) {
+    if (is_array($panelRow) && $panelRow['type'] === 'marzban' && !is_file(__DIR__ . '/../storage/sub_relay_off')) { // kill switch: touch storage/sub_relay_off
         $raw = getuser($nameloc['username'], $panelRow['name_panel']);
         $ud = is_array($raw) ? json_decode($raw['body'] ?? '', true) : null;
         if (is_array($ud) && !empty($ud['subscription_url'])) {
