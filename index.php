@@ -3241,10 +3241,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $stmt->bindParam(':status', $status);
     $stmt->execute();
     if ($photo) {
-        sendphoto($departeman['idsupport'], $photoid, null);
+        foreach (supportRecipients($departeman['idsupport']) as $supportTo) {
+            sendphoto($supportTo, $photoid, null);
+        }
     }
     if ($video) {
-        sendvideo($departeman['idsupport'], $videoid, null);
+        foreach (supportRecipients($departeman['idsupport']) as $supportTo) {
+            sendvideo($supportTo, $videoid, null);
+        }
     }
     $textsuppoer = sprintf($textbotlang['Admin']['reportgroup']['supportMessage'], $from_id, $from_id, $timejalali, $username, $departeman['name_departman'], $text, $caption);
     $Response = json_encode([
@@ -3254,7 +3258,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ],
         ]
     ]);
-    sendmessage($departeman['idsupport'], $textsuppoer, $Response, 'HTML');
+    foreach (supportRecipients($departeman['idsupport']) as $supportTo) {
+        sendmessage($supportTo, $textsuppoer, $Response, 'HTML');
+    }
     sendmessage($from_id, $textbotlang['users']['support']['sentForReview'], $keyboard, 'HTML');
     step("home", $from_id);
     step("home", $departeman['idsupport']);
@@ -3317,12 +3323,18 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         ]
     ]);
     if ($photo) {
-        sendphoto($trakingdetail['idsupport'], $photoid, null);
+        foreach (supportRecipients($trakingdetail['idsupport']) as $supportTo) {
+            sendphoto($supportTo, $photoid, null);
+        }
     }
     if ($video) {
-        sendvideo($trakingdetail['idsupport'], $videoid, null);
+        foreach (supportRecipients($trakingdetail['idsupport']) as $supportTo) {
+            sendvideo($supportTo, $videoid, null);
+        }
     }
-    sendmessage($trakingdetail['idsupport'], $textsuppoer, $Response, 'HTML');
+    foreach (supportRecipients($trakingdetail['idsupport']) as $supportTo) {
+        sendmessage($supportTo, $textsuppoer, $Response, 'HTML');
+    }
     sendmessage($from_id, $textbotlang['users']['support']['sentForRequestReview'], null, 'HTML');
 } elseif ($datain == "fqQuestions") {
     sendmessage($from_id, $textbotlang['textbot']['faqDesc'], null, 'HTML');

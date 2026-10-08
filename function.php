@@ -2348,6 +2348,27 @@ function subscriptionHeaders($data, $invoice, $template = null)
     }
     return $h;
 }
+/**
+ * Everyone who must see a support ticket: the department's own support id plus every administrator and support admin
+ * (Seller is excluded, like for payment receipts). Unique, non-empty, as strings.
+ */
+function supportRecipients($primary = null)
+{
+    global $pdo;
+    $ids = [];
+    if ($primary !== null && trim((string) $primary) !== '') {
+        $ids[] = trim((string) $primary);
+    }
+    try {
+        foreach ($pdo->query("SELECT id_admin FROM admin WHERE rule IN ('administrator','support')")->fetchAll(PDO::FETCH_COLUMN) as $id) {
+            if (trim((string) $id) !== '') {
+                $ids[] = trim((string) $id);
+            }
+        }
+    } catch (Throwable $e) {
+    }
+    return array_values(array_unique($ids));
+}
 function normalizePanelUrl($url)
 {
     $url = trim((string) $url);
