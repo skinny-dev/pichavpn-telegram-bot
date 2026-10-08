@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Boxes, Coins, Copy, Landmark, Receipt, RefreshCw, ShoppingBag, Users, Wallet } from 'lucide-react'
+import { Boxes, Coins, Scale, PiggyBank, Copy, Landmark, Receipt, RefreshCw, ShoppingBag, Users, Wallet } from 'lucide-react'
 import { api } from '@/lib/api'
 import { fmtNum, fmtNum2, fmtToman, fmtTs } from '@/lib/format'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -11,10 +11,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatCard } from '@/components/Stat'
 
 const PERIODS = [['all', 'کل'], ['hour', 'یک ساعت اخیر'], ['today', 'امروز'], ['yesterday', 'دیروز'], ['month', 'ماه فعلی'], ['lastmonth', 'ماه قبل']] as const
-type D = Record<string, number>
+type KindSum = Record<string, { c: number; s: number }>
+type D = Record<string, number> & { by_kind: KindSum }
+interface Kind { key: string; label: string; group: 'cogs' | 'opex' | 'equity' }
 interface Method { m: string; c: string; s: string }
 interface Overall { users: number; with_service: number; buyers: number; test_users: number; test_only: number; test_then_buy: number; balance: number; agents_n: number; agents_n2: number; panels: number; active_services: number; active_sum: number; auto_users: number | null; auto_services: number | null; repeat_buyers: number; revenue_30d: number; volume_30d: number; methods: Method[] }
-interface StatsRes { title: string; start: number; end: number; data: D; all: D; overall: Overall | null; text: string }
+interface StatsRes { title: string; start: number; end: number; data: D; all: D; overall: Overall | null; kinds: Kind[]; text: string }
 const LABELS: Record<string, string> = { 'cart to cart': '💳 کارت به کارت', 'Star Telegram': '⭐ استار تلگرام', tetraminator: '🏦 درگاه tetraminator', 'after pay': '🧾 پرداخت بعد از دریافت', 'manual invoice': '✍️ فاکتور دستی', 'add order by admin': '🛠 سفارش ثبت‌شده توسط ادمین', 'extend by admin': '🛠 تمدید توسط ادمین', wallet: '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin': '🎁 شارژ توسط ادمین (هدیه)', zarinpal: 'زرین‌پال', aqayepardakht: 'آقای پرداخت' }
 const dur = (sec: number) => { const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600); return d ? `${fmtNum(d)} روز${h ? ` و ${fmtNum(h)} ساعت` : ''}` : h ? `${fmtNum(h)} ساعت` : `${fmtNum2(sec / 60)} دقیقه` }
 const gb = (v: number) => `${fmtNum2(v)} گیگابایت`
@@ -62,10 +64,10 @@ export default function Stats() {
       {!d || !all ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}</div> : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard icon={Coins} label="درآمد کل" value={fmtToman(d.revenue)} tone="success" hint={`از ابتدا: ${fmtToman(all.revenue)}`} />
-            <StatCard icon={Wallet} label="درآمد خالص" value={fmtToman(d.net)} tone={d.net < 0 ? 'danger' : 'success'} hint={`از ابتدا: ${fmtToman(all.net)}`} />
-            <StatCard icon={Landmark} label="ورود سرمایه" value={fmtToman(d.cap_sum)} hint={`از ابتدا: ${fmtToman(all.cap_sum)}`} />
-            <StatCard icon={Receipt} label="مجموع هزینه‌ها" value={fmtToman(d.exp_sum)} tone={d.exp_sum ? 'danger' : 'default'} hint={`${fmtNum(d.exp)} مورد`} />
+            <StatCard icon={Coins} label="فروش" value={fmtToman(d.revenue)} tone="success" hint={`از ابتدا: ${fmtToman(all.revenue)}`} />
+            <StatCard icon={Scale} label="سود ناخالص (فروش − خرید)" value={fmtToman(d.gross)} tone={d.gross < 0 ? 'danger' : 'success'} hint={`از ابتدا: ${fmtToman(all.gross)}`} />
+            <StatCard icon={Wallet} label="سود خالص" value={fmtToman(d.net)} tone={d.net < 0 ? 'danger' : 'success'} hint={`از ابتدا: ${fmtToman(all.net)}`} />
+            <StatCard icon={Landmark} label="ورود سرمایه (جدا از سود)" value={fmtToman(d.cap_sum)} hint={`از ابتدا: ${fmtToman(all.cap_sum)}`} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Section title="فروش" icon={ShoppingBag}>
@@ -76,14 +78,29 @@ export default function Stats() {
               <Row label="تمدید" count={d.renew} sum={d.renew_sum} />
               <Row label="حجم اضافه" count={d.extra} sum={d.extra_sum} />
             </Section>
-            <Section title="پول دریافتی و حسابداری" icon={Wallet}>
+            <Section title="صورت سود و زیان" icon={Scale}>
+              <Row label="فروش (پول دریافتی)" count={d.count_all} sum={d.revenue} />
+              {d.wallet_out_sum > 0 && <Row label="− بازپرداخت به مشتریان" count={d.wallet_out} sum={d.wallet_out_sum} />}
+              <Row label="− خرید (بهای تمام‌شده)" count={d.cogs} sum={d.cogs_sum} />
+              <div className="flex items-center justify-between py-2 text-sm font-semibold"><span>= سود ناخالص</span><span className="tabular">{fmtToman(d.gross)} <span className="text-xs font-normal text-muted-foreground">{pct(d.gross, d.net_sales)}</span></span></div>
+              <Row label="− هزینه‌های عملیاتی" count={d.opex} sum={d.opex_sum} />
+              <div className="flex items-center justify-between py-2 text-sm font-semibold"><span>= سود خالص</span><span className="tabular">{fmtToman(d.net)} <span className="text-xs font-normal text-muted-foreground">{pct(d.net, d.net_sales)}</span></span></div>
+              <Row label="− سود سهام / برداشت شرکا" count={d.div} sum={d.div_sum} />
+              <div className="flex items-center justify-between py-2 text-sm font-semibold"><span>= سود باقی‌مانده</span><span className="tabular">{fmtToman(d.retained)}</span></div>
+            </Section>
+            <Section title="هزینه‌ها به تفکیک دسته" icon={Receipt}>
+              {q.data?.kinds.map((k) => <Row key={k.key} label={`${k.group === 'cogs' ? '🛒 ' : k.group === 'equity' ? '🤝 ' : ''}${k.label}`} count={d.by_kind[k.key]?.c ?? 0} sum={d.by_kind[k.key]?.s ?? 0} />)}
+              <div className="py-2 text-xs text-muted-foreground">«سود سهام» هزینه حساب نمی‌شود؛ از سود خالص کم می‌شود.</div>
+            </Section>
+            <Section title="سرمایه (جدا از فروش و سود)" icon={PiggyBank}>
+              <Row label="ورود سرمایه در این بازه" count={d.cap} sum={d.cap_sum} />
+              <Row label="ورود سرمایه از ابتدا" sum={all.cap_sum} />
+              <Row label="سرمایه + سود باقی‌مانده (از ابتدا)" sum={all.cap_sum + all.retained} />
+            </Section>
+            <Section title="پول دریافتی" icon={Wallet}>
               <Row label="پرداخت مشتریان (درگاه‌ها)" count={d.wallet_in} sum={d.wallet_in_sum} />
               <Row label="ثبت‌شده توسط ادمین" count={d.admin_in} sum={d.admin_in_sum} />
               <Row label="جمع پرداخت‌های موفق" count={d.count_all} />
-              <Row label="هزینه‌ها" count={d.exp} sum={d.exp_sum} />
-              <Row label="↳ تبلیغات" count={d.exp_ads ?? 0} sum={d.exp_ads_sum ?? 0} />
-              <Row label="برداشت از کیف پول" count={d.wallet_out} sum={d.wallet_out_sum} />
-              <Row label="ورود سرمایه" count={d.cap} sum={d.cap_sum} />
             </Section>
             {q.data?.overall && (
               <>

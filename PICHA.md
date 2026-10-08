@@ -151,3 +151,16 @@ Tests: `python3 tests/api_test.py URL admin PASS` (successful Telegram delivery 
 
 ## Bring accounting rows back from a backup
 `scripts/restore_accounting.sh BACKUP.tgz.enc [--apply]` copies ONLY expenses, capital entries and the Mirza-Pro cost/investment payment rows from a backup into the live DB. Dry run by default (shows counts), `--apply` saves a copy of the live accounting tables to `/root/pre-accounting-*.sql` first, skips rows that already exist (safe to repeat) and never touches users, orders, products or settings.
+
+## Professional accounting (P&L)
+Stats (bot «آمار» and panel «آمار») now read like an accountant's statement:
+```
+فروش (پول دریافتی)  − بازپرداخت به مشتریان  − خرید (بهای تمام‌شده)  = سود ناخالص
+− هزینه‌های عملیاتی (حقوق، تبلیغات، سرور، ابزار، کارمزد، مالیات، سایر)  = سود خالص
+− سود سهام / برداشت شرکا (هزینه نیست)                                   = سود باقی‌مانده
+ورود سرمایه: بلوک جدا (هیچ‌وقت جزو فروش یا سود نیست) + «سرمایه + سود باقی‌مانده»
+```
+Categories (`expenses.kind`): `purchase` خرید · `salary` حقوق · `advertising` تبلیغات · `server` سرور · `tools` ابزار · `fee` کارمزد · `tax` مالیات · `general` سایر · `dividend` سود سهام.
+- Bot (administrator): `/finance` shows all commands: `/buy /salary /ad /server /tools /fee /tax /expense /dividend /capital AMOUNT description [@1405/07/14 15:30]`.
+- Panel: حسابداری → هزینه‌ها: the «نوع هزینه» column is a dropdown, so old rows (all «سایر») can be re-categorised in place, e.g. server purchases → «خرید».
+- Old rows keep working: Mirza-Pro «cost» payments count as «سایر هزینه‌ها»; `net` is unchanged for old data except that dividends no longer reduce expenses (they reduce retained profit).

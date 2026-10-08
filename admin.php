@@ -325,9 +325,23 @@ if ($datain == "paygwback") {
         $lines[] = adminTestLine($row);
     }
     sendmessage($from_id, "🧪 <b>نتیجه‌ی تست اعلان ادمین‌ها</b>\n\n" . ($lines ? implode("\n", $lines) : 'هیچ ادمینی ثبت نشده است.') . "\n\nرسید پرداخت‌ها به همه‌ی ادمین‌ها (به‌جز «support») ارسال می‌شود. هر ادمین جدید همان لحظه شروع به دریافت می‌کند، به شرطی که /start را زده باشد.", null, 'HTML');
-} elseif (preg_match('/^\/(expense|capital|ad)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
+} elseif ($text == "/finance" && $adminrulecheck['rule'] == "administrator") {
+    sendmessage($from_id, "📒 <b>ثبت حسابداری</b> (مبلغ به تومان؛ اختیاری: <code>@1405/07/14 15:30</code> برای تاریخ و ساعت)\n\n"
+        . "🛒 <code>/buy 3000000 خرید ترافیک پنل</code> — خرید (بهای تمام‌شده)\n"
+        . "👥 <code>/salary 5000000 حقوق پشتیبان</code> — حقوق\n"
+        . "📣 <code>/ad 500000 کمپین اینستاگرام</code> — تبلیغات\n"
+        . "🖥 <code>/server 1200000 سرور</code> — سرور و زیرساخت\n"
+        . "🧰 <code>/tools 200000 اشتراک ابزار</code> — نرم‌افزار و ابزار\n"
+        . "🏦 <code>/fee 50000 کارمزد درگاه</code> — کارمزد درگاه و بانک\n"
+        . "🏛 <code>/tax 400000 مالیات</code> — مالیات و عوارض\n"
+        . "🧾 <code>/expense 120000 توضیح</code> — سایر هزینه‌ها\n"
+        . "🤝 <code>/dividend 10000000 سهم شریک</code> — سود سهام / برداشت شرکا (هزینه حساب نمی‌شود)\n"
+        . "🏦 <code>/capital 5000000 سرمایه</code> — ورود سرمایه (جدا از فروش و سود)\n\n"
+        . "نتیجه در «آمار» به‌صورت: فروش − خرید = سود ناخالص ← − هزینه‌ها = سود خالص ← − سهام = سود باقی‌مانده.", null, 'HTML');
+} elseif (preg_match('/^\/(expense|capital|ad|buy|salary|server|tools|fee|tax|dividend)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
     // /ad 500000 کمپین اینستاگرام            -> advertising expense, now
     // /ad 500000 کمپین اینستاگرام @1405/07/14 15:30   -> same, on that date/time (date alone = 12:00)
+    // /buy /salary /server /tools /fee /tax /dividend /expense  -> the other categories (see /finance)
     require_once __DIR__ . '/stats_report.php';
     $accName = trim($acc[3]);
     $accTime = time();
@@ -344,9 +358,9 @@ if ($datain == "paygwback") {
         $pdo->prepare("INSERT INTO capital_entries (amount, description, created_at, admin_id) VALUES (?,?,?,?)")->execute([(int) $acc[2], $accName, $accTime, $from_id]);
         $accLabel = '🏦 ورود سرمایه ثبت شد: ';
     } else {
-        $accKind = $acc[1] == 'ad' ? 'advertising' : 'general';
+        $accKind = ['ad' => 'advertising', 'expense' => 'general'][$acc[1]] ?? $acc[1];
         $pdo->prepare("INSERT INTO expenses (amount, description, created_at, admin_id, kind) VALUES (?,?,?,?,?)")->execute([(int) $acc[2], $accName, $accTime, $from_id, $accKind]);
-        $accLabel = $acc[1] == 'ad' ? '📣 هزینه تبلیغات ثبت شد: ' : '🧾 هزینه ثبت شد: ';
+        $accLabel = accKindIcon($accKind) . ' ثبت شد — ' . accExpenseKinds()[$accKind] . ': ';
     }
     sendmessage($from_id, $accLabel . number_format((int) $acc[2]) . ' تومان' . ($accName !== '' ? "\n📝 " . htmlspecialchars($accName, ENT_NOQUOTES, 'UTF-8') : '') . "\n🕒 " . accFormatDateTime($accTime), null, 'HTML');
 } elseif (strpos((string) $datain, "pstat_") === 0) {

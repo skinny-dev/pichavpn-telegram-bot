@@ -7,7 +7,11 @@
 //   expenses     = Payment_report rows with Payment_Method 'cost' (Mirza Pro) + rows in table `expenses`.
 //   capital      = Payment_report rows 'capital_injection' (Mirza Pro) + rows in table `capital_entries`.
 //   withdrawals  = table wallet_withdraw (Mirza Pro, status paid) or 'low balance by admin' payments.
-//   net          = revenue - expenses - withdrawals.
+//   P&L (as an accountant reads it):  sales (cash received) - refunds = net sales
+//                  - purchases (cost of goods: kind «purchase»)            = gross profit
+//                  - operating expenses (salary, ads, server, tools, fees, tax, other) = net profit
+//                  - dividends / partner withdrawals (kind «dividend», NOT an expense) = retained profit
+//   capital      = money the owners put in. Reported on its own, never part of sales or profit.
 //   sales        = invoices with price > 0 that are not unpaid / expired-unpaid / unsuccessful / rejected.
 
 if (!function_exists('jdate')) {
@@ -74,10 +78,32 @@ const STATS_BAD_INVOICE = "('unpaid','expire','unsuccessful','reject')";
 
 // Raw numbers for [$start, $end] (unix timestamps).
 
-/** Expense kinds (accounting). «advertising» is what the owner tracks for ad campaigns. */
+/** Accounting categories of the `expenses` table (kind column). Order = order in menus and reports. */
 function accExpenseKinds()
 {
-    return ['advertising' => 'تبلیغات', 'server' => 'سرور و زیرساخت', 'general' => 'سایر هزینه‌ها'];
+    return [
+        'purchase' => 'خرید (بهای تمام‌شده)',
+        'salary' => 'حقوق و دستمزد',
+        'advertising' => 'تبلیغات',
+        'server' => 'سرور و زیرساخت',
+        'tools' => 'نرم‌افزار و ابزار',
+        'fee' => 'کارمزد درگاه و بانک',
+        'tax' => 'مالیات و عوارض',
+        'general' => 'سایر هزینه‌ها',
+        'dividend' => 'سود سهام / برداشت شرکا',
+    ];
+}
+
+/** cogs = cost of goods sold (purchases); equity = paid out to owners (not an expense); everything else = operating expense */
+function accKindGroup($kind)
+{
+    return $kind === 'purchase' ? 'cogs' : ($kind === 'dividend' ? 'equity' : 'opex');
+}
+
+function accKindIcon($kind)
+{
+    static $i = ['purchase' => '🛒', 'salary' => '👥', 'advertising' => '📣', 'server' => '🖥', 'tools' => '🧰', 'fee' => '🏦', 'tax' => '🏛', 'general' => '🧾', 'dividend' => '🤝'];
+    return $i[$kind] ?? '🧾';
 }
 
 /**
@@ -194,27 +220,51 @@ function statsCollect(PDO $pdo, $start, $end)
     $r['wallet_out'] = (int) $n($row['c']);
     $r['wallet_out_sum'] = $n($row['p']);
 
-    // expenses and capital: Pro rows in Payment_report + our own tables
-    foreach (['cost' => ['exp', 'expenses'], 'capital_injection' => ['cap', 'capital_entries']] as $method => [$key, $table]) {
-        $row = $one("SELECT COUNT(*) c, SUM(CAST(price AS SIGNED)) p FROM Payment_report WHERE Payment_Method = '$method' AND $tsPay BETWEEN :s AND :e", $p);
-        $r[$key] = (int) $n($row['c']);
-        $r[$key . '_sum'] = $n($row['p']);
-        if (statsHas($pdo, $table)) {
-            $row = $one("SELECT COUNT(*) c, SUM(amount) p FROM `$table` WHERE created_at BETWEEN :s AND :e", $p);
-            $r[$key] += (int) $n($row['c']);
-            $r[$key . '_sum'] += $n($row['p']);
-        }
+    // capital: Pro rows in Payment_report + our own table (reported on its own, never part of sales or profit)
+    $row = $one("SELECT COUNT(*) c, SUM(CAST(price AS SIGNED)) p FROM Payment_report WHERE Payment_Method = 'capital_injection' AND $tsPay BETWEEN :s AND :e", $p);
+    $r['cap'] = (int) $n($row['c']);
+    $r['cap_sum'] = $n($row['p']);
+    if (statsHas($pdo, 'capital_entries')) {
+        $row = $one("SELECT COUNT(*) c, SUM(amount) p FROM `capital_entries` WHERE created_at BETWEEN :s AND :e", $p);
+        $r['cap'] += (int) $n($row['c']);
+        $r['cap_sum'] += $n($row['p']);
     }
 
-    // advertising spend (already part of the expenses above; shown on its own line)
-    $r['exp_ads'] = 0;
-    $r['exp_ads_sum'] = 0;
-    try {
-        $row = $one("SELECT COUNT(*) c, SUM(amount) p FROM expenses WHERE kind = 'advertising' AND created_at BETWEEN :s AND :e", $p);
-        $r['exp_ads'] = (int) $n($row['c']);
-        $r['exp_ads_sum'] = $n($row['p']);
-    } catch (Throwable $e) {
+    // expenses by category. Pro "cost" rows have no category = «سایر هزینه‌ها»
+    $by = [];
+    foreach (array_keys(accExpenseKinds()) as $k) {
+        $by[$k] = ['c' => 0, 's' => 0.0];
     }
+    $row = $one("SELECT COUNT(*) c, SUM(CAST(price AS SIGNED)) p FROM Payment_report WHERE Payment_Method = 'cost' AND $tsPay BETWEEN :s AND :e", $p);
+    $by['general']['c'] += (int) $n($row['c']);
+    $by['general']['s'] += $n($row['p']);
+    if (statsHas($pdo, 'expenses')) {
+        $kindExpr = statsHas($pdo, 'expenses', 'kind') ? "COALESCE(NULLIF(kind,''),'general')" : "'general'";
+        $st = $pdo->prepare("SELECT $kindExpr k, COUNT(*) c, SUM(amount) p FROM `expenses` WHERE created_at BETWEEN :s AND :e GROUP BY k");
+        $st->execute($p);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $x) {
+            $k = isset($by[$x['k']]) ? $x['k'] : 'general';
+            $by[$k]['c'] += (int) $x['c'];
+            $by[$k]['s'] += (float) $x['p'];
+        }
+    }
+    $r['by_kind'] = $by;
+    foreach (['cogs', 'opex', 'equity'] as $g) {
+        $r[$g] = 0;
+        $r[$g . '_sum'] = 0.0;
+    }
+    foreach ($by as $k => $v) {
+        $g = accKindGroup($k);
+        $r[$g] += $v['c'];
+        $r[$g . '_sum'] += $v['s'];
+    }
+    $r['div'] = $r['equity'];
+    $r['div_sum'] = $r['equity_sum'];
+    // total expenses = purchases + operating costs (dividends are a distribution of profit, not an expense)
+    $r['exp'] = $r['cogs'] + $r['opex'];
+    $r['exp_sum'] = $r['cogs_sum'] + $r['opex_sum'];
+    $r['exp_ads'] = $by['advertising']['c'];
+    $r['exp_ads_sum'] = $by['advertising']['s'];
 
     // users / tests
     $row = $one("SELECT COUNT(*) c FROM invoice i WHERE $tsInv BETWEEN :s AND :e AND $isTest", $p);
@@ -223,7 +273,10 @@ function statsCollect(PDO $pdo, $start, $end)
     $r['new_users'] = (int) $n($row['c']);
 
     $r['revenue'] = $r['wallet_in_sum'] + $r['admin_in_sum'];
-    $r['net'] = $r['revenue'] - $r['exp_sum'] - $r['wallet_out_sum'];
+    $r['net_sales'] = $r['revenue'] - $r['wallet_out_sum'];
+    $r['gross'] = $r['net_sales'] - $r['cogs_sum'];
+    $r['net'] = $r['gross'] - $r['opex_sum'];
+    $r['retained'] = $r['net'] - $r['div_sum'];
     $r['count_all'] = $r['wallet_in'] + $r['admin_in'];
     return $r;
 }
@@ -338,11 +391,29 @@ function statsReport(PDO $pdo, $key)
     $L[] = '• پرداخت مشتریان (درگاه‌ها) : ' . $n($d['wallet_in']) . ' عدد — ' . $n($d['wallet_in_sum']) . ' تومان';
     $L[] = '• ثبت‌شده توسط ادمین : ' . $n($d['admin_in']) . ' عدد — ' . $n($d['admin_in_sum']) . ' تومان';
     $L[] = '';
-    $L[] = '🧾 <b>هزینه و سرمایه</b>';
-    $L[] = '• هزینه‌ها : ' . $n($d['exp']) . ' عدد — ' . $n($d['exp_sum']) . ' تومان';
-    $L[] = '   ↳ 📣 تبلیغات : ' . $n($d['exp_ads']) . ' عدد — ' . $n($d['exp_ads_sum']) . ' تومان';
-    $L[] = '• برداشت از کیف پول : ' . $n($d['wallet_out']) . ' عدد — ' . $n($d['wallet_out_sum']) . ' تومان';
-    $L[] = '• ورود سرمایه : ' . $n($d['cap']) . ' عدد — ' . $n($d['cap_sum']) . ' تومان';
+    $L[] = '📒 <b>صورت سود و زیان</b>';
+    $L[] = '• فروش (پول دریافتی) : ' . $n($d['revenue']) . ' تومان';
+    if ($d['wallet_out_sum'] > 0) {
+        $L[] = '• − بازپرداخت به مشتریان : ' . $n($d['wallet_out']) . ' عدد — ' . $n($d['wallet_out_sum']) . ' تومان';
+    }
+    $L[] = '• − خرید (بهای تمام‌شده) : ' . $n($d['cogs']) . ' عدد — ' . $n($d['cogs_sum']) . ' تومان';
+    $L[] = '= <b>سود ناخالص : ' . $n($d['gross']) . ' تومان</b>' . ($d['net_sales'] > 0 ? ' (' . statsPct($d['gross'], $d['net_sales']) . '٪ فروش)' : '');
+    $L[] = '• − هزینه‌های عملیاتی : ' . $n($d['opex']) . ' عدد — ' . $n($d['opex_sum']) . ' تومان';
+    foreach ($d['by_kind'] as $k => $v) {
+        if (accKindGroup($k) === 'opex' && $v['c'] > 0) {
+            $L[] = '   ↳ ' . accKindIcon($k) . ' ' . accExpenseKinds()[$k] . ' : ' . $n($v['c']) . ' عدد — ' . $n($v['s']) . ' تومان';
+        }
+    }
+    $L[] = '= <b>سود خالص : ' . $n($d['net']) . ' تومان</b>' . ($d['net_sales'] > 0 ? ' (' . statsPct($d['net'], $d['net_sales']) . '٪ فروش)' : '');
+    $L[] = '• − ' . accKindIcon('dividend') . ' سود سهام / برداشت شرکا : ' . $n($d['div']) . ' عدد — ' . $n($d['div_sum']) . ' تومان';
+    $L[] = '= <b>سود باقی‌مانده : ' . $n($d['retained']) . ' تومان</b>';
+    $L[] = '';
+    $L[] = '🏦 <b>سرمایه (جدا از سود و فروش)</b>';
+    $L[] = '• ورود سرمایه در این بازه : ' . $n($d['cap']) . ' عدد — ' . $n($d['cap_sum']) . ' تومان';
+    if ($key !== 'all') {
+        $L[] = '• ورود سرمایه از ابتدا : ' . $n($all['cap_sum']) . ' تومان';
+    }
+    $L[] = '• سرمایه + سود باقی‌مانده (از ابتدا) : ' . $n($all['cap_sum'] + $all['retained']) . ' تومان';
     $L[] = '';
     $L[] = '🔋 <b>حجم فروخته‌شده : ' . $vol($d['vol_service'] + $d['vol_extra']) . ' گیگابایت</b>';
     $L[] = '• از خرید سرویس : ' . $vol($d['vol_service']) . ' · از حجم اضافه : ' . $vol($d['vol_extra']);
@@ -351,12 +422,11 @@ function statsReport(PDO $pdo, $key)
     $L[] = '🔑 اکانت تست : ' . $n($d['tests']) . ' عدد · 👤 کاربر جدید : ' . $n($d['new_users']) . ' نفر';
     $L[] = '⏱ میانگین زمان عضویت تا اولین خرید : ' . ($d['first_avg_n'] > 0 ? statsDuration($d['first_avg_sec']) . ' (' . $n($d['first_avg_n']) . ' کاربر)' : '—');
     $L[] = '';
-    $L[] = '💰 <b>درآمد کل (این بازه) : ' . $n($d['revenue']) . ' تومان</b>';
-    $L[] = '💵 <b>درآمد خالص (این بازه) : ' . $n($d['net']) . ' تومان</b>';
     if ($key !== 'all') {
-        $L[] = '💰 درآمد کل (از ابتدا) : ' . $n($all['revenue']) . ' تومان';
-        $L[] = '💵 درآمد خالص (از ابتدا) : ' . $n($all['net']) . ' تومان';
-        $L[] = '🏦 ورود سرمایه (از ابتدا) : ' . $n($all['cap_sum']) . ' تومان';
+        $L[] = '💰 فروش (از ابتدا) : ' . $n($all['revenue']) . ' تومان';
+        $L[] = '📈 سود ناخالص (از ابتدا) : ' . $n($all['gross']) . ' تومان';
+        $L[] = '💵 سود خالص (از ابتدا) : ' . $n($all['net']) . ' تومان';
+        $L[] = '🧮 سود باقی‌مانده (از ابتدا) : ' . $n($all['retained']) . ' تومان';
     }
     if ($key === 'all') {
         $L[] = '';

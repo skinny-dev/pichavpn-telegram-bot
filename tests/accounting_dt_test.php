@@ -21,4 +21,6 @@ ok(accParseDateTime('1790000000') === 1790000000, 'a unix time passes through (r
 ok(accFormatDateTime($tehran('2020-01-05 10:00:00')) === '1398/10/15 10:00', 'format = Jalali, Latin digits');
 ok(accParseDateTime(accFormatDateTime($tehran('2026-10-06 15:30:00'))) === $tehran('2026-10-06 15:30:00'), 'format → parse round trip');
 ok(isset(accExpenseKinds()['advertising']) && accExpenseKinds()['advertising'] === 'تبلیغات', 'advertising kind is «تبلیغات»');
+ok(accKindGroup('purchase') === 'cogs' && accKindGroup('dividend') === 'equity' && accKindGroup('salary') === 'opex' && accKindGroup('zzz') === 'opex', 'category groups: purchase=cogs, dividend=equity, rest=opex');
+ok(count(accExpenseKinds()) >= 9 && isset(accExpenseKinds()['salary'], accExpenseKinds()['general']), 'professional category list');
 exit($fail ? 1 : 0);

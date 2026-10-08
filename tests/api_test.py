@@ -194,6 +194,25 @@ op, csrf = op_saved, csrf_saved
 call('admin_delete', {'id': '555666777'})
 sql("DELETE FROM support_message WHERE iduser IN ('1001','1002')")
 
+# ---- professional accounting: sales - purchases = gross; - opex = net; - dividends = retained; capital separate
+s, r = call('stats', period='today'); b = r['data']
+check('stats lists the expense categories', [k['key'] for k in r['kinds']][:2] == ['purchase', 'salary'] and 'dividend' in [k['key'] for k in r['kinds']], r['kinds'])
+ids = []
+for kind, amt in (('purchase', 3000), ('salary', 500), ('advertising', 200), ('dividend', 700)):
+    s, r = call('create', {'res': 'expenses', 'row': {'description': 'acc-' + kind, 'amount': amt, 'kind': kind, 'created_at': ''}}); check('create ' + kind, s == 200, (s, r)); ids.append(r.get('id'))
+s, r = call('create', {'res': 'capital', 'row': {'description': 'acc-cap', 'amount': 90000, 'created_at': ''}}); check('create capital entry', s == 200, (s, r)); capid = r.get('id')
+s, r = call('stats', period='today'); a = r['data']
+check('purchase goes to cost of goods', a['cogs_sum'] == b['cogs_sum'] + 3000 and a['by_kind']['purchase']['s'] == b['by_kind']['purchase']['s'] + 3000, a)
+check('salary + ads are operating expenses', a['opex_sum'] == b['opex_sum'] + 700 and a['by_kind']['salary']['s'] == b['by_kind']['salary']['s'] + 500, a)
+check('dividend is NOT an expense', a['exp_sum'] == b['exp_sum'] + 3700 and a['div_sum'] == b['div_sum'] + 700, a)
+check('gross = sales - refunds - purchases', a['gross'] == a['revenue'] - a['wallet_out_sum'] - a['cogs_sum'], a)
+check('net = gross - operating expenses', a['net'] == a['gross'] - a['opex_sum'], a)
+check('retained = net - dividends', a['retained'] == a['net'] - a['div_sum'], a)
+check('capital is separate: sales unchanged, capital up', a['revenue'] == b['revenue'] and a['cap_sum'] == b['cap_sum'] + 90000 and a['net'] == b['net'] - 3700, (a['revenue'], b['revenue'], a['net'], b['net']))
+s, r = call('stats', period='all'); check('text report has the P&L lines', 'سود ناخالص' in r['text'] and 'سود باقی‌مانده' in r['text'] and 'سرمایه' in r['text'], r['text'][:400])
+for i in ids: call('delete', {'res': 'expenses', 'id': str(i)})
+call('delete', {'res': 'capital', 'id': str(capid)})
+
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
 print('\nFAILED:', fails); sys.exit(1 if fails else 0)
