@@ -1,0 +1,122 @@
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { ArrowRight, CheckCheck, Loader2, Search, Send } from 'lucide-react'
+import { api, ApiError } from '@/lib/api'
+import { fmtStr } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { useDebounced } from '@/lib/hooks'
+
+interface Thread { iduser: string; tg_username: string | null; name: string | null; unread: number; open: boolean; snippet: string; department: string; time: string; n: number }
+interface Msg { id: string; from: 'customer' | 'support'; text: string; time: string; by?: string; dept?: string }
+interface ThreadData { uid: string; user: { username: string; namecustom: string; Balance: string; number: string } | null; messages: Msg[]; open: boolean }
+
+const who = (t: { iduser: string; name?: string | null; tg_username?: string | null }) => t.name && t.name !== 'none' ? t.name : t.tg_username && t.tg_username !== 'none' ? `@${t.tg_username}` : t.iduser
+
+export default function Support() {
+  const qc = useQueryClient()
+  const [sel, setSel] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'open' | 'closed' | 'all'>('open')
+  const [q, setQ] = useState('')
+  const dq = useDebounced(q, 300)
+  const threads = useQuery({
+    queryKey: ['support-threads', filter, dq],
+    queryFn: () => api<{ threads: Thread[] }>('support_threads', { query: { f: filter, q: dq } }),
+    refetchInterval: 5000,
+  })
+  const refreshAll = () => { qc.invalidateQueries({ queryKey: ['support-threads'] }); qc.invalidateQueries({ queryKey: ['support-unread'] }) }
+
+  return (
+    <div className="grid h-[calc(100dvh-11rem)] min-h-[28rem] gap-4 md:h-[calc(100dvh-8rem)] md:grid-cols-[20rem_1fr]">
+      <section className={cn('flex min-h-0 flex-col gap-2 rounded-xl border bg-card p-3', sel && 'hidden md:flex')}>
+        <div className="relative">
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="ps-9" placeholder="جستجوی نام یا آیدی" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="flex gap-1">
+          {([['open', 'باز'], ['closed', 'بسته'], ['all', 'همه']] as const).map(([k, l]) => (
+            <Button key={k} size="sm" variant={filter === k ? 'default' : 'ghost'} onClick={() => setFilter(k)}>{l}</Button>
+          ))}
+        </div>
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+          {threads.isLoading && <div className="p-4 text-center text-sm text-muted-foreground">در حال بارگذاری…</div>}
+          {threads.data?.threads.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">گفتگویی وجود ندارد</div>}
+          {threads.data?.threads.map((t) => (
+            <button key={t.iduser} onClick={() => setSel(t.iduser)} className={cn('mb-1 grid w-full gap-1 rounded-lg p-3 text-start transition-colors hover:bg-accent', sel === t.iduser && 'bg-primary/10')}>
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium">{who(t)}</span>
+                {t.unread > 0 && <span className="rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white">{t.unread}</span>}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">{t.snippet}</div>
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground"><span className="truncate">{t.department}</span><span dir="ltr">{fmtStr(t.time)}</span></div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className={cn('min-h-0 rounded-xl border bg-card', !sel && 'hidden md:grid md:place-items-center')}>
+        {sel ? <Chat key={sel} uid={sel} onBack={() => setSel(null)} onChanged={refreshAll} /> : <p className="text-sm text-muted-foreground">یک گفتگو را انتخاب کنید</p>}
+      </section>
+    </div>
+  )
+}
+
+function Chat({ uid, onBack, onChanged }: { uid: string; onBack: () => void; onChanged: () => void }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState('')
+  const bottom = useRef<HTMLDivElement>(null)
+  const data = useQuery({ queryKey: ['support-thread', uid], queryFn: () => api<ThreadData>('support_thread', { query: { uid } }), refetchInterval: 4000 })
+  const count = data.data?.messages.length ?? 0
+  useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [count])
+  useEffect(() => { onChanged() }, [data.dataUpdatedAt]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const send = useMutation({
+    mutationFn: () => api('support_reply', { body: { uid, text } }),
+    onSuccess: () => { setText(''); qc.invalidateQueries({ queryKey: ['support-thread', uid] }); onChanged() },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ارسال ناموفق بود'),
+  })
+  const close = useMutation({
+    mutationFn: () => api('support_close', { body: { uid } }),
+    onSuccess: () => { toast.success('گفتگو بسته شد'); qc.invalidateQueries({ queryKey: ['support-thread', uid] }); onChanged() },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ناموفق بود'),
+  })
+  const u = data.data?.user
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex items-center gap-2 border-b p-3">
+        <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={onBack} aria-label="بازگشت"><ArrowRight /></Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium">{u ? who({ iduser: uid, name: u.namecustom, tg_username: u.username }) : uid}</div>
+          <div className="text-xs text-muted-foreground" dir="ltr">{uid}</div>
+        </div>
+        {data.data && !data.data.open && <Badge variant="secondary">بسته</Badge>}
+        <Button size="sm" variant="outline" disabled={close.isPending || data.data?.open === false} onClick={() => close.mutate()}><CheckCheck />بستن گفتگو</Button>
+      </header>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+        {data.isLoading && <div className="text-center text-sm text-muted-foreground">در حال بارگذاری…</div>}
+        {data.data?.messages.map((m) => (
+          <div key={m.id} className={cn('flex', m.from === 'support' ? 'justify-start' : 'justify-end')}>
+            <div className={cn('max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm', m.from === 'support' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+              {m.text}
+              <div className={cn('mt-1 text-[10px] opacity-70', m.from === 'customer' && 'text-start')} dir="ltr">{m.from === 'customer' && m.dept ? `${m.dept} · ` : ''}{fmtStr(m.time)}</div>
+            </div>
+          </div>
+        ))}
+        <div ref={bottom} />
+      </div>
+      <form className="flex items-end gap-2 border-t p-3" onSubmit={(e) => { e.preventDefault(); if (text.trim() && !send.isPending) send.mutate() }}>
+        <textarea
+          className="min-h-10 max-h-40 flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          rows={2} value={text} placeholder="پاسخ شما مستقیم در تلگرام مشتری ارسال می‌شود…" maxLength={3500}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (text.trim() && !send.isPending) send.mutate() } }}
+        />
+        <Button type="submit" disabled={!text.trim() || send.isPending}>{send.isPending ? <Loader2 className="animate-spin" /> : <Send />}ارسال</Button>
+      </form>
+    </div>
+  )
+}

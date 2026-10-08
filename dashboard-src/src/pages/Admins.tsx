@@ -42,7 +42,7 @@ export default function Admins() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <p className="flex-1 text-sm text-muted-foreground">
-          «مدیر کل» به همه‌ی بخش‌های ربات و این پنل دسترسی دارد. «فروشنده» و «پشتیبان» فقط در ربات و با دسترسی محدود کار می‌کنند و وارد پنل وب نمی‌شوند.
+          «مدیر کل» به همه‌ی بخش‌های ربات و این پنل دسترسی دارد. «پشتیبان» با نام کاربری و رمز فقط به بخش «پشتیبانی» پنل وب دسترسی دارد (چت زنده با مشتری‌ها). «فروشنده» فقط در ربات کار می‌کند.
           ادمین جدید باید یک‌بار در ربات /start بزند تا پیام‌ها به او برسد.
         </p>
         <Button onClick={() => setForm(EMPTY)}><Plus />افزودن ادمین</Button>
@@ -75,7 +75,7 @@ export default function Admins() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing ? 'ویرایش ادمین' : 'افزودن ادمین'}</DialogTitle>
-            <DialogDescription>نام کاربری و رمز فقط برای ورود به پنل وب لازم است (فقط مدیر کل).</DialogDescription>
+            <DialogDescription>نام کاربری و رمز فقط برای ورود به پنل وب لازم است (مدیر کل و پشتیبان).</DialogDescription>
           </DialogHeader>
           {form && (
             <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save.mutate(form) }}>
@@ -90,7 +90,7 @@ export default function Admins() {
                   <SelectContent>{Object.entries(roles).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              {form.rule === 'administrator' && (
+              {(form.rule === 'administrator' || form.rule === 'support') && (
                 <>
                   <div className="grid gap-2">
                     <Label htmlFor="aun">نام کاربری پنل وب</Label>

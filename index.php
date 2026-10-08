@@ -3273,6 +3273,8 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $time = date('Y/m/d H:i:s');
     update("support_message", "status", "Answered", "Tracking", $user['Processing_value']);
     update("support_message", "result", $text, "Tracking", $user['Processing_value']);
+    update("support_message", "result_time", $time, "Tracking", $user['Processing_value']);
+    update("support_message", "result_by", $from_id, "Tracking", $user['Processing_value']);
     $textSendAdminToUser = sprintf($textbotlang['users']['support']['messageFromAdmin'], $text);
     $Response = json_encode([
         'inline_keyboard' => [

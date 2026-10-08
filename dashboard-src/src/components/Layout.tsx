@@ -1,7 +1,8 @@
 import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { BarChart3, LayoutDashboard, LogOut, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { BarChart3, Headset, LayoutDashboard, LogOut, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
@@ -9,8 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface Item { to: string; label: string; icon: LucideIcon }
-const ITEMS: Item[] = [
+const ALL_ITEMS: Item[] = [
   { to: '/', label: 'نمای کلی', icon: LayoutDashboard },
+  { to: '/support', label: 'پشتیبانی', icon: Headset },
   { to: '/stats', label: 'آمار', icon: BarChart3 },
   { to: '/users', label: 'کاربران', icon: Users },
   { to: '/orders', label: 'سفارشات', icon: ShoppingCart },
@@ -18,7 +20,6 @@ const ITEMS: Item[] = [
   { to: '/accounting', label: 'حسابداری', icon: Wallet },
   { to: '/admins', label: 'ادمین‌ها', icon: ShieldCheck },
 ]
-const PRIMARY_MOBILE = ITEMS.slice(0, 4)
 
 function useTheme() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -30,7 +31,10 @@ function useTheme() {
 }
 
 export function Layout() {
-  const { user, brand } = useSession()
+  const { user, brand, role } = useSession()
+  const ITEMS = role === 'administrator' ? ALL_ITEMS : ALL_ITEMS.filter((i) => i.to === '/support')
+  const PRIMARY_MOBILE = ITEMS.slice(0, 4)
+  const unread = useQuery({ queryKey: ['support-unread'], queryFn: () => api<{ unread: number }>('support_unread'), refetchInterval: 15000 }).data?.unread ?? 0
   const qc = useQueryClient()
   const { pathname } = useLocation()
   const theme = useTheme()
@@ -54,6 +58,7 @@ export function Layout() {
     >
       <i.icon className={mobile ? 'size-5' : 'size-[18px]'} />
       <span className="truncate">{i.label}</span>
+      {i.to === '/support' && unread > 0 && <span className="rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white">{unread}</span>}
     </NavLink>
   )
 

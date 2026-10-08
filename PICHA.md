@@ -135,6 +135,16 @@ Tests: `php tests/admin_test_test.php`.
 ## Admin management in the web panel
 Sidebar → «ادمین‌ها» (`/dashboard/#/admins`). Only an `administrator` can open the panel.
 - **Add**: Telegram numeric id + role. Roles: `administrator` (everything + web panel), `Seller` (limited bot menu), `support` (limited, no payment receipts). The new admin must press /start in the bot once.
-- **Web login**: only for `administrator`; set a username and a password (≥ 8 chars). Leave the password empty on edit = unchanged. Seller/support (or an administrator without a login name) are bot-only.
+- **Web login**: for `administrator` (everything) and `support` (live-chat page only); set a username and a password (≥ 8 chars). Leave the password empty on edit = unchanged. Seller (or an admin without a login name) is bot-only.
 - **Edit/delete**: change role, rename login, reset password, remove. Guards: you cannot delete or demote yourself, and the last administrator can never be removed/demoted. A demoted admin loses panel access immediately (role is checked on every request).
 - API: `admins`, `admin_save`, `admin_delete` in `dashboard/api.php`; covered by `tests/api_test.py`.
+
+## Live support chat (panel ⇄ Telegram)
+Sidebar → «پشتیبانی» (badge = customers waiting). It reads the bot's own ticket table (`support_message`), so both sides are always in sync:
+- A customer's messages from the bot's «پشتیبانی» appear in the panel within ~5 s (unread badge until you open the chat).
+- A reply typed in the panel is sent straight to the customer in Telegram (same text + «پاسخ به پیام» button as a reply from the bot). If Telegram refuses (customer blocked the bot) the panel shows the error and stores nothing.
+- A reply given inside Telegram by support staff shows in the panel too (with time and author; stored in `result_time` / `result_by`). Whoever answers first closes the "answer" button for the others, as before.
+- «بستن گفتگو» closes the thread; a new customer message reopens it. Filters: باز / بسته / همه + search by name or id.
+- Accounts with role `support` can log in (create them in «ادمین‌ها» with a username/password) and see only this page; every other API route answers 403 for them.
+- Not synced: photos/videos customers send (still arrive in Telegram for the department admin; only text is shown in the panel).
+Tests: `python3 tests/api_test.py URL admin PASS` (successful Telegram delivery needs the real API and was not exercised offline).

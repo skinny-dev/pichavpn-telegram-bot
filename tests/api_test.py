@@ -154,10 +154,45 @@ def login_as(u, p):
     op, csrf = saved
     return st
 check('new administrator can log in', login_as('webadm1', 'longenough1') == 200)
-s, r = call('admin_save', {'id': '222333444', 'username': 'webadm1', 'rule': 'support'}); check('demote web admin', s == 200, (s, r))
+s, r = call('admin_save', {'id': '222333444', 'username': 'webadm1', 'rule': 'Seller'}); check('demote web admin', s == 200, (s, r))
 check('demoted admin cannot log in', login_as('webadm1', 'longenough1') == 401)
 for i in ('109617420', '222333444'):
     s, r = call('admin_delete', {'id': i}); check('delete admin ' + i, s == 200, (s, r))
+
+# ---- live support chat
+import subprocess
+def sql(q): subprocess.run(['mysql', '-uroot', '--default-character-set=utf8mb4', 'mirza', '-e', q], check=True)
+sql("DELETE FROM support_message WHERE iduser IN ('1001','1002')")
+sql("INSERT INTO support_message (Tracking,idsupport,iduser,name_departman,text,result,time,status) VALUES ('t1','9','1001','عمومی','سلام، کانفیگ وصل نمیشه','0','2026/10/08 10:00:00','Unseen'),('t2','9','1001','عمومی','فوری لطفا','0','2026/10/08 10:05:00','Customerresponse'),('t3','9','1002','مالی','پرداخت من تایید نشد','0','2026/10/08 09:00:00','Answered')")
+sql("UPDATE support_message SET result='پیگیری شد', result_time='2026/10/08 09:10:00', result_by='9' WHERE Tracking='t3'")
+s, r = call('support_unread'); check('unread counts customers with unseen messages', r.get('unread') == 1, r)
+s, r = call('support_threads'); th = {t['iduser']: t for t in r.get('threads', [])}
+check('threads list: unread thread first, counts', r['threads'][0]['iduser'] == '1001' and th['1001']['unread'] == 2 and th['1001']['name'] == 'Ali', r)
+check('thread snippet shows last support reply', th['1002']['snippet'].startswith('شما:'), th)
+s, r = call('support_threads', q='sara'); check('thread search by user name', [t['iduser'] for t in r['threads']] == ['1002'], r)
+s, r = call('support_thread', uid='1001'); check('thread messages in order', [m['from'] for m in r['messages']] == ['customer', 'customer'] and r['messages'][0]['text'].startswith('سلام'), r)
+s, r = call('support_thread', uid='1002'); check('support reply is shown with time and author', r['messages'][1]['from'] == 'support' and r['messages'][1]['time'] == '2026/10/08 09:10:00' and r['messages'][1]['by'] == '9', r)
+s, r = call('support_unread'); check('opening a thread marks it seen', r.get('unread') == 0, r)
+s, r = call('support_reply', {'uid': '1001', 'text': ''}); check('empty reply 422', s == 422, (s, r))
+s, r = call('support_reply', {'uid': 'nobody', 'text': 'x'}); check('reply to unknown thread 404', s == 404, (s, r))
+s, r = call('support_reply', {'uid': '1001', 'text': 'سلام'}); check('reply fails cleanly when Telegram is unreachable (502)', s == 502, (s, r))
+s, r = call('support_thread', uid='1001'); check('failed delivery leaves no reply behind', [m['from'] for m in r['messages']] == ['customer', 'customer'], r)
+s, r = call('support_close', {'uid': '1001'}); check('close thread', s == 200, (s, r))
+s, r = call('support_threads'); check('closed thread leaves the open list', '1001' not in [t['iduser'] for t in r['threads']], r)
+s, r = call('support_threads', f='closed'); check('closed list has it', '1001' in [t['iduser'] for t in r['threads']], r)
+# a support-role account only reaches the chat
+s, r = call('admin_save', {'id_admin': '555666777', 'username': 'sup1', 'rule': 'support', 'password': 'supportpass1'}); check('create support web login', s == 200, (s, r))
+op_saved, csrf_saved = op, csrf
+op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())); csrf = ''
+s, r = call('login', {'username': 'sup1', 'password': 'supportpass1'}); check('support user can log in', s == 200, (s, r)); csrf = r.get('csrf', '')
+s, r = call('me'); check('me reports the support role', r.get('role') == 'support', r)
+s, r = call('support_threads'); check('support can read the inbox', s == 200, (s, r))
+for route, q in (('list', {'res': 'users'}), ('stats', {}), ('admins', {}), ('overview', {}), ('schema', {})):
+    s, r = call(route, **q); check('support is denied ' + route, s == 403, (s, r))
+s, r = call('admin_save', {'id_admin': '999888777', 'rule': 'administrator'}); check('support cannot create admins', s == 403, (s, r))
+op, csrf = op_saved, csrf_saved
+call('admin_delete', {'id': '555666777'})
+sql("DELETE FROM support_message WHERE iduser IN ('1001','1002')")
 
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))

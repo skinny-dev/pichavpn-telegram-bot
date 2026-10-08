@@ -14,5 +14,7 @@ return [
         SQL,
     'columns' => [
         ['result', '0', 'TEXT'],
+        ['result_time', '', 'VARCHAR(50)'],
+        ['result_by', '', 'VARCHAR(100)'],
     ],
 ];

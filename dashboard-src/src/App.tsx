@@ -1,5 +1,5 @@
 import { Route, Routes, Navigate } from 'react-router-dom'
-import { SessionProvider } from '@/lib/session'
+import { SessionProvider, useSession } from '@/lib/session'
 import { Layout } from '@/components/Layout'
 import { Login } from '@/components/Login'
 import { lazy, Suspense } from 'react'
@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 const Overview = lazy(() => import('@/pages/Overview'))
 const Admins = lazy(() => import('@/pages/Admins'))
+const Support = lazy(() => import('@/pages/Support'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Users = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Users })))
 const Orders = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Orders })))
@@ -15,12 +16,18 @@ const Accounting = lazy(() => import('@/pages/Resources').then((m) => ({ default
 
 const Splash = () => <div className="grid min-h-dvh place-items-center"><Skeleton className="h-10 w-40" /></div>
 
+function Home() {
+  const { role } = useSession()
+  return role === 'support' ? <Navigate to="/support" replace /> : <Overview />
+}
+
 export default function App() {
   return (
     <SessionProvider fallback={<Splash />} loginView={(done) => <Login onDone={done} />}>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Overview />} />
+          <Route index element={<Home />} />
+          <Route path="support" element={<Support />} />
           <Route path="stats" element={<Stats />} />
           <Route path="users" element={<Users />} />
           <Route path="orders" element={<Orders />} />

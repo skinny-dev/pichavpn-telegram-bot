@@ -44,13 +44,30 @@ function picha_admin_roles(): array
     return [
         'administrator' => 'مدیر کل (همه‌ی بخش‌ها + پنل وب)',
         'Seller' => 'فروشنده (دسترسی محدود در ربات)',
-        'support' => 'پشتیبان (بدون رسید پرداخت‌ها)',
+        'support' => 'پشتیبان (چت پشتیبانی در پنل وب، بدون رسید پرداخت‌ها)',
     ];
 }
 
 function picha_admin_count(PDO $pdo): int
 {
     return (int) $pdo->query("SELECT COUNT(*) FROM admin WHERE rule = 'administrator'")->fetchColumn();
+}
+
+/** Send a support reply to the customer through the bot (same text and "reply" button as a reply typed in Telegram). */
+function picha_support_send(string $uid, string $text, string $tracking): array
+{
+    global $from_id, $pdo, $setting, $APIKEY;
+    $cwd = getcwd();
+    chdir(dirname(__DIR__)); // function.php loads vendor/autoload.php relative to the bot root
+    require_once __DIR__ . '/../botapi.php';
+    require_once __DIR__ . '/../function.php';
+    $from_id = $uid; // languagechange() reads the customer's language from this
+    $lang = languagechange(dirname(__DIR__));
+    $msg = sprintf($lang['users']['support']['messageFromAdmin'], htmlspecialchars($text, ENT_NOQUOTES, 'UTF-8'));
+    $kb = json_encode(['inline_keyboard' => [[['text' => $lang['users']['support']['answermessage'], 'callback_data' => 'Responsesusera_' . $tracking]]]]);
+    $res = sendmessage($uid, $msg, $kb, 'HTML');
+    chdir($cwd);
+    return !empty($res['ok']) ? ['ok' => true] : ['ok' => false, 'error' => (string) ($res['description'] ?? 'unknown')];
 }
 
 function body(): array
@@ -418,7 +435,7 @@ if ($route === 'login') {
     $stored = $admin ? (string) $admin['password'] : '$2y$10$dummy.hash.for.timing.attack.prevention.xxxxxxxxxxxxxxxx';
     $isHash = str_starts_with($stored, '$2') || str_starts_with($stored, '$argon2');
     $ok = $isHash ? password_verify($p, $stored) : ($admin && hash_equals($stored, $p));
-    if ($ok && $admin && $admin['rule'] === 'administrator') {
+    if ($ok && $admin && in_array($admin['rule'], ['administrator', 'support'], true)) {
         if (!$isHash) {
             $pdo->prepare("UPDATE admin SET password = ? WHERE username = ?")->execute([password_hash($p, PASSWORD_BCRYPT, ['cost' => 12]), $u]);
         }
@@ -433,15 +450,17 @@ if ($route === 'login') {
 }
 
 $authed = false;
+$role = '';
 if (!empty($_SESSION['admin_user'])) {
     $st = $pdo->prepare("SELECT rule FROM admin WHERE username = ?");
     $st->execute([$_SESSION['admin_user']]);
-    $rule = $st->fetchColumn();
-    $authed = ($rule === 'administrator') && (time() - (int) ($_SESSION['login_time'] ?? 0) < 86400);
+    $role = (string) $st->fetchColumn();
+    // support staff may use the live-chat inbox only; everything else needs a full administrator
+    $authed = in_array($role, ['administrator', 'support'], true) && (time() - (int) ($_SESSION['login_time'] ?? 0) < 86400);
 }
 
 if ($route === 'me') {
-    out(['ok' => true, 'authed' => $authed, 'user' => $authed ? $_SESSION['admin_user'] : null, 'csrf' => $authed ? picha_csrf() : null, 'brand' => PICHA_BRAND]);
+    out(['ok' => true, 'authed' => $authed, 'user' => $authed ? $_SESSION['admin_user'] : null, 'role' => $authed ? $role : null, 'csrf' => $authed ? picha_csrf() : null, 'brand' => PICHA_BRAND]);
 }
 if (!$authed) {
     fail('ورود لازم است', 401);
@@ -451,6 +470,9 @@ if ($method !== 'GET') {
     if (!hash_equals(picha_csrf(), $sent)) {
         fail('نشست نامعتبر است. صفحه را دوباره بارگذاری کنید', 403);
     }
+}
+if ($role === 'support' && !in_array($route, ['logout', 'support_unread', 'support_threads', 'support_thread', 'support_reply', 'support_close'], true)) {
+    fail('دسترسی این حساب فقط به بخش پشتیبانی است', 403);
 }
 
 // ---------------------------------------------------------------- routes
@@ -707,6 +729,105 @@ try {
             $recent = $pdo->query("SELECT id_invoice, username, name_product, price_product, time_sell, Status FROM invoice ORDER BY CAST(time_sell AS UNSIGNED) DESC LIMIT 8")->fetchAll(PDO::FETCH_ASSOC);
             out(['ok' => true, 'today' => $today, 'month' => $month, 'users' => $users, 'balance' => $balance, 'active_services' => $active, 'pending_payments' => $pending, 'series' => $series, 'recent' => $recent]);
 
+        case 'support_unread':
+            out(['ok' => true, 'unread' => (int) $pdo->query("SELECT COUNT(DISTINCT iduser) FROM support_message WHERE status IN ('Unseen','Customerresponse')")->fetchColumn()]);
+
+        case 'support_threads':
+            $filter = (string) ($_GET['f'] ?? 'open');
+            $q = trim((string) ($_GET['q'] ?? ''));
+            $params = [];
+            $having = $filter === 'closed' ? 'HAVING open_rows = 0' : ($filter === 'all' ? '' : 'HAVING open_rows > 0');
+            $where = '';
+            if ($q !== '') {
+                $where = "WHERE s.iduser LIKE ? OR u.username LIKE ? OR u.namecustom LIKE ?";
+                $like = '%' . addcslashes($q, '%_\\') . '%';
+                $params = [$like, $like, $like];
+            }
+            $st = $pdo->prepare("SELECT s.iduser, MAX(s.id) AS last_id, COUNT(*) AS n, SUM(s.status IN ('Unseen','Customerresponse')) AS unread, SUM(s.status != 'close') AS open_rows, u.username AS tg_username, u.namecustom AS name FROM support_message s LEFT JOIN user u ON u.id = s.iduser $where GROUP BY s.iduser, u.username, u.namecustom $having ORDER BY (SUM(s.status IN ('Unseen','Customerresponse')) > 0) DESC, last_id DESC LIMIT 200");
+            $st->execute($params);
+            $threads = $st->fetchAll(PDO::FETCH_ASSOC);
+            $lastRow = $pdo->prepare("SELECT name_departman, text, result, time, result_time FROM support_message WHERE id = ?");
+            foreach ($threads as &$t) {
+                $lastRow->execute([$t['last_id']]);
+                $l = $lastRow->fetch(PDO::FETCH_ASSOC) ?: [];
+                $hasReply = ($l['result'] ?? '') !== '' && ($l['result'] ?? '') !== '0';
+                $t['snippet'] = mb_substr($hasReply ? 'شما: ' . $l['result'] : (string) ($l['text'] ?? ''), 0, 80);
+                $t['department'] = (string) ($l['name_departman'] ?? '');
+                $t['time'] = $hasReply && ($l['result_time'] ?? '') !== '' ? $l['result_time'] : (string) ($l['time'] ?? '');
+                $t['unread'] = (int) $t['unread'];
+                $t['open'] = (int) $t['open_rows'] > 0;
+                unset($t['open_rows'], $t['last_id']);
+            }
+            unset($t);
+            out(['ok' => true, 'threads' => $threads]);
+
+        case 'support_thread':
+            $uid = trim((string) ($_GET['uid'] ?? ''));
+            $st = $pdo->prepare("SELECT id, Tracking, name_departman, text, result, time, result_time, result_by, status FROM support_message WHERE iduser = ? ORDER BY id");
+            $st->execute([$uid]);
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            if (!$rows) {
+                fail('گفتگو پیدا نشد', 404);
+            }
+            $msgs = [];
+            foreach ($rows as $r) {
+                if ($r['text'] !== '') {
+                    $msgs[] = ['id' => $r['id'] . 'c', 'from' => 'customer', 'text' => $r['text'], 'time' => $r['time'], 'dept' => $r['name_departman']];
+                }
+                if ($r['result'] !== '' && $r['result'] !== '0') {
+                    $msgs[] = ['id' => $r['id'] . 's', 'from' => 'support', 'text' => $r['result'], 'time' => $r['result_time'] !== '' ? $r['result_time'] : $r['time'], 'by' => (string) $r['result_by']];
+                }
+            }
+            // opening the chat marks the customer's messages as seen (bot status "Pending" = seen, not yet answered)
+            $pdo->prepare("UPDATE support_message SET status = 'Pending' WHERE iduser = ? AND status IN ('Unseen','Customerresponse')")->execute([$uid]);
+            $u = $pdo->prepare("SELECT username, namecustom, Balance, number FROM user WHERE id = ?");
+            $u->execute([$uid]);
+            out(['ok' => true, 'uid' => $uid, 'user' => $u->fetch(PDO::FETCH_ASSOC) ?: null, 'messages' => $msgs, 'open' => (bool) array_filter($rows, fn($r) => $r['status'] !== 'close')]);
+
+        case 'support_reply':
+            $b = body();
+            $uid = trim((string) ($b['uid'] ?? ''));
+            $text = trim((string) ($b['text'] ?? ''));
+            if ($text === '' || mb_strlen($text) > 3500) {
+                fail('متن پیام خالی یا بیش از حد طولانی است', 422);
+            }
+            $st = $pdo->prepare("SELECT * FROM support_message WHERE iduser = ? ORDER BY id DESC");
+            $st->execute([$uid]);
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            if (!$rows) {
+                fail('گفتگو پیدا نشد', 404);
+            }
+            $pending = array_values(array_filter($rows, fn($r) => in_array($r['status'], ['Unseen', 'Customerresponse', 'Pending'], true)));
+            $adminRow = $pdo->prepare("SELECT id_admin FROM admin WHERE username = ?");
+            $adminRow->execute([$_SESSION['admin_user']]);
+            $by = (string) ($adminRow->fetchColumn() ?: $_SESSION['admin_user']);
+            $now = date('Y/m/d H:i:s');
+            if ($pending) {
+                $trk = (string) $pending[0]['Tracking'];
+            } else {
+                $trk = bin2hex(random_bytes(4));
+            }
+            // deliver first: a customer who blocked the bot must not leave a "sent" reply behind
+            $delivery = picha_support_send($uid, $text, $trk);
+            if (!$delivery['ok']) {
+                fail('ارسال به تلگرام ناموفق بود: ' . $delivery['error'] . ' (شاید مشتری ربات را مسدود کرده است)', 502);
+            }
+            $pdo->beginTransaction();
+            if ($pending) {
+                $pdo->prepare("UPDATE support_message SET status = 'Answered' WHERE iduser = ? AND status IN ('Unseen','Customerresponse','Pending')")->execute([$uid]);
+                $pdo->prepare("UPDATE support_message SET result = ?, result_time = ?, result_by = ? WHERE Tracking = ?")->execute([$text, $now, $by, $trk]);
+            } else {
+                $pdo->prepare("INSERT INTO support_message (Tracking,idsupport,iduser,name_departman,text,result,result_time,result_by,time,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$trk, $rows[0]['idsupport'], $uid, $rows[0]['name_departman'], '', $text, $now, $by, $now, 'Answered']);
+            }
+            $pdo->commit();
+            out(['ok' => true]);
+
+        case 'support_close':
+            $uid = trim((string) (body()['uid'] ?? ''));
+            $pdo->prepare("UPDATE support_message SET status = 'close' WHERE iduser = ? AND status != 'close'")->execute([$uid]);
+            out(['ok' => true]);
+
         case 'admins':
             $rows = $pdo->query("SELECT a.id_admin, a.username, a.rule, (a.password LIKE '\$2%' OR a.password LIKE '\$argon2%') AS hp, u.username AS tg_username, u.namecustom FROM admin a LEFT JOIN user u ON u.id = a.id_admin ORDER BY FIELD(a.rule,'administrator','Seller','support'), a.id_admin")->fetchAll(PDO::FETCH_ASSOC);
             $selfName = (string) $_SESSION['admin_user'];
@@ -714,7 +835,7 @@ try {
                 'id_admin' => (string) $r['id_admin'], 'username' => (string) $r['username'], 'rule' => (string) $r['rule'],
                 'tg_username' => (string) ($r['tg_username'] ?? ''), 'name' => (string) ($r['namecustom'] ?? ''),
                 // "bot-only" admins carry a random unusable hash; only the web login name differs from the id
-                'web_login' => (string) $r['rule'] === 'administrator' && (string) $r['username'] !== (string) $r['id_admin'],
+                'web_login' => in_array((string) $r['rule'], ['administrator', 'support'], true) && (string) $r['username'] !== (string) $r['id_admin'],
                 'self' => (string) $r['username'] === $selfName,
             ], $rows);
             out(['ok' => true, 'rows' => $list, 'roles' => picha_admin_roles()]);
