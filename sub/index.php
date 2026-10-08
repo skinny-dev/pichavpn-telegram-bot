@@ -49,8 +49,9 @@ try {
         }
     }
     if (is_array($DataUserOut) && isset($DataUserOut['links']) && is_array($DataUserOut['links'])) {
-        foreach ($DataUserOut['links'] as $Links) {
-            $config .= $Links . "\r\r";
+        // one config per LINE: clients split the subscription on "\n"; the old "\r\r" separator made strict clients see only the first config
+        foreach (subscriptionLines($DataUserOut['links']) as $line) {
+            $config .= $line . "\n";
         }
     }
     echo $config;

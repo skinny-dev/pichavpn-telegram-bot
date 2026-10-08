@@ -2425,6 +2425,24 @@ function supportSendMedia($chatId, $type, $fileId, $caption = '', $markup = null
     }
     return telegram($method, $data);
 }
+/** flatten whatever the panel returned (strings, strings with several lines, nested arrays) into trimmed, non-empty single lines */
+function subscriptionLines($links): array
+{
+    $out = [];
+    foreach ((array) $links as $l) {
+        if (is_array($l)) {
+            $out = array_merge($out, subscriptionLines($l));
+            continue;
+        }
+        foreach (preg_split('/\R+/', (string) $l) as $line) {
+            $line = trim($line);
+            if ($line !== '') {
+                $out[] = $line;
+            }
+        }
+    }
+    return $out;
+}
 function normalizePanelUrl($url)
 {
     $url = trim((string) $url);
