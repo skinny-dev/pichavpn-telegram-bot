@@ -8008,6 +8008,13 @@ if ($datain == "settimecornday" && $adminrulecheck['rule'] == "administrator") {
             ['text' => $textbotlang['keyboard']['exclusiveSubLink'], 'callback_data' => "none"],
         ];
     }
+    if (in_array($panel['type'], ["marzban", "marzneshin"])) {
+        $subproxyNative = ($panel['subproxy'] ?? 'onsubproxy') === 'offsubproxy';
+        $Bot_Status['inline_keyboard'][] = [
+            ['text' => $subproxyNative ? '🔗 لینک خود پنل' : '🤖 لینک دامنه ربات', 'callback_data' => "editpanel-subproxy-" . ($subproxyNative ? 'offsubproxy' : 'onsubproxy') . "-{$panel['code_panel']}"],
+            ['text' => '📎 لینک اشتراک مشتری', 'callback_data' => "none"],
+        ];
+    }
     if (in_array($panel['type'], ["marzban"])) {
         $Bot_Status['inline_keyboard'][] = [
             ['text' => $inbocunddisable, 'callback_data' => "editpanel-inbocunddisable-{$panel['inboundstatus']}-{$panel['code_panel']}"],
@@ -8087,6 +8094,8 @@ if ($datain == "settimecornday" && $adminrulecheck['rule'] == "administrator") {
             $valuenew = "oninbounddisable";
         }
         update("marzban_panel", "inboundstatus", $valuenew, "code_panel", $code_panel);
+    } elseif ($type == "subproxy") {
+        update("marzban_panel", "subproxy", $value == "offsubproxy" ? "onsubproxy" : "offsubproxy", "code_panel", $code_panel);
     } elseif ($type == "subvip") {
         if ($value == "onsubvip") {
             $valuenew = "offsubvip";

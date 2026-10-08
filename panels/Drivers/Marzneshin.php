@@ -45,7 +45,7 @@ class MarzneshinPanelDriver extends BasePanelDriver
             $links_user = explode("\n", trim($data_Output['links']));
             $date = new DateTime($data_Output['expire']);
             if ($invoice != false) {
-                $data_Output['subscription_url'] = "https://$domainhosts/sub/" . $invoice['id_invoice'];
+                $data_Output['subscription_url'] = panelSubscriptionLink($Get_Data_Panel, $data_Output['subscription_url'] ?? '', $invoice, $domainhosts);
             }
             $data_Output['expire'] = $date->getTimestamp();
             $Output['status'] = 'successful';
@@ -115,7 +115,7 @@ class MarzneshinPanelDriver extends BasePanelDriver
                     $expiretime = 0;
                 }
                 if ($invoice != false) {
-                    $UsernameData['subscription_url'] = "https://$domainhosts/sub/" . $invoice['id_invoice'];
+                    $UsernameData['subscription_url'] = panelSubscriptionLink($Get_Data_Panel, $UsernameData['subscription_url'] ?? '', $invoice, $domainhosts);
                 }
                 $Output = array(
                     'status' => $UsernameData['status'],

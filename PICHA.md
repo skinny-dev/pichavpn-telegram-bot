@@ -171,3 +171,9 @@ Categories (`expenses.kind`): `purchase` خرید · `salary` حقوق · `adver
 
 ### «In statistics I see expenses but not in the list»
 Mirza-Pro stored expenses/capital as `Payment_report` rows (`cost` / `capital_injection`). Statistics count them, but the panel list and `/finance` commands use the tables `expenses` / `capital_entries`. `php scripts/migrate_pro_costs.php [--apply]` moves those rows into the tables (category guessed from the description, totals unchanged, old rows kept and marked `cost_migrated`, SQL copy saved first).
+
+## Subscription link: panel's own domain vs bot domain
+By default the customer gets `https://<bot domain>/sub/<invoice id>` (the bot re-reads the panel on every request). If the panel (PasarGuard/Marzban) has its own subscription domain (e.g. `https://dmc.example.com/sub/TOKEN`) this causes two different links for the same user. Switch per panel:
+- Bot: panel settings (`مدیریت پنل ← وضعیت قابلیت‌ها`) → button «📎 لینک اشتراک مشتری»: «🤖 لینک دامنه ربات» ⇄ «🔗 لینک خود پنل».
+- Server: `php scripts/sub_mode.php` (status) · `native` / `bot` [PANEL_NAME] · `domain PANEL_NAME https://dmc.example.com` (force the sub domain if the panel reports another host).
+Applies to new purchases and every later refresh of the service message. Links already sent keep working (`/sub/<id>` stays online). Test: `php tests/sub_link_test.php`.

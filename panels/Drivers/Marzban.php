@@ -50,7 +50,7 @@ class MarzbanPanelDriver extends BasePanelDriver
                     : explode("\n", (string) $links);
             }
             if ($invoice != false) {
-                $data_Output['subscription_url'] = "https://$domainhosts/sub/" . $invoice['id_invoice'];
+                $data_Output['subscription_url'] = panelSubscriptionLink($Get_Data_Panel, $data_Output['subscription_url'] ?? '', $invoice, $domainhosts);
             }
             $Output['status'] = 'successful';
             $Output['username'] = $data_Output['username'];
@@ -120,7 +120,7 @@ class MarzbanPanelDriver extends BasePanelDriver
                 $UsernameData['expire'] = $UsernameData['expire'] ?? null;
             }
             if ($invoice != false) {
-                $UsernameData['subscription_url'] = "https://$domainhosts/sub/" . $invoice['id_invoice'];
+                $UsernameData['subscription_url'] = panelSubscriptionLink($Get_Data_Panel, $UsernameData['subscription_url'] ?? '', $invoice, $domainhosts);
             }
             if ($Get_Data_Panel['version_panel'] == "1") {
                 $UsernameData['proxies'] = isset($UsernameData['proxy_settings']) ? $UsernameData['proxy_settings'] : null;

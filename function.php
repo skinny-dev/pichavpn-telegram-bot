@@ -2296,6 +2296,34 @@ function absoluteSubscriptionUrl($subUrl, $panelUrl)
     }
     return rtrim((string) $panelUrl, '/') . '/' . ltrim($subUrl, '/');
 }
+/**
+ * Subscription link handed to the customer for a Marzban-family panel (Marzban, PasarGuard, Marzneshin).
+ *  - subproxy 'offsubproxy': the panel's OWN link (e.g. https://dmc.example.com/sub/TOKEN), so the customer, the panel and the
+ *    bot all show one link. If the panel's «linksubx» differs from its admin URL, that host is used as the subscription domain.
+ *  - otherwise (default, original behaviour): https://<bot domain>/sub/<invoice id>, a proxy that re-reads the panel on each request.
+ */
+function panelSubscriptionLink($panel, $nativeUrl, $invoice, $domainhosts)
+{
+    $botLink = ($invoice != false) ? "https://$domainhosts/sub/" . $invoice['id_invoice'] : $nativeUrl;
+    if (($panel['subproxy'] ?? 'onsubproxy') !== 'offsubproxy' || $invoice == false) {
+        return $botLink;
+    }
+    $native = trim((string) $nativeUrl);
+    if ($native === '') {
+        return $botLink; // nothing to show natively: keep the working bot link
+    }
+    $base = trim((string) ($panel['linksubx'] ?? ''));
+    $baseHost = $base !== '' ? parse_url($base, PHP_URL_HOST) : null;
+    $adminHost = parse_url((string) ($panel['url_panel'] ?? ''), PHP_URL_HOST);
+    if ($baseHost && $baseHost !== $adminHost) {
+        $parts = parse_url($native);
+        if (!empty($parts['path'])) {
+            $port = parse_url($base, PHP_URL_PORT);
+            return (parse_url($base, PHP_URL_SCHEME) ?: 'https') . '://' . $baseHost . ($port ? ':' . $port : '') . $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+        }
+    }
+    return $native;
+}
 function normalizePanelUrl($url)
 {
     $url = trim((string) $url);

@@ -87,6 +87,7 @@ return [
         ['proxies', null, 'TEXT'],
         ['inbounds', null, 'TEXT'],
         ['subvip', 'offsubvip', 'VARCHAR(60)'],
+        ['subproxy', 'onsubproxy', 'VARCHAR(30)'],
         ['changeloc', 'offchangeloc', 'VARCHAR(60)'],
         ['on_hold_test', '1', 'VARCHAR(60)'],
         ['version_panel', '0', 'VARCHAR(60)'],
