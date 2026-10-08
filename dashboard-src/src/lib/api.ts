@@ -60,3 +60,21 @@ export async function api<T = any>(route: string, opts: { body?: unknown; query?
   }
   return data as T
 }
+
+/** multipart upload (e.g. a support attachment); same CSRF + error handling as api() */
+export async function apiForm<T = any>(route: string, form: FormData): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`${ENDPOINT}?${new URLSearchParams({ r: route })}`, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf }, body: form })
+  } catch {
+    throw new ApiError('اتصال به سرور برقرار نشد', 0)
+  }
+  let data: any = null
+  try { data = await res.json() } catch { /* non-JSON */ }
+  if (res.status === 401) onUnauthorized?.()
+  if (!res.ok || (data && data.ok === false)) throw new ApiError(data?.error ?? `خطای سرور (${res.status})`, res.status, data ?? undefined)
+  return data as T
+}
+
+/** URL of a support attachment (streamed by the server from Telegram) */
+export const supportFileUrl = (row: number, side: 'c' | 's') => `${ENDPOINT}?r=support_file&row=${row}&side=${side}`

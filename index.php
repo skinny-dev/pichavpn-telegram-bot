@@ -3224,7 +3224,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     deletemessage($from_id, $message_id);
     sendmessage($from_id, $textbotlang['users']['support']['sendMessage'], $backuser, 'HTML');
     step("gettextticket", $from_id);
-} elseif ($user['step'] == "gettextticket" && $text) {
+} elseif ($user['step'] == "gettextticket" && ($text || $caption || supportMediaFromMessage($update['message'] ?? null))) {
+    $supportMedia = supportMediaFromMessage($update['message'] ?? null);
+    $ticketText = $text !== '' ? $text : $caption;
     $userdata = json_decode($user['Processing_value'], true);
     $departeman = select("departman", "*", "id", $userdata['iddeparteman'], "select");
     $time = date('Y/m/d H:i:s');
@@ -3236,21 +3238,17 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $stmt->bindParam(':idsupport', $departeman['idsupport']);
     $stmt->bindParam(':iduser', $from_id);
     $stmt->bindParam(':name_departman', $departeman['name_departman']);
-    $stmt->bindParam(':text', $text, PDO::PARAM_STR);
+    $stmt->bindParam(':text', $ticketText, PDO::PARAM_STR);
     $stmt->bindParam(':time', $time);
     $stmt->bindParam(':status', $status);
     $stmt->execute();
-    if ($photo) {
+    if ($supportMedia) {
+        $pdo->prepare("UPDATE support_message SET file_id = ?, file_type = ?, file_name = ? WHERE Tracking = ?")->execute([$supportMedia['file_id'], $supportMedia['type'], $supportMedia['name'], $randomString]);
         foreach (supportRecipients($departeman['idsupport']) as $supportTo) {
-            sendphoto($supportTo, $photoid, null);
+            supportSendMedia($supportTo, $supportMedia['type'], $supportMedia['file_id']);
         }
     }
-    if ($video) {
-        foreach (supportRecipients($departeman['idsupport']) as $supportTo) {
-            sendvideo($supportTo, $videoid, null);
-        }
-    }
-    $textsuppoer = sprintf($textbotlang['Admin']['reportgroup']['supportMessage'], $from_id, $from_id, $timejalali, $username, $departeman['name_departman'], $text, $caption);
+    $textsuppoer = sprintf($textbotlang['Admin']['reportgroup']['supportMessage'], $from_id, $from_id, $timejalali, $username, $departeman['name_departman'], $ticketText, '');
     $Response = json_encode([
         'inline_keyboard' => [
             [
@@ -3276,12 +3274,18 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     step("getextsupport", $from_id);
 } elseif ($user['step'] == "getextsupport") {
     $trakingdetail = select("support_message", "*", "Tracking", $user['Processing_value']);
+    $replyMedia = supportMediaFromMessage($update['message'] ?? null);
+    $replyText = $text !== '' ? $text : $caption;
+    if ($replyText === '' && !$replyMedia) {
+        sendmessage($from_id, $textbotlang['users']['support']['sendMessageText'], $backuser, 'HTML');
+        return;
+    }
     $time = date('Y/m/d H:i:s');
     update("support_message", "status", "Answered", "Tracking", $user['Processing_value']);
-    update("support_message", "result", $text, "Tracking", $user['Processing_value']);
+    update("support_message", "result", $replyText, "Tracking", $user['Processing_value']);
     update("support_message", "result_time", $time, "Tracking", $user['Processing_value']);
     update("support_message", "result_by", $from_id, "Tracking", $user['Processing_value']);
-    $textSendAdminToUser = sprintf($textbotlang['users']['support']['messageFromAdmin'], $text);
+    $textSendAdminToUser = sprintf($textbotlang['users']['support']['messageFromAdmin'], $replyText);
     $Response = json_encode([
         'inline_keyboard' => [
             [
@@ -3289,7 +3293,16 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ],
         ]
     ]);
-    sendmessage($trakingdetail['iduser'], $textSendAdminToUser, $Response, 'HTML');
+    if ($replyMedia) {
+        $pdo->prepare("UPDATE support_message SET result_file_id = ?, result_file_type = ?, result_file_name = ? WHERE Tracking = ?")->execute([$replyMedia['file_id'], $replyMedia['type'], $replyMedia['name'], $user['Processing_value']]);
+        $fits = mb_strlen($textSendAdminToUser) <= 1000;
+        supportSendMedia($trakingdetail['iduser'], $replyMedia['type'], $replyMedia['file_id'], $fits ? $textSendAdminToUser : '', $fits ? $Response : null);
+        if (!$fits) {
+            sendmessage($trakingdetail['iduser'], $textSendAdminToUser, $Response, 'HTML');
+        }
+    } else {
+        sendmessage($trakingdetail['iduser'], $textSendAdminToUser, $Response, 'HTML');
+    }
     sendmessage($from_id, $textbotlang['users']['support']['sentSuccess'], null, 'HTML');
     step("home", $from_id);
 } elseif (preg_match('/Responsesusera_(\w+)/', $datain, $dataget)) {
@@ -3298,6 +3311,8 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     update("user", "Processing_value", $idtraking, "id", $from_id);
     step("getextuserfors", $from_id);
 } elseif ($user['step'] == "getextuserfors") {
+    $supportMedia = supportMediaFromMessage($update['message'] ?? null);
+    $ticketText = $text !== '' ? $text : $caption;
     $trakingdetail = select("support_message", "*", "Tracking", $user['Processing_value']);
     step("home", $from_id);
     $time = date('Y/m/d H:i:s');
@@ -3310,11 +3325,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $stmt->bindParam(':idsupport', $trakingdetail['idsupport']);
     $stmt->bindParam(':iduser', $trakingdetail['iduser']);
     $stmt->bindParam(':name_departman', $trakingdetail['name_departman']);
-    $stmt->bindParam(':text', $text, PDO::PARAM_STR);
+    $stmt->bindParam(':text', $ticketText, PDO::PARAM_STR);
     $stmt->bindParam(':time', $time);
     $stmt->bindParam(':status', $status);
     $stmt->execute();
-    $textsuppoer = sprintf($textbotlang['Admin']['reportgroup']['supportMessage2'], $from_id, $from_id, $timejalali, $username, $trakingdetail['name_departman'], $text);
+    if ($supportMedia) {
+        $pdo->prepare("UPDATE support_message SET file_id = ?, file_type = ?, file_name = ? WHERE Tracking = ?")->execute([$supportMedia['file_id'], $supportMedia['type'], $supportMedia['name'], $randomString]);
+    }
+    $textsuppoer = sprintf($textbotlang['Admin']['reportgroup']['supportMessage2'], $from_id, $from_id, $timejalali, $username, $trakingdetail['name_departman'], $ticketText);
     $Response = json_encode([
         'inline_keyboard' => [
             [
@@ -3322,14 +3340,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ],
         ]
     ]);
-    if ($photo) {
+    if ($supportMedia) {
         foreach (supportRecipients($trakingdetail['idsupport']) as $supportTo) {
-            sendphoto($supportTo, $photoid, null);
-        }
-    }
-    if ($video) {
-        foreach (supportRecipients($trakingdetail['idsupport']) as $supportTo) {
-            sendvideo($supportTo, $videoid, null);
+            supportSendMedia($supportTo, $supportMedia['type'], $supportMedia['file_id']);
         }
     }
     foreach (supportRecipients($trakingdetail['idsupport']) as $supportTo) {

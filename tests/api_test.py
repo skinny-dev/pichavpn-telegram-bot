@@ -213,6 +213,49 @@ s, r = call('stats', period='all'); check('text report has the P&L lines', 'سو
 for i in ids: call('delete', {'res': 'expenses', 'id': str(i)})
 call('delete', {'res': 'capital', 'id': str(capid)})
 
+# ---- support attachments (Telegram itself is unreachable here, so delivery fails cleanly; validation and storage are tested)
+def post_multipart(route, fields, files):
+    import uuid
+    bd = uuid.uuid4().hex
+    parts = []
+    for k, v in fields.items():
+        parts.append(f'--{bd}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    for k, (fn, ct, data) in files.items():
+        parts.append(f'--{bd}\r\nContent-Disposition: form-data; name="{k}"; filename="{fn}"\r\nContent-Type: {ct}\r\n\r\n'.encode() + data + b'\r\n')
+    parts.append(f'--{bd}--\r\n'.encode())
+    req = urllib.request.Request(f"{base}/dashboard/api.php?r={route}", data=b''.join(parts), method='POST')
+    req.add_header('Content-Type', f'multipart/form-data; boundary={bd}')
+    if csrf: req.add_header('X-CSRF-Token', csrf)
+    try:
+        r = op.open(req); return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b'{}')
+sql("DELETE FROM support_message WHERE iduser IN ('1001','1002')")
+sql("INSERT INTO support_message (Tracking,idsupport,iduser,name_departman,text,result,time,status,file_id,file_type,file_name,result_file_id,result_file_type,result_file_name,result_time,result_by) VALUES ('f1','9','1001','عمومی','عکس مشکل','0','2026/10/08 10:00:00','Unseen','AgACfake','photo','','','','','',''),('f2','9','1001','عمومی','','0','2026/10/08 10:05:00','Unseen','BQACfake','document','report.pdf','','','','',''),('f3','9','1001','عمومی','فایل شما','فایل شما','2026/10/08 10:06:00','Answered','','','','BAACfake','video','demo.mp4','2026/10/08 10:07:00','9')")
+s, r = call('support_thread', uid='1001'); msgs = r.get('messages', [])
+check('thread shows customer photo with caption', msgs[0]['from'] == 'customer' and msgs[0]['text'] == 'عکس مشکل' and msgs[0]['file']['kind'] == 'image' and msgs[0]['file']['side'] == 'c', msgs[:1])
+check('file-only message (no text) is listed with its file', msgs[1]['text'] == '' and msgs[1]['file']['kind'] == 'file' and msgs[1]['file']['name'] == 'report.pdf', msgs[1:2])
+check('support reply with a video attachment is listed', any(m['from'] == 'support' and m.get('file', {}).get('kind') == 'video' and m['file']['side'] == 's' for m in msgs), msgs)
+s, r = call('support_threads'); t = [x for x in r['threads'] if x['iduser'] == '1001']
+check('thread snippet marks attachments', t and '📎' in t[0]['snippet'], t)
+s, r = call('support_file', row='99999', side='c'); check('file of an unknown message is 404', s == 404, (s, r))
+s, r = call('support_file', row='1', side='s'); check('side without a file is 404', s == 404, (s, r))
+s, r = post_multipart('support_reply', {'uid': '1001', 'text': ''}, {}); check('empty reply without file is 422', s == 422, (s, r))
+s, r = post_multipart('support_reply', {'uid': '1001', 'text': 'x'}, {'file': ('big.bin', 'application/octet-stream', b'0' * (21 * 1024 * 1024))}); check('file over 20MB is refused (413)', s == 413, (s, r))
+s, r = post_multipart('support_reply', {'uid': '1001', 'text': ''}, {'file': ('a.png', 'image/png', b'\x89PNG\r\n\x1a\n' + b'0' * 50)}); check('file-only reply passes validation, then fails cleanly at Telegram (502)', s == 502, (s, r))
+csrf_keep = csrf; csrf = 'bad'
+s, r = post_multipart('support_reply', {'uid': '1001', 'text': 'x'}, {'file': ('a.png', 'image/png', b'123')}); check('multipart upload without CSRF is 403', s == 403, (s, r))
+csrf = csrf_keep
+s, r = call('support_thread', uid='1001'); check('failed delivery stores nothing', len([m for m in r['messages'] if m['from'] == 'support']) == 1, r)
+op_saved, csrf_saved = op, csrf
+call('admin_save', {'id_admin': '555666778', 'username': 'sup2', 'rule': 'support', 'password': 'supportpass2'})
+op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())); csrf = ''
+s, r = call('login', {'username': 'sup2', 'password': 'supportpass2'}); csrf = r.get('csrf', '')
+s, r = call('support_file', row='99999', side='c'); check('support role may open the file route (404, not 403)', s == 404, (s, r))
+op, csrf = op_saved, csrf_saved
+call('admin_delete', {'id': '555666778'})
+sql("DELETE FROM support_message WHERE iduser IN ('1001','1002')")
+
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
 print('\nFAILED:', fails); sys.exit(1 if fails else 0)

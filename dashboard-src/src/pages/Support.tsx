@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowRight, CheckCheck, Loader2, Search, Send } from 'lucide-react'
-import { api, ApiError } from '@/lib/api'
+import { ArrowRight, CheckCheck, FileText, Loader2, Paperclip, Search, Send, X } from 'lucide-react'
+import { api, apiForm, ApiError, supportFileUrl } from '@/lib/api'
 import { fmtStr } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -11,10 +11,21 @@ import { Badge } from '@/components/ui/badge'
 import { useDebounced } from '@/lib/hooks'
 
 interface Thread { iduser: string; tg_username: string | null; name: string | null; unread: number; open: boolean; snippet: string; department: string; time: string; n: number }
-interface Msg { id: string; from: 'customer' | 'support'; text: string; time: string; by?: string; dept?: string }
+interface Attach { row: number; side: 'c' | 's'; kind: 'image' | 'video' | 'audio' | 'file'; name: string }
+interface Msg { id: string; from: 'customer' | 'support'; text: string; time: string; by?: string; dept?: string; file?: Attach }
 interface ThreadData { uid: string; user: { username: string; namecustom: string; Balance: string; number: string } | null; messages: Msg[]; open: boolean }
 
 const who = (t: { iduser: string; name?: string | null; tg_username?: string | null }) => t.name && t.name !== 'none' ? t.name : t.tg_username && t.tg_username !== 'none' ? `@${t.tg_username}` : t.iduser
+
+function Attachment({ f }: { f: Attach }) {
+  const url = supportFileUrl(f.row, f.side)
+  const [failed, setFailed] = useState(false)
+  if (failed) return <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2 text-xs underline"><FileText className="size-4" />{f.name} (دانلود)</a>
+  if (f.kind === 'image') return <a href={url} target="_blank" rel="noreferrer" className="mb-1 block"><img src={url} alt={f.name} loading="lazy" onError={() => setFailed(true)} className="max-h-72 max-w-full rounded-lg object-contain" /></a>
+  if (f.kind === 'video') return <video src={url} controls preload="metadata" onError={() => setFailed(true)} className="mb-1 max-h-72 max-w-full rounded-lg" />
+  if (f.kind === 'audio') return <audio src={url} controls preload="none" onError={() => setFailed(true)} className="mb-1 max-w-full" />
+  return <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2 text-sm"><FileText className="size-4 shrink-0" /><span className="truncate" dir="ltr">{f.name}</span></a>
+}
 
 export default function Support() {
   const qc = useQueryClient()
@@ -67,6 +78,10 @@ export default function Support() {
 function Chat({ uid, onBack, onChanged }: { uid: string; onBack: () => void; onChanged: () => void }) {
   const qc = useQueryClient()
   const [text, setText] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const picker = useRef<HTMLInputElement>(null)
+  const preview = useMemo(() => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null), [file])
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
   const bottom = useRef<HTMLDivElement>(null)
   const data = useQuery({ queryKey: ['support-thread', uid], queryFn: () => api<ThreadData>('support_thread', { query: { uid } }), refetchInterval: 4000 })
   const count = data.data?.messages.length ?? 0
@@ -74,8 +89,13 @@ function Chat({ uid, onBack, onChanged }: { uid: string; onBack: () => void; onC
   useEffect(() => { onChanged() }, [data.dataUpdatedAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = useMutation({
-    mutationFn: () => api('support_reply', { body: { uid, text } }),
-    onSuccess: () => { setText(''); qc.invalidateQueries({ queryKey: ['support-thread', uid] }); onChanged() },
+    mutationFn: () => {
+      if (!file) return api('support_reply', { body: { uid, text } })
+      const fd = new FormData()
+      fd.append('uid', uid); fd.append('text', text); fd.append('file', file)
+      return apiForm('support_reply', fd)
+    },
+    onSuccess: () => { setText(''); setFile(null); qc.invalidateQueries({ queryKey: ['support-thread', uid] }); onChanged() },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ارسال ناموفق بود'),
   })
   const close = useMutation({
@@ -101,6 +121,7 @@ function Chat({ uid, onBack, onChanged }: { uid: string; onBack: () => void; onC
         {data.data?.messages.map((m) => (
           <div key={m.id} className={cn('flex', m.from === 'support' ? 'justify-start' : 'justify-end')}>
             <div className={cn('max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm', m.from === 'support' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+              {m.file && <Attachment f={m.file} />}
               {m.text}
               <div className={cn('mt-1 text-[10px] opacity-70', m.from === 'customer' && 'text-start')} dir="ltr">{m.from === 'customer' && m.dept ? `${m.dept} · ` : ''}{fmtStr(m.time)}</div>
             </div>
@@ -108,14 +129,25 @@ function Chat({ uid, onBack, onChanged }: { uid: string; onBack: () => void; onC
         ))}
         <div ref={bottom} />
       </div>
-      <form className="flex items-end gap-2 border-t p-3" onSubmit={(e) => { e.preventDefault(); if (text.trim() && !send.isPending) send.mutate() }}>
+      {file && (
+        <div className="flex items-center gap-2 border-t bg-muted/50 px-3 py-2 text-sm">
+          {preview ? <img src={preview} alt="" className="size-10 rounded object-cover" /> : <FileText className="size-5 shrink-0" />}
+          <span className="min-w-0 flex-1 truncate" dir="ltr">{file.name}</span>
+          <span className="text-xs text-muted-foreground tabular">{(file.size / 1048576).toFixed(1)} MB</span>
+          <Button type="button" variant="ghost" size="icon-sm" onClick={() => setFile(null)} aria-label="حذف فایل"><X /></Button>
+        </div>
+      )}
+      <form className="flex items-end gap-2 border-t p-3" onSubmit={(e) => { e.preventDefault(); if ((text.trim() || file) && !send.isPending) send.mutate() }}>
+        <input ref={picker} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (f.size > 20 * 1048576) toast.error('حداکثر حجم فایل ۲۰ مگابایت است'); else setFile(f) } e.target.value = '' }} />
+        <Button type="button" variant="ghost" size="icon" onClick={() => picker.current?.click()} aria-label="پیوست فایل" disabled={send.isPending}><Paperclip /></Button>
         <textarea
           className="min-h-10 max-h-40 flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           rows={2} value={text} placeholder="پاسخ شما مستقیم در تلگرام مشتری ارسال می‌شود…" maxLength={3500}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (text.trim() && !send.isPending) send.mutate() } }}
+          onPaste={(e) => { const f = Array.from(e.clipboardData.files)[0]; if (f) { e.preventDefault(); if (f.size > 20 * 1048576) toast.error('حداکثر حجم فایل ۲۰ مگابایت است'); else setFile(f) } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if ((text.trim() || file) && !send.isPending) send.mutate() } }}
         />
-        <Button type="submit" disabled={!text.trim() || send.isPending}>{send.isPending ? <Loader2 className="animate-spin" /> : <Send />}ارسال</Button>
+        <Button type="submit" disabled={(!text.trim() && !file) || send.isPending}>{send.isPending ? <Loader2 className="animate-spin" /> : <Send />}ارسال</Button>
       </form>
     </div>
   )

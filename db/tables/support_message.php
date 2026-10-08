@@ -16,5 +16,12 @@ return [
         ['result', '0', 'TEXT'],
         ['result_time', '', 'VARCHAR(50)'],
         ['result_by', '', 'VARCHAR(100)'],
+        // attachments (Telegram file ids; the files themselves stay on Telegram): customer side and support side
+        ['file_id', '', 'VARCHAR(300)'],
+        ['file_type', '', 'VARCHAR(20)'],
+        ['file_name', '', 'VARCHAR(255)'],
+        ['result_file_id', '', 'VARCHAR(300)'],
+        ['result_file_type', '', 'VARCHAR(20)'],
+        ['result_file_name', '', 'VARCHAR(255)'],
     ],
 ];

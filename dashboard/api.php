@@ -21,6 +21,7 @@ header('Cache-Control: no-store');
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../stats_report.php';
+require_once __DIR__ . '/../support_files.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
@@ -53,8 +54,11 @@ function picha_admin_count(PDO $pdo): int
     return (int) $pdo->query("SELECT COUNT(*) FROM admin WHERE rule = 'administrator'")->fetchColumn();
 }
 
-/** Send a support reply to the customer through the bot (same text and "reply" button as a reply typed in Telegram). */
-function picha_support_send(string $uid, string $text, string $tracking): array
+/**
+ * Send a support reply to the customer through the bot (same text and "reply" button as a reply typed in Telegram), optionally with
+ * an attachment ($file = ['path','name','mime','size']). Returns ['ok'=>bool, 'error'=>..., 'file'=>['type','id','name']|null].
+ */
+function picha_support_send(string $uid, string $text, string $tracking, ?array $file = null): array
 {
     global $from_id, $pdo, $setting, $APIKEY;
     $cwd = getcwd();
@@ -63,11 +67,50 @@ function picha_support_send(string $uid, string $text, string $tracking): array
     require_once __DIR__ . '/../function.php';
     $from_id = $uid; // languagechange() reads the customer's language from this
     $lang = languagechange(dirname(__DIR__));
-    $msg = sprintf($lang['users']['support']['messageFromAdmin'], htmlspecialchars($text, ENT_NOQUOTES, 'UTF-8'));
+    $msg = sprintf($lang['users']['support']['messageFromAdmin'], htmlspecialchars($text === '' ? '📎' : $text, ENT_NOQUOTES, 'UTF-8'));
     $kb = json_encode(['inline_keyboard' => [[['text' => $lang['users']['support']['answermessage'], 'callback_data' => 'Responsesusera_' . $tracking]]]]);
-    $res = sendmessage($uid, $msg, $kb, 'HTML');
+    if ($file === null) {
+        $res = sendmessage($uid, $msg, $kb, 'HTML');
+        chdir($cwd);
+        return !empty($res['ok']) ? ['ok' => true, 'file' => null] : ['ok' => false, 'error' => (string) ($res['description'] ?? 'unknown')];
+    }
+    $mime = (string) $file['mime'];
+    $fits = mb_strlen($msg) <= 1000; // a caption holds 1024 characters; longer text goes as its own message
+    $attempts = [];
+    if (str_starts_with($mime, 'image/') && in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true) && $file['size'] <= 10 * 1024 * 1024) {
+        $attempts[] = ['sendPhoto', 'photo', 'photo'];
+    } elseif (str_starts_with($mime, 'video/') && $file['size'] <= 50 * 1024 * 1024) {
+        $attempts[] = ['sendVideo', 'video', 'video'];
+    } elseif (in_array($mime, ['audio/mpeg', 'audio/mp4', 'audio/x-m4a'], true)) {
+        $attempts[] = ['sendAudio', 'audio', 'audio'];
+    }
+    $attempts[] = ['sendDocument', 'document', 'document'];
+    $res = ['ok' => false];
+    $sentType = 'document';
+    foreach ($attempts as [$method, $field, $type]) {
+        $data = ['chat_id' => $uid, $field => new CURLFile($file['path'], $mime, $file['name'])];
+        if ($fits) {
+            $data['caption'] = $msg;
+            $data['parse_mode'] = 'HTML';
+            $data['reply_markup'] = $kb;
+        }
+        $res = telegram($method, $data);
+        if (!empty($res['ok'])) {
+            $sentType = $type;
+            break;
+        }
+    }
+    if (empty($res['ok'])) {
+        chdir($cwd);
+        return ['ok' => false, 'error' => (string) ($res['description'] ?? 'unknown')];
+    }
+    if (!$fits) {
+        sendmessage($uid, $msg, $kb, 'HTML');
+    }
+    $r = $res['result'] ?? [];
+    $fid = $sentType === 'photo' ? (string) (end($r['photo'])['file_id'] ?? '') : (string) ($r[$sentType]['file_id'] ?? '');
     chdir($cwd);
-    return !empty($res['ok']) ? ['ok' => true] : ['ok' => false, 'error' => (string) ($res['description'] ?? 'unknown')];
+    return ['ok' => true, 'file' => $fid !== '' ? ['type' => $sentType, 'id' => $fid, 'name' => $file['name']] : null];
 }
 
 function body(): array
@@ -471,7 +514,7 @@ if ($method !== 'GET') {
         fail('نشست نامعتبر است. صفحه را دوباره بارگذاری کنید', 403);
     }
 }
-if ($role === 'support' && !in_array($route, ['logout', 'support_unread', 'support_threads', 'support_thread', 'support_reply', 'support_close'], true)) {
+if ($role === 'support' && !in_array($route, ['logout', 'support_unread', 'support_threads', 'support_thread', 'support_reply', 'support_close', 'support_file'], true)) {
     fail('دسترسی این حساب فقط به بخش پشتیبانی است', 403);
 }
 
@@ -746,12 +789,15 @@ try {
             $st = $pdo->prepare("SELECT s.iduser, MAX(s.id) AS last_id, COUNT(*) AS n, SUM(s.status IN ('Unseen','Customerresponse')) AS unread, SUM(s.status != 'close') AS open_rows, u.username AS tg_username, u.namecustom AS name FROM support_message s LEFT JOIN user u ON u.id = s.iduser $where GROUP BY s.iduser, u.username, u.namecustom $having ORDER BY (SUM(s.status IN ('Unseen','Customerresponse')) > 0) DESC, last_id DESC LIMIT 200");
             $st->execute($params);
             $threads = $st->fetchAll(PDO::FETCH_ASSOC);
-            $lastRow = $pdo->prepare("SELECT name_departman, text, result, time, result_time FROM support_message WHERE id = ?");
+            $lastRow = $pdo->prepare("SELECT name_departman, text, result, time, result_time, file_id, result_file_id FROM support_message WHERE id = ?");
             foreach ($threads as &$t) {
                 $lastRow->execute([$t['last_id']]);
                 $l = $lastRow->fetch(PDO::FETCH_ASSOC) ?: [];
                 $hasReply = ($l['result'] ?? '') !== '' && ($l['result'] ?? '') !== '0';
-                $t['snippet'] = mb_substr($hasReply ? 'شما: ' . $l['result'] : (string) ($l['text'] ?? ''), 0, 80);
+                $hasReply = $hasReply || ($l['result_file_id'] ?? '') !== '';
+                $snipText = $hasReply ? 'شما: ' . ($l['result'] === '0' ? '' : $l['result']) : (string) ($l['text'] ?? '');
+                $hasFile = $hasReply ? ($l['result_file_id'] ?? '') !== '' : ($l['file_id'] ?? '') !== '';
+                $t['snippet'] = mb_substr(trim($snipText . ($hasFile ? ' 📎' : '')), 0, 80);
                 $t['department'] = (string) ($l['name_departman'] ?? '');
                 $t['time'] = $hasReply && ($l['result_time'] ?? '') !== '' ? $l['result_time'] : (string) ($l['time'] ?? '');
                 $t['unread'] = (int) $t['unread'];
@@ -763,19 +809,32 @@ try {
 
         case 'support_thread':
             $uid = trim((string) ($_GET['uid'] ?? ''));
-            $st = $pdo->prepare("SELECT id, Tracking, name_departman, text, result, time, result_time, result_by, status FROM support_message WHERE iduser = ? ORDER BY id");
+            $st = $pdo->prepare("SELECT id, Tracking, name_departman, text, result, time, result_time, result_by, status, file_id, file_type, file_name, result_file_id, result_file_type, result_file_name FROM support_message WHERE iduser = ? ORDER BY id");
             $st->execute([$uid]);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
             if (!$rows) {
                 fail('گفتگو پیدا نشد', 404);
             }
             $msgs = [];
+            $fileInfo = function (string $type, string $name, int $row, string $side) {
+                [$mime, $inline] = supportFileDelivery($type, $name);
+                $kind = !$inline ? 'file' : (str_starts_with($mime, 'image/') ? 'image' : (str_starts_with($mime, 'video/') ? 'video' : 'audio'));
+                return ['row' => $row, 'side' => $side, 'kind' => $kind, 'name' => $name !== '' ? $name : ($type === 'photo' ? 'photo.jpg' : $type)];
+            };
             foreach ($rows as $r) {
-                if ($r['text'] !== '') {
-                    $msgs[] = ['id' => $r['id'] . 'c', 'from' => 'customer', 'text' => $r['text'], 'time' => $r['time'], 'dept' => $r['name_departman']];
+                if ($r['text'] !== '' || $r['file_id'] !== '') {
+                    $m = ['id' => $r['id'] . 'c', 'from' => 'customer', 'text' => $r['text'], 'time' => $r['time'], 'dept' => $r['name_departman']];
+                    if ($r['file_id'] !== '') {
+                        $m['file'] = $fileInfo((string) $r['file_type'], (string) $r['file_name'], (int) $r['id'], 'c');
+                    }
+                    $msgs[] = $m;
                 }
-                if ($r['result'] !== '' && $r['result'] !== '0') {
-                    $msgs[] = ['id' => $r['id'] . 's', 'from' => 'support', 'text' => $r['result'], 'time' => $r['result_time'] !== '' ? $r['result_time'] : $r['time'], 'by' => (string) $r['result_by']];
+                if (($r['result'] !== '' && $r['result'] !== '0') || $r['result_file_id'] !== '') {
+                    $m = ['id' => $r['id'] . 's', 'from' => 'support', 'text' => $r['result'] === '0' ? '' : $r['result'], 'time' => $r['result_time'] !== '' ? $r['result_time'] : $r['time'], 'by' => (string) $r['result_by']];
+                    if ($r['result_file_id'] !== '') {
+                        $m['file'] = $fileInfo((string) $r['result_file_type'], (string) $r['result_file_name'], (int) $r['id'], 's');
+                    }
+                    $msgs[] = $m;
                 }
             }
             // opening the chat marks the customer's messages as seen (bot status "Pending" = seen, not yet answered)
@@ -785,10 +844,32 @@ try {
             out(['ok' => true, 'uid' => $uid, 'user' => $u->fetch(PDO::FETCH_ASSOC) ?: null, 'messages' => $msgs, 'open' => (bool) array_filter($rows, fn($r) => $r['status'] !== 'close')]);
 
         case 'support_reply':
-            $b = body();
+            // JSON {uid, text} or multipart form (uid, text, file)
+            if (!$_POST && !$_FILES && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0 && stripos((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'multipart/') === 0) {
+                // PHP drops the whole body when it is larger than post_max_size
+                fail('حجم فایل از حد مجاز سرور بیشتر است (upload_max_filesize = ' . ini_get('upload_max_filesize') . '، post_max_size = ' . ini_get('post_max_size') . ')', 413);
+            }
+            $b = $_POST ? $_POST : body();
             $uid = trim((string) ($b['uid'] ?? ''));
             $text = trim((string) ($b['text'] ?? ''));
-            if ($text === '' || mb_strlen($text) > 3500) {
+            $up = $_FILES['file'] ?? null;
+            $file = null;
+            if (is_array($up) && ($up['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                if ($up['error'] === UPLOAD_ERR_INI_SIZE || $up['error'] === UPLOAD_ERR_FORM_SIZE) {
+                    fail('حجم فایل از حد مجاز سرور بیشتر است (upload_max_filesize = ' . ini_get('upload_max_filesize') . '، post_max_size = ' . ini_get('post_max_size') . ')', 413);
+                }
+                if ($up['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($up['tmp_name'])) {
+                    fail('آپلود فایل ناموفق بود', 422);
+                }
+                if ($up['size'] > 20 * 1024 * 1024) {
+                    fail('حداکثر حجم فایل ۲۰ مگابایت است', 413);
+                }
+                $name = trim((string) preg_replace('/[\x00-\x1f\x7f\/\\\\]+/u', '_', (string) $up['name']));
+                $name = mb_substr($name !== '' ? $name : 'file', 0, 120);
+                $mime = (new finfo(FILEINFO_MIME_TYPE))->file($up['tmp_name']) ?: 'application/octet-stream';
+                $file = ['path' => $up['tmp_name'], 'name' => $name, 'mime' => $mime, 'size' => (int) $up['size']];
+            }
+            if (($text === '' && $file === null) || mb_strlen($text) > 3500) {
                 fail('متن پیام خالی یا بیش از حد طولانی است', 422);
             }
             $st = $pdo->prepare("SELECT * FROM support_message WHERE iduser = ? ORDER BY id DESC");
@@ -802,26 +883,62 @@ try {
             $adminRow->execute([$_SESSION['admin_user']]);
             $by = (string) ($adminRow->fetchColumn() ?: $_SESSION['admin_user']);
             $now = date('Y/m/d H:i:s');
-            if ($pending) {
-                $trk = (string) $pending[0]['Tracking'];
-            } else {
-                $trk = bin2hex(random_bytes(4));
-            }
+            $trk = $pending ? (string) $pending[0]['Tracking'] : bin2hex(random_bytes(4));
             // deliver first: a customer who blocked the bot must not leave a "sent" reply behind
-            $delivery = picha_support_send($uid, $text, $trk);
+            $delivery = picha_support_send($uid, $text, $trk, $file);
             if (!$delivery['ok']) {
                 fail('ارسال به تلگرام ناموفق بود: ' . $delivery['error'] . ' (شاید مشتری ربات را مسدود کرده است)', 502);
             }
+            $sent = $delivery['file'] ?? null;
             $pdo->beginTransaction();
             if ($pending) {
                 $pdo->prepare("UPDATE support_message SET status = 'Answered' WHERE iduser = ? AND status IN ('Unseen','Customerresponse','Pending')")->execute([$uid]);
-                $pdo->prepare("UPDATE support_message SET result = ?, result_time = ?, result_by = ? WHERE Tracking = ?")->execute([$text, $now, $by, $trk]);
+                $pdo->prepare("UPDATE support_message SET result = ?, result_time = ?, result_by = ?, result_file_id = ?, result_file_type = ?, result_file_name = ? WHERE Tracking = ?")
+                    ->execute([$text, $now, $by, $sent['id'] ?? '', $sent['type'] ?? '', $sent['name'] ?? '', $trk]);
             } else {
-                $pdo->prepare("INSERT INTO support_message (Tracking,idsupport,iduser,name_departman,text,result,result_time,result_by,time,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$trk, $rows[0]['idsupport'], $uid, $rows[0]['name_departman'], '', $text, $now, $by, $now, 'Answered']);
+                $pdo->prepare("INSERT INTO support_message (Tracking,idsupport,iduser,name_departman,text,result,result_time,result_by,time,status,result_file_id,result_file_type,result_file_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$trk, $rows[0]['idsupport'], $uid, $rows[0]['name_departman'], '', $text, $now, $by, $now, 'Answered', $sent['id'] ?? '', $sent['type'] ?? '', $sent['name'] ?? '']);
             }
             $pdo->commit();
             out(['ok' => true]);
+
+        case 'support_file':
+            // streams an attachment from Telegram (file ids never leave the server, the bot token is never exposed)
+            $st = $pdo->prepare("SELECT file_id, file_type, file_name, result_file_id, result_file_type, result_file_name FROM support_message WHERE id = ?");
+            $st->execute([(int) ($_GET['row'] ?? 0)]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            $s = ($_GET['side'] ?? 'c') === 's' ? 'result_' : '';
+            $fid = (string) ($r[$s . 'file_id'] ?? '');
+            if ($fid === '') {
+                fail('فایل پیدا نشد', 404);
+            }
+            $ftype = (string) $r[$s . 'file_type'];
+            $fname = (string) $r[$s . 'file_name'];
+            $ask = curl_init('https://api.telegram.org/bot' . $APIKEY . '/getFile?file_id=' . urlencode($fid));
+            curl_setopt_array($ask, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15]);
+            $info = json_decode((string) curl_exec($ask), true);
+            curl_close($ask);
+            if (empty($info['ok']) || empty($info['result']['file_path'])) {
+                $big = stripos((string) ($info['description'] ?? ''), 'too big') !== false;
+                fail($big ? 'فایل بزرگ‌تر از ۲۰ مگابایت است و از طریق ربات قابل دانلود نیست؛ در تلگرام ببینید' : 'دریافت فایل از تلگرام ناموفق بود', $big ? 413 : 502);
+            }
+            [$mime, $inline] = supportFileDelivery($ftype, $fname);
+            $dl = $fname !== '' ? $fname : basename($info['result']['file_path']);
+            header('Content-Type: ' . $mime);
+            header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $dl) . '"');
+            header("Content-Security-Policy: default-src 'none'; sandbox");
+            header('Cache-Control: private, max-age=3600');
+            if (!empty($info['result']['file_size'])) {
+                header('Content-Length: ' . (int) $info['result']['file_size']);
+            }
+            $dlc = curl_init('https://api.telegram.org/file/bot' . $APIKEY . '/' . $info['result']['file_path']);
+            curl_setopt_array($dlc, [CURLOPT_TIMEOUT => 120, CURLOPT_WRITEFUNCTION => function ($c, $chunk) {
+                echo $chunk;
+                return strlen($chunk);
+            }]);
+            curl_exec($dlc);
+            curl_close($dlc);
+            exit;
 
         case 'support_close':
             $uid = trim((string) (body()['uid'] ?? ''));

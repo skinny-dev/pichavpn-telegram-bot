@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/support_files.php';
 require_once 'vendor/autoload.php';
 require 'config.php';
 ini_set('error_log', 'error_log');
@@ -2408,6 +2409,21 @@ function supportRecipients($primary = null)
     } catch (Throwable $e) {
     }
     return array_values(array_unique($ids));
+}
+/** Send an already-uploaded Telegram file (by file_id) of any supported type. */
+function supportSendMedia($chatId, $type, $fileId, $caption = '', $markup = null)
+{
+    $map = ['photo' => ['sendPhoto', 'photo'], 'video' => ['sendVideo', 'video'], 'voice' => ['sendVoice', 'voice'], 'audio' => ['sendAudio', 'audio'], 'animation' => ['sendAnimation', 'animation'], 'video_note' => ['sendVideoNote', 'video_note']];
+    [$method, $field] = $map[$type] ?? ['sendDocument', 'document'];
+    $data = ['chat_id' => $chatId, $field => $fileId];
+    if ($caption !== '' && $type !== 'video_note') {
+        $data['caption'] = $caption;
+        $data['parse_mode'] = 'HTML';
+    }
+    if ($markup) {
+        $data['reply_markup'] = $markup;
+    }
+    return telegram($method, $data);
 }
 function normalizePanelUrl($url)
 {

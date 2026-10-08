@@ -188,3 +188,10 @@ A ticket from the bot's «پشتیبانی» used to go ONLY to the department's
 
 ### «Subscription shows only one location»
 The bot link `/sub/<id>` used to rebuild the subscription from the user's `links` list, which can be a subset of what the panel's own subscription serves (hosts per client/format). For Marzban / PasarGuard / Marzneshin it now RELAYS the panel's own subscription (fetched with the customer's app User-Agent) and forwards its real headers (profile title, usage, expiry); only if that fetch fails it falls back to the old rebuild. If the panel reports another sub domain than you want, `php scripts/sub_mode.php domain PANEL https://dmc.example.com:8000`.
+
+### Support chat: photos, videos, files, voice (both directions, synced)
+- **Customer → support**: photo / video / document / voice / audio / video note sent in the bot's «پشتیبانی» (with or without caption, as a new ticket or as a follow-up) is stored (Telegram `file_id`, type, name) and forwarded to all support recipients as before; the panel chat shows it (images inline, video/audio players, other files as a download).
+- **Support → customer**: from the panel use the 📎 button (or paste an image; max 20 MB) with or without text → the bot sends it to the customer (photo/video/audio/document as appropriate, same «پاسخ به پیام» button). From Telegram, an admin can answer a ticket with any attachment too; it shows up in the panel.
+- Files stay on Telegram (only ids are stored). The panel streams them through `api.php?r=support_file` (login required, the bot token never reaches the browser). Telegram bot downloads are limited to 20 MB (bigger files show «در تلگرام ببینید»). Only plain images/video/audio render inline; html/svg/pdf/etc. are download-only.
+- Upload size is also limited by PHP: raise `upload_max_filesize` and `post_max_size` (e.g. 25M / 26M) in the Apache php.ini and restart Apache; the panel prints the current limits when a file is too big.
+- Tests: `php tests/support_files_test.php`, `python3 tests/api_test.py …` (Telegram delivery itself needs the real API).
