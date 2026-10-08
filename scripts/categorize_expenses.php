@@ -88,7 +88,7 @@ if (!$apply) {
     exit(0);
 }
 $backup = '/root/pre-categorize-' . time() . '.sql';
-$cmd = sprintf('mysqldump -uroot --single-transaction %s expenses > %s 2>/dev/null', escapeshellarg($dbname), escapeshellarg($backup));
+$cmd = sprintf('MYSQL_PWD=%s mysqldump -h %s -u %s --single-transaction --no-tablespaces %s expenses > %s 2>/dev/null', escapeshellarg($passworddb), escapeshellarg($dbhost), escapeshellarg($usernamedb), escapeshellarg($dbname), escapeshellarg($backup));
 exec($cmd, $o, $code);
 if ($code !== 0 || !is_file($backup) || filesize($backup) < 100) {
     fwrite(STDERR, "could not save a safety copy ($backup); nothing was changed\n");
