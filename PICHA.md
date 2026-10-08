@@ -124,3 +124,10 @@ Every expense counts in the expenses of ITS OWN day; advertising also has its ow
 - **Web panel → Accounting/Expenses → Add**: نوع هزینه = تبلیغات, نام, مبلغ, تاریخ و ساعت (`1405/07/14 15:30`, Gregorian `2026-10-06 15:30` also works; date alone = 12:00; empty = now). Dates are editable afterwards.
 - **Bot** (administrator): `/ad 500000 کمپین اینستاگرام` (now) · `/ad 500000 کمپین اینستاگرام @1405/07/14 15:30` (that moment) · `/expense 120000 سرور` · `/capital 5000000 سرمایه` (all accept the `@date` suffix).
 Tests: `php tests/accounting_dt_test.php`, `python3 tests/api_test.py URL admin PASS`.
+
+## Admin notification test
+- In the bot (administrator): **`/admintest`** sends a test message to every admin and replies with who received it («✅ پیام رسید» / «❌ او هنوز /start را نزده است» / «ربات را بلاک کرده»).
+- From the server: `php scripts/admin_test.php` (same result, exit code 1 if someone did not receive it).
+- Every admin in the admin table gets payment receipts (with ✅/❌ buttons), support messages and alerts — the table is read live, so a newly added admin starts receiving them at once, if they pressed Start on the bot. «support» admins do not get payment receipts.
+- Adding an admin in the bot now tells you at once if the new admin never pressed Start (the message could not be delivered).
+Tests: `php tests/admin_test_test.php`.

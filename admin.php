@@ -270,7 +270,11 @@ if ($datain == "paygwback") {
         return;
     }
     sendmessage($from_id, $textbotlang['Admin']['manageadmin']['addAdminSet'], $keyboardadmin, 'HTML');
-    sendmessage($user['Processing_value'], $textbotlang['Admin']['manageadmin']['adminAddedSendUser'], null, 'HTML');
+    $adminNotice = sendmessage($user['Processing_value'], $textbotlang['Admin']['manageadmin']['adminAddedSendUser'], null, 'HTML');
+    if (!is_array($adminNotice) || empty($adminNotice['ok'])) {
+        // the new admin never pressed Start (or blocked the bot): tell who added them, so they are not waiting for messages that cannot arrive
+        sendmessage($from_id, "⚠️ ادمین ثبت شد، ولی پیام به <code>" . htmlspecialchars((string) $user['Processing_value'], ENT_NOQUOTES, 'UTF-8') . "</code> نرسید.\nباید ابتدا /start را در ربات بزند؛ بعد از آن رسیدها و اعلان‌ها برای او هم می‌آید. برای دوباره آزمایش‌کردن: /admintest", null, 'HTML');
+    }
     step('home', $from_id);
     $unusablePasswordHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
     $stmt = $pdo->prepare("INSERT INTO admin (id_admin, username, password, rule) VALUES (:id_admin, :username, :password, :rule)");
@@ -315,6 +319,12 @@ if ($datain == "paygwback") {
     } else {
         sendmessage($from_id, $statsText, statsKeyboard('all'), 'HTML');
     }
+} elseif ($text == "/admintest" && $adminrulecheck['rule'] == "administrator") {
+    $lines = [];
+    foreach (adminTestNotify('درخواست‌کننده‌ی تست: ' . $from_id) as $row) {
+        $lines[] = adminTestLine($row);
+    }
+    sendmessage($from_id, "🧪 <b>نتیجه‌ی تست اعلان ادمین‌ها</b>\n\n" . ($lines ? implode("\n", $lines) : 'هیچ ادمینی ثبت نشده است.') . "\n\nرسید پرداخت‌ها به همه‌ی ادمین‌ها (به‌جز «support») ارسال می‌شود. هر ادمین جدید همان لحظه شروع به دریافت می‌کند، به شرطی که /start را زده باشد.", null, 'HTML');
 } elseif (preg_match('/^\/(expense|capital|ad)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
     // /ad 500000 کمپین اینستاگرام            -> advertising expense, now
     // /ad 500000 کمپین اینستاگرام @1405/07/14 15:30   -> same, on that date/time (date alone = 12:00)

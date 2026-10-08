@@ -1107,6 +1107,42 @@ function sendStartMessage($chat_id, $keyboard)
     return $sent;
 }
 
+/**
+ * Admin notification test: sends a test message to EVERY admin in the admin table and reports who received it.
+ * Payment receipts, support messages and alerts are sent to all admins the same way (the table is read live), so anybody added as an
+ * admin starts receiving them at once, provided they pressed Start on the bot. «support» admins do not get payment receipts.
+ * @return array[] each: ['id' => ..., 'rule' => ..., 'ok' => bool, 'error' => string]
+ */
+function adminTestNotify($note = '')
+{
+    global $pdo;
+    $rows = $pdo->query("SELECT id_admin, rule FROM admin ORDER BY rule, id_admin")->fetchAll(PDO::FETCH_ASSOC);
+    $out = [];
+    foreach ($rows as $r) {
+        $gets = $r['rule'] === 'support' ? 'پیام‌های پشتیبانی و اعلان‌ها (رسید پرداخت برای شما ارسال نمی‌شود)' : 'رسید پرداخت‌ها (با دکمه‌ی تأیید/رد)، پیام‌های پشتیبانی و اعلان‌ها';
+        $res = telegram('sendmessage', [
+            'chat_id' => $r['id_admin'],
+            'text' => "🧪 <b>تست اعلان ادمین</b>\n\nاگر این پیام را می‌بینید، اعلان‌های مدیریت به شما می‌رسد.\n🎭 نقش شما: <code>" . htmlspecialchars((string) $r['rule'], ENT_NOQUOTES, 'UTF-8') . "</code>\n📥 دریافت می‌کنید: " . $gets . ($note !== '' ? "\n\n" . htmlspecialchars($note, ENT_NOQUOTES, 'UTF-8') : ''),
+            'parse_mode' => 'HTML',
+        ]);
+        $ok = is_array($res) && !empty($res['ok']);
+        $out[] = ['id' => $r['id_admin'], 'rule' => $r['rule'], 'ok' => $ok, 'error' => $ok ? '' : (string) ($res['description'] ?? 'no answer')];
+    }
+    return $out;
+}
+
+/** Human line for one adminTestNotify() row. */
+function adminTestLine(array $r)
+{
+    if ($r['ok']) {
+        return "✅ <code>{$r['id']}</code> · {$r['rule']} · پیام رسید";
+    }
+    $why = stripos($r['error'], 'chat not found') !== false || stripos($r['error'], "can't initiate") !== false
+        ? 'او هنوز /start را در ربات نزده است'
+        : (stripos($r['error'], 'blocked') !== false ? 'ربات را بلاک کرده است' : $r['error']);
+    return "❌ <code>{$r['id']}</code> · {$r['rule']} · نرسید: " . htmlspecialchars($why, ENT_NOQUOTES, 'UTF-8');
+}
+
 /** Category sale status ("disable" = sold out): normalised name used to match product.category */
 function categoryOffKey($remark)
 {
