@@ -270,27 +270,31 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [] }: 
                       }}
                       onDoubleClick={() => { if (col.edit && !coarse) setEditing(true) }}
                       className={cn(
-                        'max-w-[22rem] truncate whitespace-nowrap border-b px-3 py-2',
+                        'relative max-w-[22rem] truncate whitespace-nowrap border-b px-3 py-2',
                         ci === 0 && 'sticky start-0 z-10 bg-card font-medium group-hover:bg-accent',
                         col.edit && 'cursor-cell',
                         isSel && 'outline outline-2 -outline-offset-2 outline-primary',
                       )}
                     >
-                      {isEdit ? (
-                        <InlineEditor
-                          col={col}
-                          initial={rawText(col, row[col.key])}
-                          onCancel={() => { setEditing(false); gridRef.current?.focus() }}
-                          onCommit={async (v, mv) => {
-                            setEditing(false)
-                            gridRef.current?.focus()
-                            await commit(ri, ci, v)
-                            if (mv === 'down') move(1, 0)
-                            else if (mv === 'next') move(0, 1)
-                            else if (mv === 'prev') move(0, -1)
-                          }}
-                        />
-                      ) : displayValue(col, row[col.key])}
+                      {/* the display value stays in place (hidden while editing) so the row never changes height or width */}
+                      <span className={isEdit ? 'invisible' : undefined}>{displayValue(col, row[col.key])}</span>
+                      {isEdit && (
+                        <span className="absolute inset-x-1 inset-y-0 flex items-center">
+                          <InlineEditor
+                            col={col}
+                            initial={rawText(col, row[col.key])}
+                            onCancel={() => { setEditing(false); gridRef.current?.focus() }}
+                            onCommit={async (v, mv) => {
+                              setEditing(false)
+                              gridRef.current?.focus()
+                              await commit(ri, ci, v)
+                              if (mv === 'down') move(1, 0)
+                              else if (mv === 'next') move(0, 1)
+                              else if (mv === 'prev') move(0, -1)
+                            }}
+                          />
+                        </span>
+                      )}
                     </td>
                   )
                 })}

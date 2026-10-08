@@ -2324,6 +2324,30 @@ function panelSubscriptionLink($panel, $nativeUrl, $invoice, $domainhosts)
     }
     return $native;
 }
+/**
+ * HTTP headers a v2ray client reads from a subscription link: the profile name shown in the app, traffic/expiry bars and the
+ * refresh interval. Without them apps show the last part of the URL (e.g. «4b6749c472», the invoice id) as the name.
+ * $template may use {username} and {product}; storage/sub_title.txt overrides the default («{username}»).
+ */
+function subscriptionHeaders($data, $invoice, $template = null)
+{
+    $username = (string) ($data['username'] ?? ($invoice['username'] ?? ''));
+    $title = str_replace(['{username}', '{product}'], [$username, (string) ($invoice['name_product'] ?? '')], $template !== null && trim($template) !== '' ? trim($template) : '{username}');
+    $title = trim(preg_replace('/\s+/', ' ', $title));
+    $h = [];
+    if ($title !== '') {
+        $h[] = 'Profile-Title: base64:' . base64_encode($title);
+        $h[] = 'Content-Disposition: attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $username !== '' ? $username : 'subscription') . '"';
+    }
+    $h[] = 'Profile-Update-Interval: 12';
+    $used = isset($data['used_traffic']) ? (int) $data['used_traffic'] : null;
+    $total = isset($data['data_limit']) ? (int) $data['data_limit'] : null;
+    $expire = isset($data['expire']) ? (int) $data['expire'] : null;
+    if ($used !== null || $total !== null || $expire !== null) {
+        $h[] = 'Subscription-Userinfo: upload=0; download=' . max(0, (int) $used) . '; total=' . max(0, (int) $total) . '; expire=' . max(0, (int) $expire);
+    }
+    return $h;
+}
 function normalizePanelUrl($url)
 {
     $url = trim((string) $url);

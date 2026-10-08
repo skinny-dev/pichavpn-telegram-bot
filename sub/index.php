@@ -22,6 +22,12 @@ try {
     }
     $DataUserOut = $ManagePanel->DataUser($nameloc['Service_location'], $nameloc['username']);
     $config = "";
+    if (is_array($DataUserOut)) {
+        $titleFile = __DIR__ . '/../storage/sub_title.txt';
+        foreach (subscriptionHeaders($DataUserOut, $nameloc, is_file($titleFile) ? (string) @file_get_contents($titleFile) : null) as $headerLine) {
+            header($headerLine);
+        }
+    }
     if (is_array($DataUserOut) && isset($DataUserOut['links']) && is_array($DataUserOut['links'])) {
         foreach ($DataUserOut['links'] as $Links) {
             $config .= $Links . "\r\r";

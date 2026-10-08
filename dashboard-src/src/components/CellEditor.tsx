@@ -73,7 +73,7 @@ export function InlineEditor({ col, initial, onCommit, onCancel }: { col: Col; i
         onChange={(e) => { done.current = true; onCommit(e.target.value, 'none') }}
         onBlur={() => !done.current && onCancel()}
         onKeyDown={(e) => { if (e.key === 'Escape') { done.current = true; onCancel() } }}
-        className="h-8 w-full rounded border border-ring bg-background px-1 text-sm"
+        className="h-7 w-full rounded border border-ring bg-background px-1 text-sm"
       >
         <option value="" disabled>—</option>
         {Object.entries(col.options ?? {}).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -93,7 +93,7 @@ export function InlineEditor({ col, initial, onCommit, onCancel }: { col: Col; i
         else if (e.key === 'Tab') { e.preventDefault(); commit(e.shiftKey ? 'prev' : 'next') }
         else if (e.key === 'Escape') { e.preventDefault(); done.current = true; onCancel() }
       }}
-      className="h-8 w-full min-w-[6rem] rounded border border-ring bg-background px-2 text-sm"
+      className="h-7 w-full min-w-0 rounded border border-ring bg-background px-2 text-sm"
     />
   )
 }

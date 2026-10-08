@@ -177,3 +177,8 @@ By default the customer gets `https://<bot domain>/sub/<invoice id>` (the bot re
 - Bot: panel settings (`مدیریت پنل ← وضعیت قابلیت‌ها`) → button «📎 لینک اشتراک مشتری»: «🤖 لینک دامنه ربات» ⇄ «🔗 لینک خود پنل».
 - Server: `php scripts/sub_mode.php` (status) · `native` / `bot` [PANEL_NAME] · `domain PANEL_NAME https://dmc.example.com` (force the sub domain if the panel reports another host).
 Applies to new purchases and every later refresh of the service message. Links already sent keep working (`/sub/<id>` stays online). Test: `php tests/sub_link_test.php`.
+
+### Names of migrated expenses / subscription titles
+- If migrated expenses show random ids (e.g. `c7fa265f03`) as names: `php scripts/migrate_pro_costs.php --show` prints every column of a few old rows to find where the label lives; then `--repair --desc-column=COLUMN` (dry run) and `--apply` put the real names (and a guessed category) in place. The old rows are never deleted, so this is always possible.
+- The bot's subscription link `/sub/<id>` now sends `Profile-Title` (default = service username; template in `storage/sub_title.txt`, placeholders `{username}` `{product}`), `Subscription-Userinfo` (used / total / expiry) and `Profile-Update-Interval`, so apps no longer name the profile by the invoice id. Test: `php tests/sub_headers_test.php`.
+- Panel tables: while a cell is edited inline the row keeps its height and width (no layout shift).
