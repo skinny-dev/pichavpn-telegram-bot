@@ -72,7 +72,7 @@ function statsTs($col)
     return "(CASE WHEN $col REGEXP '^[0-9]+$' THEN CAST($col AS UNSIGNED) ELSE UNIX_TIMESTAMP(STR_TO_DATE($col, '%Y/%m/%d %H:%i:%s')) END)";
 }
 
-const STATS_NON_CASH = "'add balance by admin','low balance by admin','wallet','cost','capital_injection'";
+const STATS_NON_CASH = "'add balance by admin','low balance by admin','wallet','cost','capital_injection','cost_migrated','capital_migrated'";
 const STATS_ADMIN_SALE = "'manual invoice','add order by admin','extend by admin'";
 const STATS_BAD_INVOICE = "('unpaid','expire','unsuccessful','reject')";
 
@@ -92,6 +92,32 @@ function accExpenseKinds()
         'general' => 'سایر هزینه‌ها',
         'dividend' => 'سود سهام / برداشت شرکا',
     ];
+}
+
+// first match wins; most specific first
+const ACC_KIND_RULES = [
+    'dividend' => ['سهام', 'سهم شریک', 'سهم ', 'سود شریک', 'برداشت شریک', 'برداشت شخصی', 'تقسیم سود', 'dividend'],
+    'salary' => ['حقوق', 'دستمزد', 'پشتیبان', 'کارمند', 'اپراتور', 'پاداش', 'salary'],
+    'advertising' => ['تبلیغ', 'کمپین', 'اینستا', 'تلگرام ادز', 'ادز', 'بنر', 'اینفلوئنسر', 'اسپانسر', 'کلیک', 'ads', 'campaign'],
+    'tax' => ['مالیات', 'عوارض', 'tax'],
+    'fee' => ['کارمزد', 'درگاه', 'بانک', 'کارت', 'fee'],
+    'server' => ['سرور', 'دامنه', 'هاست', 'vps', 'ssl', 'کلودفلر', 'cloudflare', 'آی‌پی', 'ایپی', 'ip ', 'دیتاسنتر', 'server', 'domain'],
+    'tools' => ['ابزار', 'نرم‌افزار', 'نرم افزار', 'اشتراک ابزار', 'لایسنس', 'اپلیکیشن', 'اپ ', 'پریمیوم', 'premium', 'chatgpt', 'github', 'tool'],
+    'purchase' => ['خرید', 'ترافیک', 'پنل', 'ساب', 'لایسنس vpn', 'تامین', 'تأمین', 'کانفیگ', 'حجم', 'گیگ', 'اکانت', 'purchase'],
+];
+
+/** Guess the expense category from its description (Farsi/English keywords); null = no idea. */
+function accGuessKind($desc)
+{
+    $d = mb_strtolower(trim((string) $desc));
+    foreach (ACC_KIND_RULES as $kind => $words) {
+        foreach ($words as $w) {
+            if ($w !== '' && mb_strpos($d, mb_strtolower($w)) !== false) {
+                return $kind;
+            }
+        }
+    }
+    return null;
 }
 
 /** cogs = cost of goods sold (purchases); equity = paid out to owners (not an expense); everything else = operating expense */
@@ -315,7 +341,7 @@ function statsOverall(PDO $pdo)
             GROUP BY id_user HAVING COUNT(*) >= 2) y");
     // payments by method (paid)
     $o['methods'] = $pdo->query("SELECT Payment_Method m, COUNT(*) c, SUM(CAST(price AS SIGNED)) s FROM Payment_report WHERE payment_Status = 'paid'
-            AND Payment_Method NOT IN ('cost','capital_injection') GROUP BY Payment_Method ORDER BY s DESC")->fetchAll(PDO::FETCH_ASSOC);
+            AND Payment_Method NOT IN ('cost','capital_injection','cost_migrated','capital_migrated') GROUP BY Payment_Method ORDER BY s DESC")->fetchAll(PDO::FETCH_ASSOC);
     // last 30 days revenue = monthly run rate
     $d = statsCollect($pdo, time() - 30 * 86400, time());
     $o['revenue_30d'] = $d['revenue'];

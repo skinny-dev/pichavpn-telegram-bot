@@ -15,31 +15,6 @@ require_once 'stats_report.php';
 $apply = in_array('--apply', $argv, true);
 $all = in_array('--all', $argv, true);
 
-// first match wins; most specific first
-const CAT_RULES = [
-    'dividend' => ['سهام', 'سهم شریک', 'سهم ', 'سود شریک', 'برداشت شریک', 'برداشت شخصی', 'تقسیم سود', 'dividend'],
-    'salary' => ['حقوق', 'دستمزد', 'پشتیبان', 'کارمند', 'اپراتور', 'پاداش', 'salary'],
-    'advertising' => ['تبلیغ', 'کمپین', 'اینستا', 'تلگرام ادز', 'ادز', 'بنر', 'اینفلوئنسر', 'اسپانسر', 'کلیک', 'ads', 'campaign'],
-    'tax' => ['مالیات', 'عوارض', 'tax'],
-    'fee' => ['کارمزد', 'درگاه', 'بانک', 'کارت', 'fee'],
-    'server' => ['سرور', 'دامنه', 'هاست', 'vps', 'ssl', 'کلودفلر', 'cloudflare', 'آی‌پی', 'ایپی', 'ip ', 'دیتاسنتر', 'server', 'domain'],
-    'tools' => ['ابزار', 'نرم‌افزار', 'نرم افزار', 'اشتراک ابزار', 'لایسنس', 'اپلیکیشن', 'اپ ', 'پریمیوم', 'premium', 'chatgpt', 'github', 'tool'],
-    'purchase' => ['خرید', 'ترافیک', 'پنل', 'ساب', 'لایسنس vpn', 'تامین', 'تأمین', 'کانفیگ', 'حجم', 'گیگ', 'اکانت', 'purchase'],
-];
-
-function catGuess($desc)
-{
-    $d = mb_strtolower(trim((string) $desc));
-    foreach (CAT_RULES as $kind => $words) {
-        foreach ($words as $w) {
-            if ($w !== '' && mb_strpos($d, mb_strtolower($w)) !== false) {
-                return $kind;
-            }
-        }
-    }
-    return null;
-}
-
 $kinds = accExpenseKinds();
 $rows = $pdo->query("SELECT id, amount, description, COALESCE(NULLIF(kind,''),'general') kind FROM expenses ORDER BY created_at")->fetchAll(PDO::FETCH_ASSOC);
 $change = [];
@@ -48,7 +23,7 @@ foreach ($rows as $r) {
     if (!$all && $r['kind'] !== 'general') {
         continue;
     }
-    $g = catGuess($r['description']);
+    $g = accGuessKind($r['description']);
     if ($g === null) {
         if ($r['kind'] === 'general') {
             $unknown[] = $r;

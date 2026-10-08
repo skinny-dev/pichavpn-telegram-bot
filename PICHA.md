@@ -168,3 +168,6 @@ Categories (`expenses.kind`): `purchase` خرید · `salary` حقوق · `adver
 ### Cleaning old expenses
 - `bash scripts/restore_accounting.sh BACKUP.tgz.enc --inspect` — read-only: shows which accounting data (expenses, capital, Pro cost rows) a backup holds.
 - `php scripts/categorize_expenses.php` — dry run: guesses the category of every «سایر» expense from its description (Farsi keywords); `--apply` saves a copy of the table and updates `kind`; `--all` also re-checks already categorised rows. Unmatched rows are listed to be set by hand in the panel.
+
+### «In statistics I see expenses but not in the list»
+Mirza-Pro stored expenses/capital as `Payment_report` rows (`cost` / `capital_injection`). Statistics count them, but the panel list and `/finance` commands use the tables `expenses` / `capital_entries`. `php scripts/migrate_pro_costs.php [--apply]` moves those rows into the tables (category guessed from the description, totals unchanged, old rows kept and marked `cost_migrated`, SQL copy saved first).
