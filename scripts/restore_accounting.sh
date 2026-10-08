@@ -82,9 +82,9 @@ SAFE="/root/pre-accounting-$(date +%s).sql"; MAXTOTAL=0; PLAN=""
 for spec in "${SPECS[@]}"; do
   t="${spec%%|*}"; flt="${spec#*|}"
   case " $FOUND " in *" $t "*) ;; *) echo "  $t: not in this backup (skipped)"; continue;; esac
-  cols="$(MN -e "SELECT GROUP_CONCAT(CONCAT('\`',b.COLUMN_NAME,'\`') ORDER BY b.ORDINAL_POSITION) FROM information_schema.COLUMNS b JOIN information_schema.COLUMNS l ON l.COLUMN_NAME=b.COLUMN_NAME AND l.TABLE_SCHEMA='$DBN' AND l.TABLE_NAME='$t' WHERE b.TABLE_SCHEMA='$DBN' AND b.TABLE_NAME='zz_bk_$t' AND b.COLUMN_NAME<>'id'")"
+  cols="$(MN -e "SET SESSION group_concat_max_len=1000000; SELECT GROUP_CONCAT(CONCAT('\`',b.COLUMN_NAME,'\`') ORDER BY b.ORDINAL_POSITION) FROM information_schema.COLUMNS b JOIN information_schema.COLUMNS l ON l.COLUMN_NAME=b.COLUMN_NAME AND l.TABLE_SCHEMA='$DBN' AND l.TABLE_NAME='$t' WHERE b.TABLE_SCHEMA='$DBN' AND b.TABLE_NAME='zz_bk_$t' AND b.COLUMN_NAME<>'id'")"
   [ -n "$cols" ] && [ "$cols" != "NULL" ] || { echo "  $t: no common columns (skipped)"; continue; }
-  same="$(MN -e "SELECT GROUP_CONCAT(CONCAT('CONVERT(l.',b.COLUMN_NAME,' USING utf8mb4) COLLATE utf8mb4_unicode_ci <=> CONVERT(b.',b.COLUMN_NAME,' USING utf8mb4) COLLATE utf8mb4_unicode_ci') SEPARATOR ' AND ') FROM information_schema.COLUMNS b JOIN information_schema.COLUMNS l ON l.COLUMN_NAME=b.COLUMN_NAME AND l.TABLE_SCHEMA='$DBN' AND l.TABLE_NAME='$t' WHERE b.TABLE_SCHEMA='$DBN' AND b.TABLE_NAME='zz_bk_$t' AND b.COLUMN_NAME<>'id'")"
+  same="$(MN -e "SET SESSION group_concat_max_len=1000000; SELECT GROUP_CONCAT(CONCAT('CONVERT(l.',b.COLUMN_NAME,' USING utf8mb4) COLLATE utf8mb4_unicode_ci <=> CONVERT(b.',b.COLUMN_NAME,' USING utf8mb4) COLLATE utf8mb4_unicode_ci') SEPARATOR ' AND ') FROM information_schema.COLUMNS b JOIN information_schema.COLUMNS l ON l.COLUMN_NAME=b.COLUMN_NAME AND l.TABLE_SCHEMA='$DBN' AND l.TABLE_NAME='$t' WHERE b.TABLE_SCHEMA='$DBN' AND b.TABLE_NAME='zz_bk_$t' AND b.COLUMN_NAME<>'id'")"
   missing="SELECT $(echo "$cols" | sed 's/`\([^`]*\)`/b.`\1`/g') FROM \`zz_bk_$t\` b WHERE $flt AND NOT EXISTS (SELECT 1 FROM \`$t\` l WHERE $same)"
   in_bk="$(MN -e "SELECT COUNT(*) FROM \`zz_bk_$t\` b WHERE $flt")"
   in_live="$(MN -e "SELECT COUNT(*) FROM \`$t\` WHERE $flt")"
