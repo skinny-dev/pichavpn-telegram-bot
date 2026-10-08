@@ -23,7 +23,7 @@ function subConfigs(string $body): array
     }
     $out = [];
     foreach (preg_split('/\s+/', $t) as $line) {
-        if (preg_match('#^[a-z0-9]+://#i', $line)) {
+        if (preg_match('#^(vless|vmess|trojan|ss|ssr|hysteria2?|hy2|tuic|wireguard|socks|shadowsocks)://#i', $line)) {
             $out[] = $line;
         }
     }
