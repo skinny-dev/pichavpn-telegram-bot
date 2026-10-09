@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/support_files.php';
+require_once __DIR__ . '/referral_links.php';
 require_once 'vendor/autoload.php';
 require 'config.php';
 ini_set('error_log', 'error_log');

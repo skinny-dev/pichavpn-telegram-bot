@@ -211,6 +211,12 @@ if (floor($TimeLastMessage / 60) >= 1) {
 if (strpos($text, "/start ") !== false && $user['step'] != "gettextSystemMessage") {
     $affiliatesid = explode(" ", $text)[1];
     if (!in_array($affiliatesid, ['start', "usertest", "/start", "buy", "help"])) {
+        // advertising / influencer campaign link (t.me/bot?start=ad_xxx): count the signup, no Telegram referrer needed
+        if (!is_numeric($affiliatesid) && referralCampaignAttach($pdo, $from_id, $affiliatesid) !== null) {
+            sendStartMessage($from_id, $keyboard);
+            step('home', $from_id);
+            return;
+        }
         isValidInvitationCode($setting, $from_id, $user['verify']);
         if (!check_active_btn($setting['keyboardmain'], "text_affiliates")) {
             sendmessage($from_id, $textbotlang['users']['affiliates']['offaffiliates'], $keyboard, 'HTML');

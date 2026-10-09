@@ -22,6 +22,7 @@ header('Cache-Control: no-store');
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../stats_report.php';
 require_once __DIR__ . '/../support_files.php';
+require_once __DIR__ . '/../referral_links.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
@@ -1082,6 +1083,121 @@ try {
             $uid = trim((string) (body()['uid'] ?? ''));
             $pdo->prepare("UPDATE support_message SET status = 'close' WHERE iduser = ? AND status != 'close'")->execute([$uid]);
             out(['ok' => true]);
+
+        case 'referrals':
+            $o = referralOverview($pdo);
+            $tgRef = $pdo->query("SELECT u.id, u.username, u.affiliatescount FROM user u WHERE CAST(u.affiliatescount AS SIGNED) > 0 ORDER BY CAST(u.affiliatescount AS SIGNED) DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+            out(['ok' => true, 'links' => $o['links'], 'global_percent' => $o['global_percent'], 'bot' => ltrim((string) ($usernamebot ?? ''), '@'),
+                 'tg_referrers' => array_map(fn($r) => ['id' => (string) $r['id'], 'username' => (string) $r['username'], 'count' => (int) $r['affiliatescount']], $tgRef)]);
+
+        case 'referral_save':
+            // body: {id?, name, platform, code?, tg_user_id?, contact?, price, pays_commission, commission_percent?, active, notes?}
+            $b = body();
+            $name = trim((string) ($b['name'] ?? ''));
+            if ($name === '' || mb_strlen($name) > 200) {
+                fail('نام تبلیغ‌دهنده/کمپین را وارد کنید', 422);
+            }
+            $platform = in_array((string) ($b['platform'] ?? ''), ['instagram', 'telegram', 'youtube', 'tiktok', 'website', 'other'], true) ? (string) $b['platform'] : 'other';
+            $price = referralMoneyInput($b['price'] ?? '0');
+            $pays = !empty($b['pays_commission']) ? 1 : 0;
+            $pct = ($b['commission_percent'] ?? '') === '' || $b['commission_percent'] === null ? null : (int) $b['commission_percent'];
+            if ($pct !== null && ($pct < 0 || $pct > 100)) {
+                fail('درصد پورسانت باید بین ۰ تا ۱۰۰ باشد', 422);
+            }
+            $tg = trim((string) ($b['tg_user_id'] ?? ''));
+            if ($tg !== '' && !preg_match('/^\d{5,15}$/', $tg)) {
+                fail('آیدی عددی تلگرام نامعتبر است (برای اینستاگرام/خارج از تلگرام خالی بگذارید)', 422);
+            }
+            $contact = mb_substr(trim((string) ($b['contact'] ?? '')), 0, 200);
+            $notes = mb_substr(trim((string) ($b['notes'] ?? '')), 0, 1000);
+            $active = array_key_exists('active', $b) && empty($b['active']) ? 0 : 1;
+            $editId = (int) ($b['id'] ?? 0);
+            $code = trim((string) ($b['code'] ?? ''));
+            if ($code !== '') {
+                $code = referralNormalizeCode($code);
+                if ($code === '') {
+                    fail('کد لینک: فقط حروف انگلیسی، عدد، _ و - (۳ تا ۴۰ کاراکتر، شروع با حرف)', 422);
+                }
+            }
+            if ($editId === 0) {
+                $code = $code !== '' ? $code : referralGenerateCode($pdo);
+                $dup = $pdo->prepare("SELECT COUNT(*) FROM referral_links WHERE code = ?");
+                $dup->execute([$code]);
+                if ((int) $dup->fetchColumn() > 0) {
+                    fail('این کد قبلاً استفاده شده است', 409);
+                }
+                $pdo->prepare("INSERT INTO referral_links (name, platform, code, tg_user_id, contact, price, pays_commission, commission_percent, active, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$name, $platform, $code, $tg === '' ? null : $tg, $contact, $price, $pays, $pct, $active, $notes, time()]);
+                out(['ok' => true, 'id' => (int) $pdo->lastInsertId(), 'code' => $code]);
+            }
+            $cur = $pdo->prepare("SELECT code FROM referral_links WHERE id = ?");
+            $cur->execute([$editId]);
+            $oldCode = $cur->fetchColumn();
+            if ($oldCode === false) {
+                fail('لینک پیدا نشد', 404);
+            }
+            // the code is what is printed in public links: it never changes after creation
+            $pdo->prepare("UPDATE referral_links SET name=?, platform=?, tg_user_id=?, contact=?, price=?, pays_commission=?, commission_percent=?, active=?, notes=? WHERE id=?")
+                ->execute([$name, $platform, $tg === '' ? null : $tg, $contact, $price, $pays, $pct, $active, $notes, $editId]);
+            out(['ok' => true, 'id' => $editId, 'code' => $oldCode]);
+
+        case 'referral_delete':
+            $id = (int) (body()['id'] ?? 0);
+            $n = $pdo->prepare("SELECT COUNT(*) FROM referral_signups WHERE link_id = ?");
+            $n->execute([$id]);
+            if ((int) $n->fetchColumn() > 0) {
+                fail('این لینک کاربر ثبت‌شده دارد؛ به‌جای حذف، غیرفعالش کنید', 409);
+            }
+            $pdo->prepare("DELETE FROM referral_payouts WHERE link_id = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM referral_links WHERE id = ?")->execute([$id]);
+            out(['ok' => true]);
+
+        case 'referral_payout':
+            $b = body();
+            $id = (int) ($b['id'] ?? 0);
+            $amount = referralMoneyInput($b['amount'] ?? '0');
+            if ($amount <= 0) {
+                fail('مبلغ پرداخت نامعتبر است', 422);
+            }
+            $ex = $pdo->prepare("SELECT COUNT(*) FROM referral_links WHERE id = ?");
+            $ex->execute([$id]);
+            if (!(int) $ex->fetchColumn()) {
+                fail('لینک پیدا نشد', 404);
+            }
+            $pdo->prepare("INSERT INTO referral_payouts (link_id, amount, note, created_at) VALUES (?,?,?,?)")->execute([$id, $amount, mb_substr(trim((string) ($b['note'] ?? '')), 0, 300), time()]);
+            out(['ok' => true]);
+
+        case 'referral_book_cost':
+            // books the campaign price once as an "advertising" expense (bridges into the finance ledger via fin_sync)
+            $id = (int) (body()['id'] ?? 0);
+            $pdo->beginTransaction();
+            $q = $pdo->prepare("SELECT * FROM referral_links WHERE id = ? FOR UPDATE");
+            $q->execute([$id]);
+            $l = $q->fetch(PDO::FETCH_ASSOC);
+            if (!$l) {
+                $pdo->rollBack();
+                fail('لینک پیدا نشد', 404);
+            }
+            if ($l['expense_id'] !== null) {
+                $pdo->rollBack();
+                fail('هزینهٔ این کمپین قبلاً ثبت شده است', 409);
+            }
+            if ((int) $l['price'] <= 0) {
+                $pdo->rollBack();
+                fail('قیمت کمپین صفر است', 422);
+            }
+            $pdo->prepare("INSERT INTO expenses (amount, description, created_at, admin_id, kind) VALUES (?,?,?,?,'advertising')")
+                ->execute([(int) $l['price'], 'تبلیغات: ' . $l['name'], time(), (string) $_SESSION['admin_user']]);
+            $eid = (int) $pdo->lastInsertId();
+            $pdo->prepare("UPDATE referral_links SET expense_id = ? WHERE id = ?")->execute([$eid, $id]);
+            $pdo->commit();
+            out(['ok' => true, 'expense_id' => $eid]);
+
+        case 'referral_payouts':
+            $q = $pdo->prepare("SELECT id, amount, note, created_at FROM referral_payouts WHERE link_id = ? ORDER BY id DESC LIMIT 200");
+            $q->execute([(int) ($_GET['id'] ?? 0)]);
+            out(['ok' => true, 'rows' => array_map(fn($r) => ['id' => (int) $r['id'], 'amount' => (int) $r['amount'], 'note' => (string) $r['note'], 'created_at' => (int) $r['created_at']], $q->fetchAll(PDO::FETCH_ASSOC))]);
+
 
         case 'admins':
             $rows = $pdo->query("SELECT a.id_admin, a.username, a.rule, (a.password LIKE '\$2%' OR a.password LIKE '\$argon2%') AS hp, u.username AS tg_username, u.namecustom FROM admin a LEFT JOIN user u ON u.id = a.id_admin ORDER BY FIELD(a.rule,'administrator','Seller','support'), a.id_admin")->fetchAll(PDO::FETCH_ASSOC);

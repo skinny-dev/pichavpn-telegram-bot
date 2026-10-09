@@ -206,3 +206,16 @@ The bot link `/sub/<id>` used to rebuild the subscription from the user's `links
 ## Finance system («مالی» in the panel)
 Double-entry engine + business layer + reports, integrated with the bot's existing expenses/capital/payments. Full description: `docs/FINANCE.md`.
 First run on the server: `php scripts/fin_sync.php --check`. Tests: `php tests/finance_test.php`, `python3 tests/api_test.py …`, `node tests/finance_e2e.mjs`.
+
+## رفرال و تبلیغات (لینک اینفلوئنسر)
+
+پنل ← «رفرال و تبلیغات». برای هر تبلیغ‌دهنده یک لینک `https://t.me/<bot>?start=<code>` ساخته می‌شود؛
+**نیازی به یوزرنیم/اکانت تلگرام نیست** (اینستاگرام، یوتیوب، سایت...). فیلدها:
+
+- **قیمت تبلیغ** = هزینهٔ کمپین؛ دکمهٔ «ثبت هزینه در حسابداری» آن را یک‌بار به‌صورت هزینهٔ «تبلیغات» ثبت می‌کند (به دفتر مالی هم می‌رود).
+- **پورسانت دارد** (سوئیچ) + درصد اختیاری (خالی = درصد پیش‌فرض ربات `affiliatespercentage`).
+- آمار هر لینک: ورودی، خریدار، سفارش، فروش (فاکتورهای پرداخت‌شده کاربران همان لینک؛ تست/پرداخت‌نشده حساب نمی‌شود)،
+  پورسانت = فروش × درصد، پرداخت‌شده، مانده، سود خالص = فروش − قیمت − پورسانت، بازده.
+- پورسانت لینک‌های تبلیغاتی دستی پرداخت می‌شود («پرداخت پورسانت» فقط ثبت می‌کند؛ موجودی کاربر تغییر نمی‌کند).
+- اولین لینک که کاربر باز کند ثابت می‌ماند (first-touch). رفرال عادی کاربران (`?start=<id>`) دست‌نخورده است.
+- جدول‌ها: `referral_links`, `referral_signups`, `referral_payouts` (با `php table.php` ساخته می‌شوند).
