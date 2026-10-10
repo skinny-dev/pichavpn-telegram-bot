@@ -566,7 +566,13 @@ function finCreateSale(PDO $pdo, array $d, ?string $user = null): array
         $txnId = finTxnInsert($pdo, ['type' => 'sale', 'txn_date' => $date, 'party_id' => $partyId, 'category_account_id' => $rev['id'], 'subtotal' => $sub, 'discount' => $discount,
             'tax' => $tax, 'total' => $total, 'due_date' => $due, 'payment_method' => $d['payment_method'] ?? null, 'memo' => $d['memo'] ?? null,
             'meta' => json_encode(['items' => $items, 'channel' => $d['channel'] ?? null], JSON_UNESCAPED_UNICODE), 'created_by' => $user]);
-        $lines = [['account' => 'ar', 'debit' => $total, 'party_id' => $partyId, 'memo' => 'فروش'], ['account' => $rev['id'], 'credit' => $sub - $discount, 'memo' => 'فروش']];
+        // fully paid cash sale without a customer: money goes straight in, no receivable and no receipt document
+        $direct = $partyId === null;
+        $directAcc = $direct ? finMoneyAccount($pdo, $d['money_account'] ?? 'cash') : null;
+        if ($direct) {
+            $pdo->prepare("UPDATE fin_txn SET paid = ?, money_account_id = ? WHERE id = ?")->execute([$total, $directAcc['id'], $txnId]);
+        }
+        $lines = [$direct ? ['account' => $directAcc['id'], 'debit' => $total, 'memo' => 'فروش نقدی'] : ['account' => 'ar', 'debit' => $total, 'party_id' => $partyId, 'memo' => 'فروش'], ['account' => $rev['id'], 'credit' => $sub - $discount, 'memo' => 'فروش']];
         if ($tax > 0) {
             $lines[] = ['account' => 'tax_payable', 'credit' => $tax, 'memo' => 'مالیات فروش'];
         }
@@ -574,7 +580,7 @@ function finCreateSale(PDO $pdo, array $d, ?string $user = null): array
         finLinkJournal($pdo, $txnId, $je);
         finAudit($pdo, $user, 'create', 'sale', $txnId, ['total' => $total]);
         $receipt = null;
-        if ($paidNow > 0) {
+        if ($paidNow > 0 && !$direct) {
             $receipt = finReceivePayment($pdo, ['date' => $date, 'party_id' => $partyId, 'amount' => $paidNow, 'money_account' => $d['money_account'] ?? 'cash',
                 'payment_method' => $d['payment_method'] ?? null, 'allocations' => [$txnId => $paidNow], 'memo' => 'دریافت همزمان با فروش'], $user);
         }
@@ -908,7 +914,7 @@ function finCancelTxn(PDO $pdo, int $id, string $reason, ?string $user = null): 
             }
         }
         if (in_array($t['type'], ['sale', 'purchase'], true)) {
-            if ((int) $t['paid'] > 0) {
+            if ((int) $t['paid'] > 0 && $t['party_id'] !== null) { // a customer-less cash sale carries its money inside the sale itself
                 throw new FinError('این سند پرداخت دارد؛ ابتدا پرداخت‌ها را ابطال کنید');
             }
             if ((int) $t['returned'] > 0) {

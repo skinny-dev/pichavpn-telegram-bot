@@ -34,7 +34,7 @@ function throws(callable $f, string $needle, string $m) {
 }
 $bal = fn($k) => finAccountBalance($pdo, $k);
 $cnt = fn($t) => (int) $pdo->query("SELECT COUNT(*) FROM $t")->fetchColumn();
-$T = strtotime('2026-10-08 12:00:00');
+$T = strtotime(date('Y-m-d') . ' 12:00:00');
 $jan = strtotime('2026-01-10 10:00:00');
 
 // ---- chart & empty books
@@ -219,6 +219,20 @@ $cashId = finAccount($pdo, 'cash')['id'];
 throws(fn() => finSaveAccount($pdo, ['id' => $cashId, 'code' => '1110', 'name' => 'صندوق', 'type' => 'asset', 'money_kind' => 'cash', 'archived' => 1]), 'موجودی', 'an account that holds money cannot be archived');
 finCreateExpense($pdo, ['amount' => 1000, 'category_account' => '5330', 'money_account' => 'bank_main', 'date' => $T]);
 ok($bal('5330') === 1000, 'new category is immediately usable');
+
+// ---- cash sale without a customer (e.g. Instagram buyer)
+$cash0 = $bal('cash');
+$cs = finCreateSale($pdo, ['amount' => 250000, 'paid_now' => 250000, 'money_account' => 'cash', 'items' => [['name' => 'Sell Random Config', 'qty' => 1, 'price' => 250000]], 'date' => $T]);
+ok($bal('cash') === $cash0 + 250000 && $cs['receipt_id'] === null, 'customer-less cash sale puts money straight into the cash account');
+ok(finTxn($pdo, $cs['id'])['paid'] == 250000 && finDocState(finTxn($pdo, $cs['id'])) === 'paid', 'customer-less sale is marked fully paid');
+ok(!finIntegrity($pdo), 'integrity check accepts a customer-less cash sale', json_encode(finIntegrity($pdo), JSON_UNESCAPED_UNICODE));
+$csr = finRefundSale($pdo, ['sale_id' => $cs['id'], 'amount' => 50000, 'money_account' => 'cash', 'date' => $T]);
+ok($csr['cash_back'] === 50000 && $bal('cash') === $cash0 + 200000, 'refund of a customer-less sale pays cash back');
+throws(fn() => finCancelTxn($pdo, $cs['id'], 'x'), 'برگشتی', 'sale with a return must have the return cancelled first');
+finCancelTxn($pdo, $csr['id'], 'اشتباه', 'admin');
+finCancelTxn($pdo, $cs['id'], 'اشتباه', 'admin');
+ok($bal('cash') === $cash0, 'cancelling a customer-less cash sale restores the cash balance');
+ok(finBalanceSheet($pdo)['balanced'] && finTrialBalance($pdo)['balanced'] && !finIntegrity($pdo), 'books balance after customer-less sale, refund and cancel');
 
 echo "\nFAILED: $fail\n";
 exit($fail ? 1 : 0);

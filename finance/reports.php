@@ -631,7 +631,7 @@ function finIntegrity(PDO $pdo): array
         $bad[] = 'ترازنامه متعادل نیست (دارایی‌ها ≠ بدهی‌ها + حقوق صاحبان سرمایه)';
     }
     $docs = $pdo->query("SELECT t.id, t.ref, t.paid, COALESCE((SELECT SUM(a.amount) FROM fin_alloc a JOIN fin_txn p ON p.id = a.payment_txn_id WHERE a.doc_txn_id = t.id AND p.status = 'posted'),0) s
-                         FROM fin_txn t WHERE t.type IN ('sale','purchase') AND t.status = 'posted'")->fetchAll(PDO::FETCH_ASSOC);
+                         FROM fin_txn t WHERE t.type IN ('sale','purchase') AND t.status = 'posted' AND t.party_id IS NOT NULL") /* customer-less cash sales carry their money inside the sale, no allocations */->fetchAll(PDO::FETCH_ASSOC);
     foreach ($docs as $d) {
         if ((int) $d['paid'] !== (int) $d['s']) {
             $bad[] = "مبلغ پرداخت‌شده‌ی {$d['ref']} با تخصیص‌ها نمی‌خواند";
