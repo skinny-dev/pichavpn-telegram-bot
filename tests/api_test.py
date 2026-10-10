@@ -332,6 +332,7 @@ op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiej
 s, r = call('login', {'username': 'sup3', 'password': 'supportpass3'}); csrf = r.get('csrf', '')
 s, r = call('fin_overview'); check('support role is denied finance (403)', s == 403, (s, r))
 s, r = call('referrals'); check('support role is denied referrals (403)', s == 403, (s, r))
+s, r = call('order_create', {'panel': 'x'}); check('support role is denied manual orders (403)', s == 403, (s, r))
 op, csrf = op_saved, csrf_saved
 call('admin_delete', {'id': '555666779'})
 sql("DELETE FROM expenses WHERE description='سرور تست'")
@@ -364,6 +365,18 @@ s, r = call('referral_save', {'id': rl, 'name': 'اینفلوئنسر اینست
 s, r = call('referrals'); L = {x['id']: x for x in r['links']}; check('after edit no commission, inactive', L[rl]['commission'] == 0 and L[rl]['active'] == 0, L.get(rl))
 s, r = call('referral_delete', {'id': rl2}); check('unused link deleted', s == 200, (s, r))
 sql("DELETE FROM referral_signups; DELETE FROM referral_payouts; DELETE FROM referral_links; DELETE FROM invoice WHERE id_invoice LIKE 'refinv%'; DELETE FROM expenses WHERE description LIKE 'تبلیغات: %'")
+
+# manual orders (customers outside Telegram): validation paths only, creation needs a real VPN panel
+s, r = call('order_options'); check('order options: panels + products', s == 200 and 'panels' in r and 'products' in r, (s, r))
+s, r = call('order_create', {'panel': 'nope', 'product_id': 1}); check('manual order: unknown panel 404', s == 404, (s, r))
+_pn = [p['name'] for p in call('order_options')[1]['panels']]
+if _pn:
+    s, r = call('order_create', {'panel': _pn[0], 'product_id': 999999}); check('manual order: unknown product 404', s == 404, (s, r))
+    _pr = call('order_options')[1]['products']
+    if _pr:
+        s, r = call('order_create', {'panel': _pn[0], 'product_id': _pr[0]['id'], 'tg_user_id': 'abc'}); check('manual order: bad telegram id 422', s in (422,), (s, r))
+        s, r = call('order_create', {'panel': _pn[0], 'product_id': _pr[0]['id'], 'tg_user_id': '99999999'}); check('manual order: unknown telegram user 422', s == 422, (s, r))
+        s, r = call('order_create', {'panel': _pn[0], 'product_id': _pr[0]['id'], 'username': 'Bad Name!'}); check('manual order: bad service name 422', s == 422, (s, r))
 
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))

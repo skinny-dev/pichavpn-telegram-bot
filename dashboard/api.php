@@ -23,6 +23,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../stats_report.php';
 require_once __DIR__ . '/../support_files.php';
 require_once __DIR__ . '/../referral_links.php';
+require_once __DIR__ . '/manual_order.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
@@ -1083,6 +1084,13 @@ try {
             $uid = trim((string) (body()['uid'] ?? ''));
             $pdo->prepare("UPDATE support_message SET status = 'close' WHERE iduser = ? AND status != 'close'")->execute([$uid]);
             out(['ok' => true]);
+
+        case 'order_options':
+            out(['ok' => true] + picha_order_options($pdo));
+
+        case 'order_create':
+            // creates the VPN account + invoice for a customer that may have no Telegram account at all
+            out(['ok' => true] + picha_order_create($pdo, body(), (string) $_SESSION['admin_user']));
 
         case 'referrals':
             $o = referralOverview($pdo);

@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ManualOrder } from '@/components/ManualOrder'
 import { DataGrid } from '@/components/DataGrid'
 import { TreeView } from '@/components/TreeView'
 import { useState } from 'react'
@@ -54,12 +55,13 @@ export function Orders() {
         forced={{ sgrp: group }}
         extra={{ range }}
         onSummary={setSum}
-        toolbar={
+        toolbar={<>
+          <ManualOrder />
           <Select value={range || 'all'} onValueChange={(v) => setRange(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-auto min-w-[8rem]" aria-label="بازه زمانی"><SelectValue /></SelectTrigger>
             <SelectContent>{RANGES.map(([k, l]) => <SelectItem key={k || 'all'} value={k || 'all'}>{l}</SelectItem>)}</SelectContent>
           </Select>
-        }
+        </>}
       />
     </div>
   )

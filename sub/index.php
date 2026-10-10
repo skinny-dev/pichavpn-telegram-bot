@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../panels/Api/Marzban.php';
 require_once __DIR__ . '/../function.php';
 require_once __DIR__ . '/../panels.php';
+require_once __DIR__ . '/../sub_page.php';
 $ManagePanel = new ManagePanel();
 header('Content-Type: text/plain; charset=utf-8');
 $url = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
@@ -19,6 +20,17 @@ try {
     if (!is_array($nameloc)) {
         echo "ERROR!";
         exit;
+    }
+    // A browser (not a VPN app) gets a readable page: status, expiry, usage, copy link, renew button
+    if (subscriptionWantsHtml((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $_GET)) {
+        $pageData = (new ManagePanel())->DataUser($nameloc['Service_location'], $nameloc['username']);
+        if (is_array($pageData) && !isset($pageData['msg']) && ($pageData['status'] ?? '') !== 'Unsuccessful') {
+            $supportRow = select("setting", "id_support", null, null, "select");
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-store');
+            echo subscriptionPageHtml($pageData, $nameloc, 'https://' . ($_SERVER['HTTP_HOST'] ?? $domainhosts) . '/sub/' . $token, (string) ($usernamebot ?? ''), (string) ($supportRow['id_support'] ?? ''));
+            exit;
+        }
     }
     // Marzban-family panels: relay the panel's OWN subscription (same app format, every host/location, real headers).
     $panelRow = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
