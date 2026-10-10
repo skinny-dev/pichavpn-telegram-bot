@@ -77,6 +77,12 @@ $backmenu_register(["limitchangeall", "limitfreechangefree"], $keyboardchangelim
 $backmenu_register(["getnamebtnapp", "geturlbtnapp", "edit_app", "get_new_lin_app", "getnameappforremove"], $keyboardlinkapp);
 $backmenu_register(["add_name_panel", "add_link_panel", "add_username_panel", "add_password_panel"], $keyboardtypepanel);
 
+// the «آمار بازه دلخواه» date prompt must never swallow inline buttons (e.g. «تایید پرداخت») or commands:
+// otherwise an admin who left it half-way gets «تاریخ باید معتبر باشد» for every button press
+if (in_array($user['step'], ['get_time_start', 'get_time_end'], true) && (($datain ?? '') !== '' || strpos((string) $text, '/') === 0)) {
+    step('home', $from_id);
+    $user['step'] = 'home';
+}
 if ($adminrulecheck['rule'] != "administrator") {
     $limitedRoleTexts = array_merge($textadmin, [
         $textbotlang['Admin']['Status']['btn'],
