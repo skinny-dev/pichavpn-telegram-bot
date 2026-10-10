@@ -65,7 +65,7 @@ function picha_order_create(PDO $pdo, array $b, string $adminName): array
     }
     $tg = trim((string) ($b['tg_user_id'] ?? ''));
     if ($tg !== '') {
-        if (!preg_match('/^\d{5,15}$/', $tg)) {
+        if (!preg_match('/^\d{1,15}$/', $tg)) {
             throw new PichaError('آیدی عددی تلگرام نامعتبر است (برای مشتری خارج از تلگرام خالی بگذارید)', 422);
         }
         $ex = $pdo->prepare("SELECT COUNT(*) FROM user WHERE id = ?");

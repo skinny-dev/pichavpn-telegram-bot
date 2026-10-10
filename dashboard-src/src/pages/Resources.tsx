@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ManualPayment } from '@/components/ManualPayment'
 import { ManualOrder } from '@/components/ManualOrder'
 import { DataGrid } from '@/components/DataGrid'
 import { TreeView } from '@/components/TreeView'
@@ -86,7 +87,7 @@ export function Accounting() {
       <TabsList><TabsTrigger value="expenses">هزینه‌ها</TabsTrigger><TabsTrigger value="capital">ورود سرمایه</TabsTrigger><TabsTrigger value="payments">پرداخت‌ها</TabsTrigger></TabsList>
       <TabsContent value="expenses"><DataGrid resName="expenses" res={schema.expenses} /></TabsContent>
       <TabsContent value="capital"><DataGrid resName="capital" res={schema.capital} /></TabsContent>
-      <TabsContent value="payments"><DataGrid resName="payments" res={schema.payments} /></TabsContent>
+      <TabsContent value="payments"><DataGrid resName="payments" res={schema.payments} toolbar={<ManualPayment />} /></TabsContent>
     </Tabs>
   )
 }

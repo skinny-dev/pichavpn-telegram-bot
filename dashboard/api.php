@@ -1085,6 +1085,41 @@ try {
             $pdo->prepare("UPDATE support_message SET status = 'close' WHERE iduser = ? AND status != 'close'")->execute([$uid]);
             out(['ok' => true]);
 
+        case 'payment_create':
+            // manual payment record (cash / card to card / outside Telegram). Optionally credits the user's wallet.
+            $b = body();
+            $amount = referralMoneyInput($b['price'] ?? 0);
+            if ($amount <= 0) {
+                fail('مبلغ نامعتبر است', 422);
+            }
+            $uid = trim((string) ($b['id_user'] ?? ''));
+            $credit = !empty($b['add_balance']);
+            if ($uid !== '' && !preg_match('/^\d{1,15}$/', $uid)) {
+                fail('آیدی عددی تلگرام نامعتبر است (برای مشتری بدون تلگرام خالی بگذارید)', 422);
+            }
+            if ($credit && $uid === '') {
+                fail('برای شارژ کیف پول، آیدی عددی کاربر لازم است', 422);
+            }
+            $method = mb_substr(trim((string) ($b['method'] ?? '')), 0, 190);
+            $method = $method === '' ? 'ثبت دستی' : $method;
+            $pdo->beginTransaction();
+            if ($uid !== '') {
+                $uq = $pdo->prepare("SELECT Balance FROM user WHERE id = ? FOR UPDATE");
+                $uq->execute([$uid]);
+                $bal = $uq->fetchColumn();
+                if ($bal === false) {
+                    $pdo->rollBack();
+                    fail('این کاربر در ربات ثبت نشده است', 404);
+                }
+                if ($credit) {
+                    $pdo->prepare("UPDATE user SET Balance = ? WHERE id = ?")->execute([(int) $bal + $amount, $uid]);
+                }
+            }
+            $pdo->prepare("INSERT INTO Payment_report (id_user, id_order, time, price, dec_not_confirmed, Payment_Method, payment_Status, id_invoice) VALUES (?,?,?,?,?,?,?,?)")
+                ->execute([$uid === '' ? '0' : $uid, bin2hex(random_bytes(6)), date('Y/m/d H:i:s'), $amount, mb_substr(trim((string) ($b['note'] ?? '')) . ' | ثبت دستی توسط ' . $_SESSION['admin_user'], 0, 1000), $method, 'paid', 'none']);
+            $pdo->commit();
+            out(['ok' => true, 'credited' => $credit]);
+
         case 'order_options':
             out(['ok' => true] + picha_order_options($pdo));
 

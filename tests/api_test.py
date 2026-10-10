@@ -333,6 +333,7 @@ s, r = call('login', {'username': 'sup3', 'password': 'supportpass3'}); csrf = r
 s, r = call('fin_overview'); check('support role is denied finance (403)', s == 403, (s, r))
 s, r = call('referrals'); check('support role is denied referrals (403)', s == 403, (s, r))
 s, r = call('order_create', {'panel': 'x'}); check('support role is denied manual orders (403)', s == 403, (s, r))
+s, r = call('payment_create', {'price': '1'}); check('support role is denied manual payments (403)', s == 403, (s, r))
 op, csrf = op_saved, csrf_saved
 call('admin_delete', {'id': '555666779'})
 sql("DELETE FROM expenses WHERE description='سرور تست'")
@@ -377,6 +378,20 @@ if _pn:
         s, r = call('order_create', {'panel': _pn[0], 'product_id': _pr[0]['id'], 'tg_user_id': 'abc'}); check('manual order: bad telegram id 422', s in (422,), (s, r))
         s, r = call('order_create', {'panel': _pn[0], 'product_id': _pr[0]['id'], 'tg_user_id': '99999999'}); check('manual order: unknown telegram user 422', s == 422, (s, r))
         s, r = call('order_create', {'panel': _pn[0], 'product_id': _pr[0]['id'], 'username': 'Bad Name!'}); check('manual order: bad service name 422', s == 422, (s, r))
+
+# manual payments
+s, r = call('list', res='users', q='1001'); _bal0 = int([x for x in r['rows'] if x['id'] == '1001'][0]['Balance'])
+s, r = call('payment_create', {'price': '0'}); check('manual payment: zero rejected', s == 422, (s, r))
+s, r = call('payment_create', {'price': '1000', 'id_user': 'abc'}); check('manual payment: bad id rejected', s == 422, (s, r))
+s, r = call('payment_create', {'price': '1000', 'add_balance': True}); check('manual payment: wallet credit needs a user', s == 422, (s, r))
+s, r = call('payment_create', {'price': '1000', 'id_user': '99999999'}); check('manual payment: unknown user 404', s == 404, (s, r))
+s, r = call('payment_create', {'price': '۲۵۰,۰۰۰', 'method': 'نقد', 'note': 'علی اینستاگرام'}); check('manual payment without Telegram account', s == 200 and r['credited'] is False, (s, r))
+s, r = call('list', res='payments', q='نقد'); check('manual payment listed as paid 250000', r.get('total') == 1 and r['rows'][0]['price'] == '250000' and r['rows'][0]['payment_Status'] == 'paid', r)
+s, r = call('payment_create', {'price': '40000', 'id_user': '1001', 'add_balance': True, 'method': 'کارت به کارت'}); check('manual payment credits wallet', s == 200 and r['credited'] is True, (s, r))
+s, r = call('list', res='users', q='1001'); check('wallet increased by 40000', int([x for x in r['rows'] if x['id'] == '1001'][0]['Balance']) == _bal0 + 40000, r)
+s, r = call('payment_create', {'price': '5000', 'id_user': '1001'}); check('record-only payment keeps wallet', s == 200 and int([x for x in call('list', res='users', q='1001')[1]['rows'] if x['id'] == '1001'][0]['Balance']) == _bal0 + 40000, (s, r))
+sql("DELETE FROM Payment_report WHERE dec_not_confirmed LIKE '%ثبت دستی توسط%'")
+sql(f"UPDATE user SET Balance={_bal0} WHERE id='1001'")
 
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
