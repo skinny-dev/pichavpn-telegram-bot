@@ -11,5 +11,6 @@ return [
         SQL,
     'columns' => [
         ['kind', 'general', 'VARCHAR(30)'],
+        ['payer', null, 'VARCHAR(150)'],
     ],
 ];

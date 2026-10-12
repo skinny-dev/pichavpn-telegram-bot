@@ -393,6 +393,14 @@ s, r = call('payment_create', {'price': '5000', 'id_user': '1001'}); check('reco
 sql("DELETE FROM Payment_report WHERE dec_not_confirmed LIKE '%ثبت دستی توسط%'")
 sql(f"UPDATE user SET Balance={_bal0} WHERE id='1001'")
 
+# expense payer name
+s, r = call('create', {'res': 'expenses', 'row': {'description': 'تبلیغات تست پرداخت‌کننده', 'amount': '123456', 'kind': 'advertising', 'payer': 'علیرضا خدابخش'}}); check('create expense with payer', s == 200 and r['ok'], (s, r))
+s, r = call('list', res='expenses', q='خدابخش'); check('expense search finds payer name', r.get('total') == 1 and r['rows'][0]['payer'] == 'علیرضا خدابخش', r)
+s, r = call('update', {'res': 'expenses', 'id': r['rows'][0]['id'], 'field': 'payer', 'value': 'علی'}); check('payer is editable inline', s == 200, (s, r))
+s, r = call('import', {'res': 'expenses', 'rows': [{'description': 'درون‌ریزی با پرداخت‌کننده', 'amount': '5000', 'kind': 'server', 'payer': 'حسین', 'created_at': '2026-09-25 20:13'}]}); check('CSV import carries payer', s == 200 and r['inserted'] == 1, (s, r))
+s, r = call('list', res='expenses', q='حسین'); check('imported payer stored', r.get('total') == 1 and r['rows'][0]['payer'] == 'حسین', r)
+sql("DELETE FROM expenses WHERE description LIKE '%پرداخت‌کننده%'")
+
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
 s, r = call('list', res='users'); check('after logout 401', s == 401, (s, r))
 print('\nFAILED:', fails); sys.exit(1 if fails else 0)

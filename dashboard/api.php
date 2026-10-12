@@ -289,12 +289,13 @@ function picha_resources(): array
         ],
         'expenses' => [
             'table' => 'expenses', 'pk' => 'id', 'title' => 'هزینه‌ها', 'create' => true, 'delete' => true, 'import' => true,
-            'search' => ['description'], 'order' => 'created_at', 'dir' => 'DESC', 'autots' => 'created_at',
+            'search' => ['description', 'payer'], 'order' => 'created_at', 'dir' => 'DESC', 'autots' => 'created_at',
             'cols' => [
                 ['id', 'شناسه', 'int'],
                 ['created_at', 'تاریخ و ساعت (خالی = همین الان)', 'dt', 'edit' => true],
                 ['kind', 'نوع هزینه', 'enum', 'edit' => true, 'options' => accExpenseKinds()],
                 ['description', 'نام / توضیحات', 'text', 'edit' => true, 'req' => true],
+                ['payer', 'پرداخت‌کننده', 'text', 'edit' => true],
                 ['amount', 'مبلغ (تومان)', 'int', 'edit' => true, 'req' => true],
             ],
             'defaults' => ['kind' => 'general'],

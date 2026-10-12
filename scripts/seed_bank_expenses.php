@@ -32,7 +32,6 @@ foreach ($rows as [$kind, $rial, $title, $payee, $method, $bank, $refLabel, $ref
     if ($ref) {
         $parts[] = "$refLabel $ref";
     }
-    $parts[] = "پرداخت‌کننده: $payer (بلو)";
     $records[] = ['kind' => $kind, 'amount' => (int) round($rial / 10), 'desc' => implode(' | ', $parts), 'ref' => $ref,
         'ts' => $date ? strtotime("$date $time:00") : null, 'when' => $date ? "$date $time" : ''];
 }
@@ -40,15 +39,19 @@ foreach ($rows as [$kind, $rial, $title, $payee, $method, $bank, $refLabel, $ref
 if (in_array('--csv', $argv, true)) {
     echo "\xEF\xBB\xBF";
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['created_at', 'kind', 'description', 'amount']);
+    fputcsv($out, ['created_at', 'kind', 'description', 'payer', 'amount']);
     foreach ($records as $r) {
-        fputcsv($out, [$r['when'], $r['kind'], $r['desc'], $r['amount']]);
+        fputcsv($out, [$r['when'], $r['kind'], $r['desc'], $payer, $r['amount']]);
     }
     exit;
 }
 
 require_once 'config.php';
 $apply = in_array('--apply', $argv, true);
+$hasPayer = (bool) $pdo->query("SHOW COLUMNS FROM expenses LIKE 'payer'")->fetchColumn();
+if ($apply && !$hasPayer) {
+    exit("ستون «پرداخت‌کننده» هنوز نیست: اول php table.php (یا دیپلوی کامل) را بزنید.\n");
+}
 $added = $skipped = 0;
 $sum = 0;
 foreach ($records as $r) {
@@ -70,7 +73,12 @@ foreach ($records as $r) {
     $sum += $r['amount'];
     $added++;
     if ($apply) {
-        $pdo->prepare("INSERT INTO expenses (amount, description, created_at, admin_id, kind) VALUES (?,?,?,?,?)")->execute([$r['amount'], $r['desc'], $r['ts'] ?? time(), $payer, $r['kind']]);
+        $cols = $hasPayer ? '(amount, description, created_at, admin_id, kind, payer)' : '(amount, description, created_at, admin_id, kind)';
+        $vals = [$r['amount'], $r['desc'], $r['ts'] ?? time(), $payer, $r['kind']];
+        if ($hasPayer) {
+            $vals[] = $payer;
+        }
+        $pdo->prepare("INSERT INTO expenses $cols VALUES (" . implode(',', array_fill(0, count($vals), '?')) . ")")->execute($vals);
     }
 }
 printf("\n%s %d rows (%s toman), already there %d.%s\n", $apply ? 'added' : 'would add', $added, number_format($sum), $skipped, $apply ? '' : ' DRY RUN — re-run with --apply.');
