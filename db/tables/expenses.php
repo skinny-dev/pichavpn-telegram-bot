@@ -12,5 +12,6 @@ return [
     'columns' => [
         ['kind', 'general', 'VARCHAR(30)'],
         ['payer', null, 'VARCHAR(150)'],
+        ['payee', null, 'VARCHAR(150)'],
     ],
 ];

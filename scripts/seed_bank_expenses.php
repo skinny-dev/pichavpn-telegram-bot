@@ -25,7 +25,7 @@ $rows = [
 
 $records = [];
 foreach ($rows as [$kind, $rial, $title, $payee, $method, $bank, $refLabel, $ref, $date, $time]) {
-    $parts = [$title . ($payee !== 'YottaSrc' ? ' — ' . $payee : '')];
+    $parts = [$title];
     if ($method) {
         $parts[] = $method . ($bank ? " (بانک $bank)" : '');
     }
@@ -33,24 +33,24 @@ foreach ($rows as [$kind, $rial, $title, $payee, $method, $bank, $refLabel, $ref
         $parts[] = "$refLabel $ref";
     }
     $records[] = ['kind' => $kind, 'amount' => (int) round($rial / 10), 'desc' => implode(' | ', $parts), 'ref' => $ref,
-        'ts' => $date ? strtotime("$date $time:00") : null, 'when' => $date ? "$date $time" : ''];
+        'payee' => $payee, 'ts' => $date ? strtotime("$date $time:00") : null, 'when' => $date ? "$date $time" : ''];
 }
 
 if (in_array('--csv', $argv, true)) {
     echo "\xEF\xBB\xBF";
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['created_at', 'kind', 'description', 'payer', 'amount']);
+    fputcsv($out, ['created_at', 'kind', 'description', 'payer', 'payee', 'amount']);
     foreach ($records as $r) {
-        fputcsv($out, [$r['when'], $r['kind'], $r['desc'], $payer, $r['amount']]);
+        fputcsv($out, [$r['when'], $r['kind'], $r['desc'], $payer, $r['payee'], $r['amount']]);
     }
     exit;
 }
 
 require_once 'config.php';
 $apply = in_array('--apply', $argv, true);
-$hasPayer = (bool) $pdo->query("SHOW COLUMNS FROM expenses LIKE 'payer'")->fetchColumn();
+$hasPayer = (bool) $pdo->query("SHOW COLUMNS FROM expenses LIKE 'payer'")->fetchColumn() && (bool) $pdo->query("SHOW COLUMNS FROM expenses LIKE 'payee'")->fetchColumn();
 if ($apply && !$hasPayer) {
-    exit("ستون «پرداخت‌کننده» هنوز نیست: اول php table.php (یا دیپلوی کامل) را بزنید.\n");
+    exit("ستون‌های «پرداخت‌کننده / مقصد» هنوز نیست: اول php table.php (یا دیپلوی کامل) را بزنید.\n");
 }
 $added = $skipped = 0;
 $sum = 0;
@@ -65,7 +65,7 @@ foreach ($records as $r) {
         $q->execute([$r['desc'], $r['amount']]);
         $dup = (int) $q->fetchColumn() > 0;
     }
-    printf("%-16s %-11s %12s  %s  %s\n", $r['when'] ?: '(تاریخ نامعلوم: الان)', $r['kind'], number_format($r['amount']), $r['desc'], $dup ? '(already there)' : ($apply ? 'ADD' : 'would add'));
+    printf("%-16s %-11s %12s  %s → %s  %s\n", $r['when'] ?: '(تاریخ نامعلوم: الان)', $r['kind'], number_format($r['amount']), $r['desc'], $r['payee'], $dup ? '(already there)' : ($apply ? 'ADD' : 'would add'));
     if ($dup) {
         $skipped++;
         continue;
@@ -73,10 +73,10 @@ foreach ($records as $r) {
     $sum += $r['amount'];
     $added++;
     if ($apply) {
-        $cols = $hasPayer ? '(amount, description, created_at, admin_id, kind, payer)' : '(amount, description, created_at, admin_id, kind)';
+        $cols = $hasPayer ? '(amount, description, created_at, admin_id, kind, payer, payee)' : '(amount, description, created_at, admin_id, kind)';
         $vals = [$r['amount'], $r['desc'], $r['ts'] ?? time(), $payer, $r['kind']];
         if ($hasPayer) {
-            $vals[] = $payer;
+            array_push($vals, $payer, $r['payee']);
         }
         $pdo->prepare("INSERT INTO expenses $cols VALUES (" . implode(',', array_fill(0, count($vals), '?')) . ")")->execute($vals);
     }

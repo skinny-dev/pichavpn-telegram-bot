@@ -394,11 +394,12 @@ sql("DELETE FROM Payment_report WHERE dec_not_confirmed LIKE '%ثبت دستی �
 sql(f"UPDATE user SET Balance={_bal0} WHERE id='1001'")
 
 # expense payer name
-s, r = call('create', {'res': 'expenses', 'row': {'description': 'تبلیغات تست پرداخت‌کننده', 'amount': '123456', 'kind': 'advertising', 'payer': 'علیرضا خدابخش'}}); check('create expense with payer', s == 200 and r['ok'], (s, r))
-s, r = call('list', res='expenses', q='خدابخش'); check('expense search finds payer name', r.get('total') == 1 and r['rows'][0]['payer'] == 'علیرضا خدابخش', r)
+s, r = call('create', {'res': 'expenses', 'row': {'description': 'تبلیغات تست پرداخت‌کننده', 'amount': '123456', 'kind': 'advertising', 'payer': 'علیرضا خدابخش', 'payee': 'حسین حیدری'}}); check('create expense with payer and payee', s == 200 and r['ok'], (s, r))
+s, r = call('list', res='expenses', q='خدابخش'); check('expense search finds payer name', r.get('total') == 1 and r['rows'][0]['payer'] == 'علیرضا خدابخش' and r['rows'][0]['payee'] == 'حسین حیدری', r)
+s2, r2 = call('list', res='expenses', q='حیدری'); check('expense search finds payee (destination) name', r2.get('total') == 1, r2)
 s, r = call('update', {'res': 'expenses', 'id': r['rows'][0]['id'], 'field': 'payer', 'value': 'علی'}); check('payer is editable inline', s == 200, (s, r))
-s, r = call('import', {'res': 'expenses', 'rows': [{'description': 'درون‌ریزی با پرداخت‌کننده', 'amount': '5000', 'kind': 'server', 'payer': 'حسین', 'created_at': '2026-09-25 20:13'}]}); check('CSV import carries payer', s == 200 and r['inserted'] == 1, (s, r))
-s, r = call('list', res='expenses', q='حسین'); check('imported payer stored', r.get('total') == 1 and r['rows'][0]['payer'] == 'حسین', r)
+s, r = call('import', {'res': 'expenses', 'rows': [{'description': 'درون‌ریزی با پرداخت‌کننده', 'amount': '5000', 'kind': 'server', 'payer': 'حسین', 'payee': 'YottaSrc', 'created_at': '2026-09-25 20:13'}]}); check('CSV import carries payer', s == 200 and r['inserted'] == 1, (s, r))
+s, r = call('list', res='expenses', q='YottaSrc'); check('imported payer and payee stored', r.get('total') == 1 and r['rows'][0]['payer'] == 'حسین' and r['rows'][0]['payee'] == 'YottaSrc', r)
 sql("DELETE FROM expenses WHERE description LIKE '%پرداخت‌کننده%'")
 
 s, r = call('logout', {}); check('logout', s == 200, (s, r))
