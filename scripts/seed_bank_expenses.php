@@ -12,7 +12,8 @@ if (PHP_SAPI !== 'cli') {
 }
 chdir(__DIR__ . '/..');
 date_default_timezone_set('Asia/Tehran');
-$payer = 'علیرضا خدابخش';
+$payer = 'علیرضا خدابخش';          // bank transfers
+$serverPayer = 'هوژان';             // the YottaSrc server bill is the hoozhan project's
 // kind, rial, title, payee, method text, bank, reference label, reference, Gregorian date, time (null = unknown)
 $rows = [
     ['advertising', 20000000, 'تبلیغات', 'حسین حیدری', 'بلو به بلو', 'بلو', 'شماره سند', '14055408860705', '2026-09-25', '20:13'],
@@ -20,7 +21,7 @@ $rows = [
     ['advertising', 20000000, 'تبلیغات', 'حسین حیدری', 'بلو به بلو', 'بلو', 'شماره سند', '14055524344215', '2026-09-29', '01:34'],
     ['advertising', 50000000, 'تبلیغات', 'امیرحسین ندرلو', 'کارت به کارت', 'تجارت', 'شماره پیگیری', '068581343691', '2026-09-29', '16:13'],
     ['advertising', 5000000, 'تبلیغات', 'ترنم میرزایی', 'کارت به کارت', 'ملی', 'شماره پیگیری', '095157952257', '2026-10-02', '18:02'],
-    ['server', 29249780, 'سرور — پروژه hoozhan (YottaSrc)', 'YottaSrc', null, null, null, null, null, null],
+    ['server', 29249780, 'سرور — پروژه هوژان (YottaSrc)', 'YottaSrc', null, null, null, null, null, null],
 ];
 
 $records = [];
@@ -32,7 +33,7 @@ foreach ($rows as [$kind, $rial, $title, $payee, $method, $bank, $refLabel, $ref
     if ($ref) {
         $parts[] = "$refLabel $ref";
     }
-    $records[] = ['kind' => $kind, 'amount' => (int) round($rial / 10), 'desc' => implode(' | ', $parts), 'ref' => $ref,
+    $records[] = ['payer' => $payee === 'YottaSrc' ? $serverPayer : $payer, 'kind' => $kind, 'amount' => (int) round($rial / 10), 'desc' => implode(' | ', $parts), 'ref' => $ref,
         'payee' => $payee, 'ts' => $date ? strtotime("$date $time:00") : null, 'when' => $date ? "$date $time" : ''];
 }
 
@@ -41,7 +42,7 @@ if (in_array('--csv', $argv, true)) {
     $out = fopen('php://output', 'w');
     fputcsv($out, ['created_at', 'kind', 'description', 'payer', 'payee', 'amount']);
     foreach ($records as $r) {
-        fputcsv($out, [$r['when'], $r['kind'], $r['desc'], $payer, $r['payee'], $r['amount']]);
+        fputcsv($out, [$r['when'], $r['kind'], $r['desc'], $r['payer'], $r['payee'], $r['amount']]);
     }
     exit;
 }
@@ -74,9 +75,9 @@ foreach ($records as $r) {
     $added++;
     if ($apply) {
         $cols = $hasPayer ? '(amount, description, created_at, admin_id, kind, payer, payee)' : '(amount, description, created_at, admin_id, kind)';
-        $vals = [$r['amount'], $r['desc'], $r['ts'] ?? time(), $payer, $r['kind']];
+        $vals = [$r['amount'], $r['desc'], $r['ts'] ?? time(), $r['payer'], $r['kind']];
         if ($hasPayer) {
-            array_push($vals, $payer, $r['payee']);
+            array_push($vals, $r['payer'], $r['payee']);
         }
         $pdo->prepare("INSERT INTO expenses $cols VALUES (" . implode(',', array_fill(0, count($vals), '?')) . ")")->execute($vals);
     }
