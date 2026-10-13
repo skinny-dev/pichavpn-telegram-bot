@@ -21,6 +21,22 @@ try {
         echo "ERROR!";
         exit;
     }
+    // A disabled panel (e.g. the emergency panel the server cannot reach) is never contacted: answer at once instead of letting the app time out
+    $panelState = select("marzban_panel", "status", "name_panel", $nameloc['Service_location'], "select");
+    if (is_array($panelState) && ($panelState['status'] ?? '') === 'disable') {
+        if (subscriptionWantsHtml((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $_GET)) {
+            $supportRow = select("setting", "id_support", null, null, "select");
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-store');
+            http_response_code(503);
+            echo subscriptionPageHtml(['username' => $nameloc['username'], 'status' => 'disabled'], $nameloc, 'https://' . ($_SERVER['HTTP_HOST'] ?? $domainhosts) . '/sub/' . $token, (string) ($usernamebot ?? ''), (string) ($supportRow['id_support'] ?? ''));
+            exit;
+        }
+        http_response_code(503);
+        header('Retry-After: 3600');
+        echo "Service panel is unavailable. Contact support.";
+        exit;
+    }
     // A browser (not a VPN app) gets a readable page: status, expiry, usage, copy link, renew button
     if (subscriptionWantsHtml((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $_GET)) {
         $pageData = (new ManagePanel())->DataUser($nameloc['Service_location'], $nameloc['username']);
