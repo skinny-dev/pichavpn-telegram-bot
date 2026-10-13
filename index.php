@@ -3898,6 +3898,12 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $parts = explode("_", $user['Processing_value_one']);
     // $partsdic for discount value
     $partsdic = explode("_", $user['Processing_value_four']);
+    if (!is_array($userdate) || empty($userdate['name_panel'])) {
+        // stale «تایید خرید» button (the purchase state was reset): tell the customer instead of staying silent
+        sendmessage($from_id, $textbotlang['users']['sell']['restartProcess'], $keyboard, 'HTML');
+        step("home", $from_id);
+        return;
+    }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $userdate['name_panel'], "select");
     if ($marzban_list_get['status'] == "disable") {
         sendmessage($from_id, $textbotlang['users']['sell']['panelUnavailable'], $backuser, 'html');
@@ -3923,8 +3929,11 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         ]);
         $info_product = $stmt->fetch(PDO::FETCH_ASSOC);
     }
-    if (!isset($info_product['price_product']))
+    if (!isset($info_product['price_product'])) {
+        sendmessage($from_id, $textbotlang['users']['sell']['restartProcess'], $keyboard, 'HTML');
+        step("home", $from_id);
         return;
+    }
     if ($datain == "confirmandgetserviceDiscount") {
         $discountcode = select("DiscountSell", "*", "codeDiscount", $partsdic[0], "count");
         if ($discountcode == 0) {
