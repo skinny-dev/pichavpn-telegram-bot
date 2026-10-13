@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Banknote, Headset, LayoutDashboard, LogOut, Megaphone, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, BarChart3, Banknote, Headset, LayoutDashboard, LogOut, Megaphone, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ const ALL_ITEMS: Item[] = [
   { to: '/', label: 'نمای کلی', icon: LayoutDashboard },
   { to: '/finance', label: 'مالی', icon: Banknote },
   { to: '/support', label: 'پشتیبانی', icon: Headset },
+  { to: '/pending', label: 'پرداخت‌های معلق', icon: AlertTriangle },
   { to: '/stats', label: 'آمار', icon: BarChart3 },
   { to: '/users', label: 'کاربران', icon: Users },
   { to: '/orders', label: 'سفارشات', icon: ShoppingCart },

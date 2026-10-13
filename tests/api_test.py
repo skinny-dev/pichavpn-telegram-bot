@@ -334,6 +334,7 @@ s, r = call('fin_overview'); check('support role is denied finance (403)', s == 
 s, r = call('referrals'); check('support role is denied referrals (403)', s == 403, (s, r))
 s, r = call('order_create', {'panel': 'x'}); check('support role is denied manual orders (403)', s == 403, (s, r))
 s, r = call('payment_create', {'price': '1'}); check('support role is denied manual payments (403)', s == 403, (s, r))
+s, r = call('pay_pending'); check('support role is denied pending payments (403)', s == 403, (s, r))
 op, csrf = op_saved, csrf_saved
 call('admin_delete', {'id': '555666779'})
 sql("DELETE FROM expenses WHERE description='سرور تست'")
@@ -384,6 +385,32 @@ s, r = call('referral_book_cost', {'id': nl, 'date': '1405/07/01 09:30'}); check
 s, r = call('referrals'); L = {x['id']: x for x in r['links']}
 check('chosen date used', _t.strftime('%Y-%m-%d %H:%M', _t.gmtime(L[nl]['expense_at'] + 12600)) == '2026-09-23 09:30', L.get(nl))
 sql("DELETE FROM expenses WHERE description LIKE 'تبلیغات: %'"); sql("DELETE FROM referral_links WHERE code IN ('ad_dated','ad_nodate')")
+
+# pending payments: unpaid / receipt waiting / paid-but-not-delivered
+import datetime as _dt
+_now = _dt.datetime.now().strftime('%Y/%m/%d %H:%M:%S')
+sql("DELETE FROM Payment_report WHERE id_order LIKE 'pp_%'; DELETE FROM invoice WHERE id_invoice LIKE 'ppi%'; DELETE FROM service_other WHERE username LIKE 'pp_%'")
+sql(f"INSERT INTO invoice (id_user,id_invoice,username,time_sell,Service_location,name_product,price_product,Volume,Service_time,Status,notifctions) VALUES ('1001','ppi1','pp_new_ok',UNIX_TIMESTAMP(),'p','x','60000','10','30','active','{{}}'),('1001','ppi2','pp_new_bad',UNIX_TIMESTAMP(),'p','x','60000','10','30','unpaid','{{}}')")
+sql("INSERT INTO service_other (id_user,username,value,time,price,type,status,output) VALUES ('1001','pp_ren','{\\\"code_product\\\":\\\"c1\\\"}','x','50000','extend_user','unpaid','')")
+sql(f"INSERT INTO Payment_report (id_user,id_order,time,price,payment_Status,Payment_Method,id_invoice,dec_not_confirmed) VALUES "
+    f"('1001','pp_unpaid','{_now}','60000','Unpaid','variza','getconfigafterpay|pp_x','SLUG1'),"
+    f"('1001','pp_wait','{_now}','60000','waiting','کارت به کارت','getconfigafterpay|pp_y',''),"
+    f"('1001','pp_ok','{_now}','60000','paid','variza','getconfigafterpay|pp_new_ok',''),"
+    f"('1001','pp_bad','{_now}','60000','paid','variza','getconfigafterpay|pp_new_bad',''),"
+    f"('1001','pp_ren','{_now}','50000','paid','variza','getextenduser|pp_ren%c1',''),"
+    f"('1001','pp_top','{_now}','90000','paid','variza','none',''),"
+    f"('1001','pp_rej','{_now}','70000','reject','variza','getconfigafterpay|pp_z','')")
+s, r = call('pay_pending', days=3); P = {x['id_order']: x for x in r.get('rows', []) if x['id_order'].startswith('pp_')}
+check('pending lists unpaid, waiting, rejected', P.get('pp_unpaid', {}).get('problem') == 'unpaid' and P.get('pp_wait', {}).get('problem') == 'waiting' and P.get('pp_rej', {}).get('problem') == 'reject', P)
+check('paid new order whose invoice is unpaid = NOT DELIVERED', P.get('pp_bad', {}).get('problem') == 'not_delivered' and P['pp_bad']['kind'] == 'new' and P['pp_bad']['target'] == 'pp_new_bad', P)
+check('paid renewal still unpaid in service_other = NOT DELIVERED', P.get('pp_ren', {}).get('problem') == 'not_delivered' and P['pp_ren']['kind'] == 'renew', P)
+check('delivered order and wallet top-up are not listed', 'pp_ok' not in P and 'pp_top' not in P, P)
+check('variza reference shown', P['pp_unpaid']['ref'] == 'SLUG1', P)
+s, r = call('pay_confirm', {'order': 'nope'}); check('confirm unknown payment 404', s == 404, (s, r))
+s, r = call('pay_confirm', {'order': 'pp_ren'}); check('paid renewal is never re-run automatically (409)', s == 409, (s, r))
+s, r = call('pay_confirm', {'order': 'pp_ok'}); check('already delivered order refused (409)', s == 409, (s, r))
+s, r = call('pay_confirm', {'order': 'pp_rej'}); check('rejected payment needs explicit override (409)', s == 409, (s, r))
+sql("DELETE FROM Payment_report WHERE id_order LIKE 'pp_%'; DELETE FROM invoice WHERE id_invoice LIKE 'ppi%'; DELETE FROM service_other WHERE username LIKE 'pp_%'")
 
 # manual orders (customers outside Telegram): validation paths only, creation needs a real VPN panel
 s, r = call('order_options'); check('order options: panels + products', s == 200 and 'panels' in r and 'products' in r, (s, r))

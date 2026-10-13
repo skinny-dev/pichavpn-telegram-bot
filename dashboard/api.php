@@ -24,6 +24,7 @@ require_once __DIR__ . '/../stats_report.php';
 require_once __DIR__ . '/../support_files.php';
 require_once __DIR__ . '/../referral_links.php';
 require_once __DIR__ . '/manual_order.php';
+require_once __DIR__ . '/payments_admin.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
@@ -1086,6 +1087,13 @@ try {
             $uid = trim((string) (body()['uid'] ?? ''));
             $pdo->prepare("UPDATE support_message SET status = 'close' WHERE iduser = ? AND status != 'close'")->execute([$uid]);
             out(['ok' => true]);
+
+        case 'pay_pending':
+            out(['ok' => true] + picha_pay_pending($pdo, (int) ($_GET['days'] ?? 7)));
+
+        case 'pay_confirm':
+            $b = body();
+            out(picha_pay_confirm($pdo, trim((string) ($b['order'] ?? '')), !empty($b['allow_rejected'])));
 
         case 'payment_create':
             // manual payment record (cash / card to card / outside Telegram). Optionally credits the user's wallet.
