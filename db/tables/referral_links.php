@@ -20,4 +20,7 @@ return [
         created_at INT NOT NULL,
         UNIQUE KEY uq_referral_code (code)
         SQL,
+    'columns' => [
+        ['ad_date', null, 'INT'],
+    ],
 ];

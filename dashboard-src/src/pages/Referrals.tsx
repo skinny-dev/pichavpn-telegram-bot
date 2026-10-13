@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Check, Copy, Coins, Loader2, Megaphone, Pencil, Plus, Receipt, Trash2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
-import { fmtNum, fmtToman, normalizeDigits } from '@/lib/format'
+import { fmtNum, fmtToman, fmtTs, latinDigits, normalizeDigits } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,12 +15,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 interface Link {
   id: number; name: string; platform: string; code: string; tg_user_id: string | null; contact: string | null
-  price: number; pays_commission: number; commission_percent: number | null; active: number; notes: string | null; expense_id: number | null
+  price: number; pays_commission: number; commission_percent: number | null; active: number; notes: string | null; expense_id: number | null; expense_at: number | null; ad_date: number | null; created_at: number
   signups: number; buyers: number; orders: number; revenue: number; percent: number; commission: number; paid: number; due: number; cost: number; net: number; roi: number | null
 }
 interface Data { links: Link[]; global_percent: number; bot: string; tg_referrers: { id: string; username: string; count: number }[] }
-interface Form { id: number; name: string; platform: string; code: string; tg_user_id: string; contact: string; price: string; pays_commission: boolean; commission_percent: string; active: boolean; notes: string }
-const EMPTY: Form = { id: 0, name: '', platform: 'instagram', code: '', tg_user_id: '', contact: '', price: '', pays_commission: false, commission_percent: '', active: true, notes: '' }
+interface Form { id: number; name: string; platform: string; code: string; tg_user_id: string; contact: string; price: string; pays_commission: boolean; commission_percent: string; active: boolean; notes: string; ad_date: string }
+const EMPTY: Form = { id: 0, name: '', platform: 'instagram', code: '', tg_user_id: '', contact: '', price: '', pays_commission: false, commission_percent: '', active: true, notes: '', ad_date: '' }
+const jDate = (ts: number | null | undefined) => (ts ? latinDigits(fmtTs(ts, true)) : '')
 const PLATFORMS: Record<string, string> = { instagram: 'اینستاگرام', telegram: 'تلگرام', youtube: 'یوتیوب', tiktok: 'تیک‌تاک', website: 'سایت/وبلاگ', other: 'سایر' }
 
 export default function Referrals() {
@@ -29,6 +30,7 @@ export default function Referrals() {
   const [form, setForm] = useState<Form | null>(null)
   const [pay, setPay] = useState<{ link: Link; amount: string; note: string } | null>(null)
   const [copied, setCopied] = useState('')
+  const [bookFor, setBookFor] = useState<{ link: Link; date: string } | null>(null)
   const refresh = () => qc.invalidateQueries({ queryKey: ['referrals'] })
   const err = (fallback: string) => (e: unknown) => toast.error(e instanceof ApiError ? e.message : fallback)
   const linkOf = (l: Link) => `https://t.me/${data?.bot ?? ''}?start=${l.code}`
@@ -39,7 +41,7 @@ export default function Referrals() {
     onError: err('ذخیره ناموفق بود'),
   })
   const del = useMutation({ mutationFn: (id: number) => api('referral_delete', { body: { id } }), onSuccess: () => { toast.success('حذف شد'); refresh() }, onError: err('حذف ناموفق بود') })
-  const book = useMutation({ mutationFn: (id: number) => api('referral_book_cost', { body: { id } }), onSuccess: () => { toast.success('هزینه در حسابداری ثبت شد'); refresh() }, onError: err('ثبت هزینه ناموفق بود') })
+  const book = useMutation({ mutationFn: (b: { id: number; date: string }) => api('referral_book_cost', { body: b }), onSuccess: () => { toast.success('هزینه در حسابداری ثبت شد'); setBookFor(null); refresh() }, onError: err('ثبت هزینه ناموفق بود') })
   const payout = useMutation({
     mutationFn: (p: { id: number; amount: string; note: string }) => api('referral_payout', { body: p }),
     onSuccess: () => { toast.success('پرداخت پورسانت ثبت شد'); setPay(null); refresh() },
@@ -86,6 +88,7 @@ export default function Referrals() {
                 <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs" dir="ltr">{linkOf(l)}</code>
                 <Button variant="ghost" size="icon-sm" aria-label="کپی لینک" onClick={() => copy(l)}>{copied === l.code ? <Check /> : <Copy />}</Button>
               </div>
+              {l.ad_date ? <div className="mt-1 text-xs text-muted-foreground">تاریخ تبلیغ: <span dir="ltr">{jDate(l.ad_date)}</span></div> : null}
               {(l.contact || l.tg_user_id) && <div className="mt-1 text-xs text-muted-foreground" dir="auto">{l.contact}{l.tg_user_id ? ` · tg ${l.tg_user_id}` : ''}</div>}
               <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
                 {[['ورودی', fmtNum(l.signups)], ['خریدار', fmtNum(l.buyers)], ['سفارش', fmtNum(l.orders)], ['فروش', fmtToman(l.revenue)], ['هزینه', fmtToman(l.cost)], ['سود خالص', fmtToman(l.net)]].map(([k, v]) => (
@@ -97,10 +100,10 @@ export default function Referrals() {
               ) : null}
               {l.roi !== null && <div className="mt-1 text-xs text-muted-foreground">بازده: <b className="tabular" dir="ltr">{fmtNum(l.roi)}٪</b></div>}
               <div className="mt-3 flex flex-wrap gap-1">
-                <Button variant="outline" size="sm" onClick={() => setForm({ id: l.id, name: l.name, platform: l.platform, code: l.code, tg_user_id: l.tg_user_id ?? '', contact: l.contact ?? '', price: String(l.price), pays_commission: !!l.pays_commission, commission_percent: l.commission_percent === null ? '' : String(l.commission_percent), active: !!l.active, notes: l.notes ?? '' })}><Pencil />ویرایش</Button>
+                <Button variant="outline" size="sm" onClick={() => setForm({ id: l.id, name: l.name, platform: l.platform, code: l.code, tg_user_id: l.tg_user_id ?? '', contact: l.contact ?? '', price: String(l.price), pays_commission: !!l.pays_commission, commission_percent: l.commission_percent === null ? '' : String(l.commission_percent), active: !!l.active, notes: l.notes ?? '', ad_date: jDate(l.ad_date) })}><Pencil />ویرایش</Button>
                 {l.pays_commission && l.due > 0 ? <Button variant="outline" size="sm" onClick={() => setPay({ link: l, amount: String(l.due), note: '' })}><Coins />پرداخت پورسانت</Button> : null}
-                {l.price > 0 && l.expense_id === null ? <Button variant="outline" size="sm" disabled={book.isPending} onClick={() => confirm(`هزینهٔ ${fmtToman(l.price)} به‌عنوان «تبلیغات» در حسابداری ثبت شود؟`) && book.mutate(l.id)}><Receipt />ثبت هزینه در حسابداری</Button> : null}
-                {l.expense_id !== null && <Badge variant="outline">هزینه ثبت شده</Badge>}
+                {l.price > 0 && l.expense_id === null ? <Button variant="outline" size="sm" onClick={() => setBookFor({ link: l, date: jDate(l.ad_date ?? l.created_at) })}><Receipt />ثبت هزینه در حسابداری</Button> : null}
+                {l.expense_id !== null && <Badge variant="outline" title="برای تغییر تاریخ، «ویرایش» و «تاریخ تبلیغ» را عوض کنید">هزینه ثبت شده · {jDate(l.expense_at)}</Badge>}
                 <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label="حذف" onClick={() => confirm('این لینک حذف شود؟') && del.mutate(l.id)}><Trash2 /></Button>
               </div>
             </li>
@@ -135,6 +138,7 @@ export default function Referrals() {
               </div>
               <div className="grid gap-2"><Label htmlFor="rc">راه ارتباط (اختیاری: آیدی اینستاگرام، شماره...)</Label><Input id="rc" dir="auto" value={form.contact} onChange={(e) => set({ contact: e.target.value })} /></div>
               <div className="grid gap-2"><Label htmlFor="rp">قیمت تبلیغ (تومان)</Label><Input id="rp" dir="ltr" inputMode="numeric" value={form.price} placeholder="۰" onChange={(e) => set({ price: normalizeDigits(e.target.value) })} /></div>
+              <div className="grid gap-2"><Label htmlFor="rad">تاریخ تبلیغ (اختیاری، مثال 1405/07/14) — هزینه با همین تاریخ در حسابداری ثبت می‌شود</Label><Input id="rad" dir="ltr" inputMode="numeric" placeholder="1405/07/14" value={form.ad_date} onChange={(e) => set({ ad_date: latinDigits(e.target.value) })} /></div>
               <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div className="min-w-0"><div className="text-sm font-medium">پورسانت دارد</div><div className="text-xs text-muted-foreground">درصدی از فروش کاربران این لینک</div></div>
                 <Switch checked={form.pays_commission} onCheckedChange={(v) => set({ pays_commission: v })} aria-label="پورسانت دارد" />
@@ -150,6 +154,18 @@ export default function Referrals() {
                 <Button type="button" variant="ghost" onClick={() => setForm(null)}>انصراف</Button>
                 <Button type="submit" disabled={save.isPending || !form.name.trim()}>{save.isPending && <Loader2 className="animate-spin" />}ذخیره</Button>
               </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!bookFor} onOpenChange={(o) => !o && setBookFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>ثبت هزینهٔ تبلیغ</DialogTitle><DialogDescription>{bookFor?.link.name} — {fmtToman(bookFor?.link.price)} در دستهٔ «تبلیغات»</DialogDescription></DialogHeader>
+          {bookFor && (
+            <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); book.mutate({ id: bookFor.link.id, date: bookFor.date }) }}>
+              <div className="grid gap-2"><Label htmlFor="bd">تاریخ هزینه (مثال 1405/07/14 یا 1405/07/14 15:30)</Label><Input id="bd" dir="ltr" inputMode="numeric" value={bookFor.date} onChange={(e) => setBookFor({ ...bookFor, date: latinDigits(e.target.value) })} required /></div>
+              <DialogFooter><Button type="button" variant="ghost" onClick={() => setBookFor(null)}>انصراف</Button><Button type="submit" disabled={book.isPending || !bookFor.date}>{book.isPending && <Loader2 className="animate-spin" />}ثبت هزینه</Button></DialogFooter>
             </form>
           )}
         </DialogContent>

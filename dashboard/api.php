@@ -1156,6 +1156,14 @@ try {
             $contact = mb_substr(trim((string) ($b['contact'] ?? '')), 0, 200);
             $notes = mb_substr(trim((string) ($b['notes'] ?? '')), 0, 1000);
             $active = array_key_exists('active', $b) && empty($b['active']) ? 0 : 1;
+            // campaign date: when the ad ran / was paid (Jalali or Gregorian); empty = unknown
+            $adDate = null;
+            if (trim((string) ($b['ad_date'] ?? '')) !== '') {
+                $adDate = accParseDateTime((string) $b['ad_date']);
+                if ($adDate === null) {
+                    fail('تاریخ تبلیغ را به‌صورت 1405/07/14 یا 1405/07/14 15:30 بنویسید', 422);
+                }
+            }
             $editId = (int) ($b['id'] ?? 0);
             $code = trim((string) ($b['code'] ?? ''));
             if ($code !== '') {
@@ -1171,19 +1179,26 @@ try {
                 if ((int) $dup->fetchColumn() > 0) {
                     fail('این کد قبلاً استفاده شده است', 409);
                 }
-                $pdo->prepare("INSERT INTO referral_links (name, platform, code, tg_user_id, contact, price, pays_commission, commission_percent, active, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$name, $platform, $code, $tg === '' ? null : $tg, $contact, $price, $pays, $pct, $active, $notes, time()]);
+                $pdo->prepare("INSERT INTO referral_links (name, platform, code, tg_user_id, contact, price, pays_commission, commission_percent, active, notes, ad_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$name, $platform, $code, $tg === '' ? null : $tg, $contact, $price, $pays, $pct, $active, $notes, $adDate, time()]);
                 out(['ok' => true, 'id' => (int) $pdo->lastInsertId(), 'code' => $code]);
             }
-            $cur = $pdo->prepare("SELECT code FROM referral_links WHERE id = ?");
+            $cur = $pdo->prepare("SELECT code, expense_id FROM referral_links WHERE id = ?");
             $cur->execute([$editId]);
-            $oldCode = $cur->fetchColumn();
-            if ($oldCode === false) {
+            $curRow = $cur->fetch(PDO::FETCH_ASSOC);
+            if (!$curRow) {
                 fail('لینک پیدا نشد', 404);
             }
+            $oldCode = $curRow['code'];
+            $pdo->beginTransaction();
             // the code is what is printed in public links: it never changes after creation
-            $pdo->prepare("UPDATE referral_links SET name=?, platform=?, tg_user_id=?, contact=?, price=?, pays_commission=?, commission_percent=?, active=?, notes=? WHERE id=?")
-                ->execute([$name, $platform, $tg === '' ? null : $tg, $contact, $price, $pays, $pct, $active, $notes, $editId]);
+            $pdo->prepare("UPDATE referral_links SET name=?, platform=?, tg_user_id=?, contact=?, price=?, pays_commission=?, commission_percent=?, active=?, notes=?, ad_date=? WHERE id=?")
+                ->execute([$name, $platform, $tg === '' ? null : $tg, $contact, $price, $pays, $pct, $active, $notes, $adDate, $editId]);
+            // an already booked cost follows the link: same amount, and the campaign date when one is given
+            if ($curRow['expense_id'] !== null) {
+                $pdo->prepare("UPDATE expenses SET amount = ?, created_at = COALESCE(?, created_at) WHERE id = ?")->execute([$price, $adDate, (int) $curRow['expense_id']]);
+            }
+            $pdo->commit();
             out(['ok' => true, 'id' => $editId, 'code' => $oldCode]);
 
         case 'referral_delete':
@@ -1214,7 +1229,15 @@ try {
 
         case 'referral_book_cost':
             // books the campaign price once as an "advertising" expense (bridges into the finance ledger via fin_sync)
-            $id = (int) (body()['id'] ?? 0);
+            $bb = body();
+            $id = (int) ($bb['id'] ?? 0);
+            $bookAt = null;
+            if (trim((string) ($bb['date'] ?? '')) !== '') {
+                $bookAt = accParseDateTime((string) $bb['date']);
+                if ($bookAt === null) {
+                    fail('تاریخ را به‌صورت 1405/07/14 یا 1405/07/14 15:30 بنویسید', 422);
+                }
+            }
             $pdo->beginTransaction();
             $q = $pdo->prepare("SELECT * FROM referral_links WHERE id = ? FOR UPDATE");
             $q->execute([$id]);
@@ -1232,7 +1255,8 @@ try {
                 fail('قیمت کمپین صفر است', 422);
             }
             $pdo->prepare("INSERT INTO expenses (amount, description, created_at, admin_id, kind) VALUES (?,?,?,?,'advertising')")
-                ->execute([(int) $l['price'], 'تبلیغات: ' . $l['name'], time(), (string) $_SESSION['admin_user']]);
+                // dated when the ad ran (chosen date > campaign date > the day the link was made), never silently "today"
+                ->execute([(int) $l['price'], 'تبلیغات: ' . $l['name'], $bookAt ?? ($l['ad_date'] !== null ? (int) $l['ad_date'] : (int) $l['created_at']), (string) $_SESSION['admin_user']]);
             $eid = (int) $pdo->lastInsertId();
             $pdo->prepare("UPDATE referral_links SET expense_id = ? WHERE id = ?")->execute([$eid, $id]);
             $pdo->commit();

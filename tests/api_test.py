@@ -367,6 +367,24 @@ s, r = call('referrals'); L = {x['id']: x for x in r['links']}; check('after edi
 s, r = call('referral_delete', {'id': rl2}); check('unused link deleted', s == 200, (s, r))
 sql("DELETE FROM referral_signups; DELETE FROM referral_payouts; DELETE FROM referral_links; DELETE FROM invoice WHERE id_invoice LIKE 'refinv%'; DELETE FROM expenses WHERE description LIKE 'تبلیغات: %'")
 
+# campaign cost is booked on the campaign date, never silently "today"
+sql("DELETE FROM referral_links WHERE code IN ('ad_dated','ad_nodate')")
+s, r = call('referral_save', {'name': 'تبلیغ تاریخ‌دار', 'code': 'ad_dated', 'price': '700000', 'ad_date': '1405/07/03'}); check('link with campaign date', s == 200, (s, r)); dl = r.get('id')
+s, r = call('referral_save', {'name': 'x', 'code': 'ad_bad', 'ad_date': 'دیروز'}); check('bad campaign date rejected', s == 422, (s, r))
+s, r = call('referral_book_cost', {'id': dl}); check('book cost with campaign date', s == 200, (s, r))
+s, r = call('referrals'); L = {x['id']: x for x in r['links']}
+import time as _t
+check('booked expense dated 1405/07/03 (2026-09-25 12:00 Tehran)', L[dl]['expense_at'] == 1790323200 + 0 or _t.strftime('%Y-%m-%d', _t.gmtime(L[dl]['expense_at'] + 12600)) == '2026-09-25', L.get(dl))
+s, r = call('referral_save', {'id': dl, 'name': 'تبلیغ تاریخ‌دار', 'price': '800000', 'ad_date': '1405/07/10'}); check('edit link date + price', s == 200, (s, r))
+s, r = call('referrals'); L = {x['id']: x for x in r['links']}
+check('booked expense follows: new date + new amount', _t.strftime('%Y-%m-%d', _t.gmtime(L[dl]['expense_at'] + 12600)) == '2026-10-02' and L[dl]['cost'] == 800000, L.get(dl))
+s, r = call('list', res='expenses', q='تبلیغ تاریخ‌دار'); check('expense row amount synced', r.get('total') == 1 and int(r['rows'][0]['amount']) == 800000, r)
+s, r = call('referral_save', {'name': 'بدون تاریخ', 'code': 'ad_nodate', 'price': '1000'}); nl = r.get('id')
+s, r = call('referral_book_cost', {'id': nl, 'date': '1405/07/01 09:30'}); check('book cost on a chosen date', s == 200, (s, r))
+s, r = call('referrals'); L = {x['id']: x for x in r['links']}
+check('chosen date used', _t.strftime('%Y-%m-%d %H:%M', _t.gmtime(L[nl]['expense_at'] + 12600)) == '2026-09-23 09:30', L.get(nl))
+sql("DELETE FROM expenses WHERE description LIKE 'تبلیغات: %'"); sql("DELETE FROM referral_links WHERE code IN ('ad_dated','ad_nodate')")
+
 # manual orders (customers outside Telegram): validation paths only, creation needs a real VPN panel
 s, r = call('order_options'); check('order options: panels + products', s == 200 and 'panels' in r and 'products' in r, (s, r))
 s, r = call('order_create', {'panel': 'nope', 'product_id': 1}); check('manual order: unknown panel 404', s == 404, (s, r))

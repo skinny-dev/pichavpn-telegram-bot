@@ -99,7 +99,8 @@ function referralOverview(PDO $pdo): array
             (SELECT COUNT(DISTINCT i.id_user) FROM referral_signups s JOIN invoice i ON CONVERT(i.id_user USING utf8mb4) COLLATE utf8mb4_unicode_ci = s.user_id WHERE s.link_id = l.id AND $sale) AS buyers,
             (SELECT COUNT(*) FROM referral_signups s JOIN invoice i ON CONVERT(i.id_user USING utf8mb4) COLLATE utf8mb4_unicode_ci = s.user_id WHERE s.link_id = l.id AND $sale) AS orders,
             (SELECT COALESCE(SUM(CAST(i.price_product AS SIGNED)),0) FROM referral_signups s JOIN invoice i ON CONVERT(i.id_user USING utf8mb4) COLLATE utf8mb4_unicode_ci = s.user_id WHERE s.link_id = l.id AND $sale) AS revenue,
-            (SELECT COALESCE(SUM(p.amount),0) FROM referral_payouts p WHERE p.link_id = l.id) AS paid_out
+            (SELECT COALESCE(SUM(p.amount),0) FROM referral_payouts p WHERE p.link_id = l.id) AS paid_out,
+            (SELECT e.created_at FROM expenses e WHERE e.id = l.expense_id) AS expense_at
         FROM referral_links l ORDER BY l.active DESC, l.id DESC")->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
         $m = referralMoney($r, (int) $r['revenue'], (int) $r['paid_out'], $global);
@@ -107,6 +108,8 @@ function referralOverview(PDO $pdo): array
             $r[$k] = (int) $r[$k];
         }
         $r['expense_id'] = $r['expense_id'] === null ? null : (int) $r['expense_id'];
+        $r['expense_at'] = $r['expense_at'] === null ? null : (int) $r['expense_at'];
+        $r['ad_date'] = ($r['ad_date'] ?? null) === null ? null : (int) $r['ad_date'];
         $r['commission_percent'] = $r['commission_percent'] === null ? null : (int) $r['commission_percent'];
         $r += $m;
         unset($r['paid_out']);
