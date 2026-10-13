@@ -5531,39 +5531,8 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if (!is_array($vOrder) || (string) $vOrder['id_user'] !== (string) $from_id || $vOrder['Payment_Method'] !== 'variza') {
         return;
     }
-    if ($vOrder['payment_Status'] == "paid") {
-        sendmessage($from_id, $textbotlang['users']['Balance']['alreadyConfirmed'], null, 'HTML');
-        return;
-    }
-    if ($vOrder['payment_Status'] == "expire") {
-        sendmessage($from_id, $textbotlang['users']['Balance']['transactionExpired'], null, 'HTML');
-        return;
-    }
-    if ($vOrder['payment_Status'] == "reject") {
-        sendmessage($from_id, $textbotlang['users']['Balance']['varizaReceiptRejected'] ?? '❌ این پرداخت رد شده است.', null, 'HTML');
-        return;
-    }
-    if ($vOrder['payment_Status'] == "waiting") {
-        sendmessage($from_id, $textbotlang['users']['Balance']['varizaReceiptWaiting'] ?? '✅ رسید شما قبلاً ثبت شده است.', null, 'HTML');
-        return;
-    }
-    $vDelay = max(1, intval(select("PaySetting", "ValuePay", "NamePay", "variza_receipt_delay", "select")['ValuePay'] ?? 5));
-    $vCreated = ctype_digit((string) $vOrder['time']) ? intval($vOrder['time']) : intval(strtotime($vOrder['time']));
-    $vWait = $vCreated > 0 ? ($vCreated + $vDelay * 60) - time() : 0;
-    if ($vWait > 0) {
-        telegram('answerCallbackQuery', [
-            'callback_query_id' => $callback_query_id,
-            'text' => sprintf($textbotlang['users']['Balance']['varizaReceiptWait'] ?? 'هنوز %s دقیقه تا امکان ارسال رسید باقی مانده است.', ceil($vWait / 60)),
-            'show_alert' => true,
-            'cache_time' => 5,
-        ]);
-        return;
-    }
-    $vCool = date('Y/m/d H:i:s', time() - 120);
-    $vStmt = $pdo->prepare("SELECT COUNT(*) FROM Payment_report WHERE id_user = :u AND Payment_Method = 'variza' AND at_updated > :t");
-    $vStmt->execute([':u' => $from_id, ':t' => $vCool]);
-    if ($vStmt->fetchColumn() > 0 and !in_array($from_id, $admin_ids)) {
-        sendmessage($from_id, $textbotlang['users']['Balance']['receiptCooldown'], null, 'HTML');
+    // no forced wait any more: an early receipt is accepted and the admins see that Variza may still confirm it by itself
+    if (!receiptAllowed($pdo, $vOrder, $from_id, in_array($from_id, $admin_ids), $textbotlang)) {
         return;
     }
     deletemessage($from_id, $message_id);
@@ -5571,28 +5540,12 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     step('cart_to_cart_user', $from_id);
     update("user", "Processing_value", $vOrder['id_order'], "id", $from_id);
 } elseif (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
-    $timefivemin = time() - 120;
-    $timefivemin = date('Y/m/d H:i:s', intval($timefivemin));
-    $sql = "SELECT * FROM Payment_report WHERE id_user = :from_id AND Payment_Method = 'cart to cart' AND at_updated > :timefivemin";
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindParam(':from_id', $from_id, PDO::PARAM_STR);
-    $stmt->bindParam(':timefivemin', $timefivemin, PDO::PARAM_STR);
-    $stmt->execute();
-    $paymentcount = $stmt->rowCount();
-    if ($paymentcount != 0 and !in_array($from_id, $admin_ids)) {
-        sendmessage($from_id, $textbotlang['users']['Balance']['receiptCooldown'], null, 'HTML');
-        return;
-    }
     $payemntcheck = select("Payment_report", "*", "id_order", $dataget[1], "select");
     if (!is_array($payemntcheck) || (string) $payemntcheck['id_user'] !== (string) $from_id) {
         return;
     }
-    if ($payemntcheck['payment_Status'] == "paid") {
-        sendmessage($from_id, $textbotlang['users']['Balance']['alreadyConfirmed'], null, 'HTML');
-        return;
-    }
-    if ($payemntcheck['payment_Status'] == "expire") {
-        sendmessage($from_id, $textbotlang['users']['Balance']['transactionExpired'], null, 'HTML');
+    // per-order checks + a 10-minute flood limit (a receipt for another order no longer blocks this one)
+    if (!receiptAllowed($pdo, $payemntcheck, $from_id, in_array($from_id, $admin_ids), $textbotlang)) {
         return;
     }
     if ((select("PaySetting", "ValuePay", "NamePay", "smsautoconfirm", "select")['ValuePay'] ?? '') === 'onsms') {
@@ -5856,6 +5809,12 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     }
     if ($PaymentReport['Payment_Method'] === 'variza') {
         $textsendrasid .= "\n\n⚠️ روش پرداخت: <b>واریزا (رسید دستی)</b>\nتأیید خودکار واریزا دریافت نشده؛ قبل از تأیید، واریز را در پنل واریزا یا حساب بانکی بررسی کنید.";
+        $vDelayMin = intval(select("PaySetting", "ValuePay", "NamePay", "variza_receipt_delay", "select")['ValuePay'] ?? 5);
+        $vEarly = receiptGate($PaymentReport, time(), $vDelayMin, 0, true)['early'];
+        if ($vEarly > 0) {
+            $textsendrasid .= "\n⏳ این رسید زود ارسال شده؛ واریزا ممکن است تا حدود {$vEarly} دقیقهٔ دیگر خودش تأیید کند (در این صورت لازم نیست کاری کنید).";
+            sendmessage($from_id, $textbotlang['users']['Balance']['varizaReceiptEarlyNote'], null, 'HTML');
+        }
     }
     foreach ($admin_ids as $id_admin) {
         $adminrulecheck = select("admin", "*", "id_admin", $id_admin, "select");

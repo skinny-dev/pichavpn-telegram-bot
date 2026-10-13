@@ -149,6 +149,16 @@ if (!empty($setting['Channel_Report']) && $paymentreports) {
     ]);
 }
 
+// The customer had already sent a manual receipt (waiting for an admin), but Variza confirmed it by itself: nothing left to review.
+if ($statusBeforeClaim === 'waiting' && !empty($setting['Channel_Report']) && $paymentreports) {
+    telegram('sendmessage', [
+        'chat_id' => $setting['Channel_Report'],
+        'message_thread_id' => $paymentreports,
+        'text' => "✅ واریزا خودکار تأیید کرد؛ رسید دستی سفارش <code>{$order_id}</code> دیگر نیاز به بررسی ندارد (سرویس فعال شد).",
+        'parse_mode' => "HTML"
+    ]);
+}
+
 // An admin had declined the manual receipt, but Variza now confirms the money really arrived: it was credited, tell the admins.
 if ($statusBeforeClaim === 'reject' && !empty($setting['Channel_Report']) && $paymentreports) {
     telegram('sendmessage', [
