@@ -35,6 +35,36 @@ function vs_get(array $panel, string $token, string $path)
     return $code === 200 ? json_decode((string) $out, true) : null;
 }
 
+/** Last subscription fetch (time, app) per username, 20 requests at a time: the user list doesn't carry it. */
+function vs_sub_updates(array $panel, string $token, array $names): array
+{
+    $out = [];
+    foreach (array_chunk($names, 20) as $chunk) {
+        $mh = curl_multi_init();
+        $hs = [];
+        foreach ($chunk as $n) {
+            $ch = curl_init(rtrim($panel['url_panel'], '/') . '/api/user/' . rawurlencode($n) . '/sub_update?offset=0&limit=1');
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . $token]]);
+            curl_multi_add_handle($mh, $ch);
+            $hs[$n] = $ch;
+        }
+        do {
+            $st = curl_multi_exec($mh, $running);
+            $running && curl_multi_select($mh, 1);
+        } while ($running && $st === CURLM_OK);
+        foreach ($hs as $n => $ch) {
+            $j = json_decode((string) curl_multi_getcontent($ch), true);
+            $u = $j['updates'][0] ?? null;
+            $out[$n] = $u ? [$u['created_at'] ?? null, $u['user_agent'] ?? null] : [null, null];
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+        }
+        curl_multi_close($mh);
+    }
+    return $out;
+}
+
 function vs_time($v): ?int
 {
     if ($v === null || $v === '') {
@@ -99,6 +129,14 @@ foreach ($panels as $panel) {
         echo "کاربر فعالی برنگشت\n";
         continue;
     }
+    if (!array_filter(array_column($users, 'sub_last_user_agent'))) {
+        echo "در حال خواندن آخرین دریافت ساب " . count($users) . " کاربر...\n";
+        $subs = vs_sub_updates($panel, $token, array_column($users, 'username'));
+        foreach ($users as &$uu) {
+            [$uu['sub_updated_at'], $uu['sub_last_user_agent']] = $subs[$uu['username']] ?? [null, null];
+        }
+        unset($uu);
+    }
     $now = time();
     $rows = ['OK' => [], 'BAD' => []];
     $badList = [];
@@ -120,6 +158,8 @@ foreach ($panels as $panel) {
             'پروتکل‌ها' => implode('+', array_keys(array_filter((array) $ps))) ?: '-',
             'VLESS flow' => ($ps['vless']['flow'] ?? '') ?: '(خالی)',
             'ماه ساخت' => $created ? date('Y-m', $created) : '?',
+            'مصرف دوره فعلی (بعد از خرید/تمدید)' => ((float) ($u['used_traffic'] ?? 0)) <= 0 ? (((float) ($u['lifetime_used_traffic'] ?? 0)) > 0 ? 'صفر — قبلاً مصرف داشته (بعد از تمدید وصل نشده)' : 'صفر') : 'مصرف دارد',
+            'آخرین اتصال' => vs_age($online),
             'مصرف کل' => ((float) ($u['lifetime_used_traffic'] ?? $u['used_traffic'] ?? 0)) <= 0 ? 'هرگز مصرف نکرده' : 'مصرف داشته',
             'محدودیت حجم' => empty($u['data_limit']) ? 'نامحدود' : 'حجمی',
             'ریست حجم' => (string) ($u['data_limit_reset_strategy'] ?? '-'),

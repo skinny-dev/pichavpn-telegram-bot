@@ -2,6 +2,7 @@
 // «پینگ میده ولی وصل نمیشه»: checks what a customer really gets from the panel and whether each config can work.
 //
 //   php scripts/vpn_check.php USERNAME [USERNAME ...]   # panel usernames (as in the bot's service info)
+//   php scripts/vpn_check.php 118706554                  # a Telegram user id: every service of that customer
 //   php scripts/vpn_check.php                            # the 3 newest active services
 //
 // For every user: panel status, used / total, expiry, last online, last subscription update + app.
@@ -21,8 +22,25 @@ require $root . '/config.php';
 require_once $root . '/function.php';
 require_once $root . '/panels.php';
 
-$users = array_slice($argv, 1);
-if (!$users) {
+$users = [];
+foreach (array_slice($argv, 1) as $arg) {
+    // a Telegram user id (numbers only) → all services of that customer, newest first
+    if (ctype_digit($arg) && !select('invoice', 'username', 'username', $arg, 'select')) {
+        $st = $pdo->prepare("SELECT username, Status FROM invoice WHERE id_user = ? ORDER BY CAST(time_sell AS UNSIGNED) DESC");
+        $st->execute([$arg]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        echo "آیدی تلگرام $arg: " . count($rows) . " سرویس" . ($rows ? ' — ' . implode('، ', array_map(fn($r) => $r['username'] . " ({$r['Status']})", $rows)) : '') . "\n";
+        foreach ($rows as $r) {
+            if (!in_array($r['Status'], ['Unpaid', 'removebyadmin', 'unpaid'], true)) {
+                $users[] = $r['username'];
+            }
+        }
+        continue;
+    }
+    $users[] = $arg;
+}
+$users = array_values(array_unique($users));
+if (!$users && $argc < 2) {
     $users = $pdo->query("SELECT username FROM invoice WHERE Status = 'active' ORDER BY time_sell DESC LIMIT 3")->fetchAll(PDO::FETCH_COLUMN);
 }
 if (!$users) {
@@ -184,6 +202,22 @@ foreach ($users as $username) {
     if ($st !== 'active') {
         echo "⚠️ کاربر فعال نیست ($st): اپ پینگ می‌گیرد ولی سرور اتصال را قبول نمی‌کند\n";
         $problems[] = "$username: وضعیت $st";
+    }
+    $subUrl = (string) ($d['subscription_url'] ?? '');
+    if ($subUrl !== '') {
+        $ch = curl_init($subUrl);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true, CURLOPT_USERAGENT => 'Happ/3.0']);
+        $body = (string) curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
+        $dec = base64_decode(trim($body), true);
+        $n = preg_match_all('#^[a-z0-9]+://#mi', $dec !== false && $dec !== '' ? $dec : $body);
+        $host = parse_url($subUrl, PHP_URL_HOST);
+        echo "لینک ساب (دامنه $host): " . ($code === 200 && $n ? "✅ باز می‌شود، $n کانفیگ" : "❌ HTTP $code " . ($err ?: ($n ? '' : 'بدون کانفیگ'))) . "\n";
+        if ($code !== 200 || !$n) {
+            $problems[] = "$username: لینک ساب کار نمی‌کند";
+        }
     }
     $links = $d['links'] ?? [];
     $links = is_array($links) ? $links : explode("\n", (string) $links);
