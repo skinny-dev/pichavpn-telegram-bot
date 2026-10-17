@@ -138,8 +138,30 @@ function promoStrike(string $s): string
 }
 
 /**
- * Button text of a product during a promotion: «🔥 ۲۰٪ | 40 گیگ — 1̶4̶4̶,̶0̶0̶0̶ 115,000 تومان» or «🎁 +10 گیگ | ...».
- * Prices / volumes written inside the product name are updated so the button never shows the old offer as current.
+ * The emoji shown on a promoted product's button. The first premium-pack emoji from the candidates wins (the premium
+ * layer then turns it into the button's custom icon); plain emoji when no pack is configured.
+ */
+function promoEmoji(string $type): string
+{
+    $candidates = $type === 'percent' ? ['🏷', '💸', '🤑', '🔖', '💰', '🔥'] : ['🎁', '🎉', '🎀', '🔥'];
+    $map = function_exists('premiumEmojiConfig') ? (premiumEmojiConfig()['map'] ?? []) : [];
+    foreach ($candidates as $e) {
+        if (isset($map[$e])) {
+            return $e;
+        }
+    }
+    return $candidates[0];
+}
+
+/** A left-to-right isolate: keeps «200,000» readable inside a Persian (RTL) label. */
+function promoLtr(string $s): string
+{
+    return "\u{2066}" . $s . "\u{2069}";
+}
+
+/**
+ * Button text of a product during a promotion, e.g. «🏷 40 گیگ — 2̶0̶0̶,̶0̶0̶0̶ 160,000 تومان» or «🎁 50 گیگ (+10 هدیه) — 144,000 تومان».
+ * One emoji only (the catalog emoji is replaced), the old price struck through, no extra words.
  */
 function promoButtonLabel(array $product, string $label): string
 {
@@ -157,12 +179,24 @@ function promoButtonLabel(array $product, string $label): string
     if (!$it) {
         return $label;
     }
+    // drop the catalog emoji (⚡ ⭐ 💎 …) in front: the promotion emoji takes its place
+    $label = preg_replace('/^\s*(?:(?:<tg-emoji\b[^>]*>.*?<\/tg-emoji>|\p{Extended_Pictographic}\x{FE0F}?)\s*)+/u', '', $label) ?? $label;
     if ($it['type'] === 'percent') {
         $old = number_format($it['old_price']);
-        $label = str_replace($old, promoStrike($old) . ' ' . number_format($it['new_price']), $label);
-        return '🔥 ' . promoNum($it['value']) . '٪ تخفیف | ' . $label;
+        $new = number_format($it['new_price']);
+        if (strpos($label, $old) !== false) {
+            $label = str_replace($old, promoLtr(promoStrike($old)) . ' ' . promoLtr($new), $label);
+        } else {
+            $label .= ' — ' . promoLtr(promoStrike($old)) . ' ' . promoLtr($new) . ' تومان';
+        }
+    } else {
+        $old = promoNum($it['old_gb']);
+        $bonus = promoNum($it['new_gb'] - $it['old_gb']);
+        $count = 0;
+        $label = preg_replace('/(?<![\d.])' . preg_quote($old, '/') . '(\s*گیگ)/u', promoNum($it['new_gb']) . '$1 (+' . $bonus . ' هدیه)', $label, 1, $count) ?? $label;
+        if (!$count) {
+            $label .= ' (+' . $bonus . ' گیگ هدیه)';
+        }
     }
-    $old = promoNum($it['old_gb']);
-    $label = preg_replace('/(?<![\d.])' . preg_quote($old, '/') . '(\s*گیگ)/u', $old . '+' . promoNum($it['value']) . '$1', $label, 1) ?? $label;
-    return '🎁 +' . promoNum($it['value']) . ' گیگ هدیه | ' . $label;
+    return promoEmoji($it['type']) . ' ' . $label;
 }
