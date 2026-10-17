@@ -26,6 +26,7 @@ require_once __DIR__ . '/../referral_links.php';
 require_once __DIR__ . '/manual_order.php';
 require_once __DIR__ . '/payments_admin.php';
 require_once __DIR__ . '/activity.php';
+require_once __DIR__ . '/promo_api.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
@@ -613,6 +614,9 @@ if ($role === 'support' && !in_array($route, ['logout', 'support_unread', 'suppo
 // ---------------------------------------------------------------- routes
 
 try {
+    if (strncmp($route, 'promo_', 6) === 0) {
+        picha_promo_route($route, $pdo);
+    }
     if (strncmp($route, 'fin_', 4) === 0) {
         require_once __DIR__ . '/finance_api.php';
         picha_finance_route($route, $pdo, $role, (string) $_SESSION['admin_user']);

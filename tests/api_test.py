@@ -335,6 +335,7 @@ s, r = call('referrals'); check('support role is denied referrals (403)', s == 4
 s, r = call('order_create', {'panel': 'x'}); check('support role is denied manual orders (403)', s == 403, (s, r))
 s, r = call('payment_create', {'price': '1'}); check('support role is denied manual payments (403)', s == 403, (s, r))
 s, r = call('pay_pending'); check('support role is denied pending payments (403)', s == 403, (s, r))
+s, r = call('promo_state'); check('support role is denied promotions (403)', s == 403, (s, r))
 op, csrf = op_saved, csrf_saved
 call('admin_delete', {'id': '555666779'})
 sql("DELETE FROM expenses WHERE description='سرور تست'")
@@ -417,6 +418,27 @@ s, r = call('activity', month='1405/01'); check('activity: Farvardin has 31 days
 s, r = call('activity', month='1405/07'); check('activity: Mehr has 30 days and all series', s == 200 and len(r['days']) == 30 and all(len(v) == 30 for v in r['series'].values()) and set(r['series']) >= {'revenue','orders','renew','new_users','expenses','net','support','tests'}, (s, str(r)[:200]))
 check('activity: net = revenue - expenses each day', all(n == rv - e for n, rv, e in zip(r['series']['net'], r['series']['revenue'], r['series']['expenses'])), r['series'])
 s, r = call('activity'); check('activity: current month by default', s == 200 and r['days'], (s, str(r)[:200]))
+
+# promotions: percent off / bonus GB on chosen products, auto restore
+sql("DELETE FROM product WHERE code_product LIKE 'promo%'")
+sql("INSERT INTO product (code_product,name_product,price_product,Volume_constraint,Location,Service_time,agent,note,data_limit_reset,one_buy_status,category,hide_panel,status_product) VALUES ('promo10','10 گیگ — 60,000 تومان','60000','10','/all','30','f','','no_reset','0','پرحجم','{}','active'),('promo40','40 گیگ — 144,000 تومان','144000','40','/all','30','f','','no_reset','0','پرحجم','{}','active'),('promoU','نامحدود','300000','0','/all','30','f','','no_reset','0','پرحجم','{}','active')")
+call('promo_end', {})
+s, r = call('promo_state'); P = {p['name']: p for p in r.get('products', [])}; check('promo state lists products by category', s == 200 and r['active'] is None and P['40 گیگ — 144,000 تومان']['category'] == 'پرحجم', (s, str(r)[:200]))
+pid10, pid40, pidU = P['10 گیگ — 60,000 تومان']['id'], P['40 گیگ — 144,000 تومان']['id'], P['نامحدود']['id']
+s, r = call('promo_preview', {'ids': [pid40], 'type': 'percent', 'value': '20', 'round': 5000, 'round_mode': 'down'}); check('preview 20% rounded to 5,000: 144,000 -> 115,000', s == 200 and r['items'][0]['new_price'] == 115000, (s, r))
+s, r = call('promo_preview', {'ids': [pid40], 'type': 'percent', 'value': '20', 'round': 10000, 'round_mode': 'nearest'}); check('preview rounded to nearest 10,000: 120,000', r['items'][0]['new_price'] == 120000, r)
+s, r = call('promo_preview', {'ids': [pidU, pid40], 'type': 'bonus_gb', 'value': '10'}); check('bonus GB skips unlimited plans', s == 200 and [i['id'] for i in r['items']] == [pid40] and r['items'][0]['new_gb'] == 50, (s, r))
+s, r = call('promo_preview', {'ids': [pid40], 'type': 'percent', 'value': '95'}); check('absurd percent rejected', s == 422, (s, r))
+s, r = call('promo_start', {'ids': [pid10, pid40], 'type': 'percent', 'value': '20', 'round': 1000, 'hours': 72, 'title': 'تست'}); check('promo started', s == 200 and len(r['active']['items']) == 2, (s, r))
+s, r = call('promo_state'); P = {p['id']: p for p in r['products']}; check('product prices really changed (48,000 / 115,000), names untouched', P[pid10]['price'] == 48000 and P[pid40]['price'] == 115000 and P[pid40]['name'] == '40 گیگ — 144,000 تومان' and r['active'], P.get(pid40))
+s, r = call('promo_start', {'ids': [pid10], 'type': 'percent', 'value': '10', 'hours': 24}); check('second promotion refused while one runs (409)', s == 409, (s, r))
+sql(f"UPDATE product SET price_product='99000' WHERE id={pid10}")
+s, r = call('promo_end', {}); check('end restores, leaves admin-edited price alone', s == 200 and r['restored'] == 1 and r['skipped'] == ['10 گیگ — 60,000 تومان'], (s, r))
+s, r = call('promo_state'); P = {p['id']: p for p in r['products']}; check('prices back: 144,000 restored, 99,000 kept', P[pid40]['price'] == 144000 and P[pid10]['price'] == 99000 and r['active'] is None, P.get(pid40))
+s, r = call('promo_start', {'ids': [pid40], 'type': 'bonus_gb', 'value': '10', 'hours': 1}); check('bonus GB promo started', s == 200, (s, r))
+s, r = call('promo_state'); P = {p['id']: p for p in r['products']}; check('volume 40 -> 50 GB', P[pid40]['gb'] == 50, P.get(pid40))
+call('promo_end', {}); s, r = call('promo_state'); P = {p['id']: p for p in r['products']}; check('volume back to 40', P[pid40]['gb'] == 40, P.get(pid40))
+sql("DELETE FROM product WHERE code_product LIKE 'promo%'")
 
 # manual orders (customers outside Telegram): validation paths only, creation needs a real VPN panel
 s, r = call('order_options'); check('order options: panels + products', s == 200 and 'panels' in r and 'products' in r, (s, r))

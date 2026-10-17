@@ -1360,7 +1360,7 @@ function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $stat
             continue;
         }
         $product['inline_keyboard'][] = [
-            ['text' => function_exists('premiumCatalogLabel') ? premiumCatalogLabel('product', $result, $result['name_product']) : $result['name_product'], 'callback_data' => "{$datakeyboard}{$result['code_product']}{$valuetow}"]
+            ['text' => (function_exists('promoButtonLabel') ? 'promoButtonLabel' : fn($r, $l) => $l)($result, function_exists('premiumCatalogLabel') ? premiumCatalogLabel('product', $result, $result['name_product']) : $result['name_product']), 'callback_data' => "{$datakeyboard}{$result['code_product']}{$valuetow}"]
         ];
     }
     if ($statuscustom)

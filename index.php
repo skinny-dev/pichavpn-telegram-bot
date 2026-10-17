@@ -12,6 +12,7 @@ mirzaEnsureInstallerRemoved();
 require_once 'keyboard.php';
 require_once 'vendor/autoload.php';
 require_once 'panels.php';
+promoAutoEnd($pdo); // a finished price promotion puts the normal prices back
 $textbotlang = languagechange();
 $text = restoreCustomEmojiLabel($text);
 #-----------telegram_ip_ranges------------#
