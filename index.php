@@ -1436,44 +1436,31 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         return;
     }
     if ($setting['statuscategory'] == "offcategory") {
-        $stmt = $pdo->prepare("SELECT * FROM product WHERE (Location = :service_location OR Location = '/all') AND agent = :agent AND one_buy_status = '0'");
-        $stmt->execute([
-            ':service_location' => $nameloc['Service_location'],
-            ':agent' => $user['agent'],
-        ]);
-        $productextend = ['inline_keyboard' => []];
-        $statusshowprice = select("shopSetting", "*", "Namevalue", "statusshowprice", "select")['value'];
-        while ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $hide_panel = json_decode($result['hide_panel'], true);
-            if (in_array($nameloc['Service_location'], $hide_panel))
-                continue;
-            if (intval($user['pricediscount']) != 0) {
-                $resultper = ($result['price_product'] * $user['pricediscount']) / 100;
-                $result['price_product'] = $result['price_product'] - $resultper;
-            }
-            if ($statusshowprice == "offshowprice") {
-                $namekeyboard = $result['name_product'];
-            } else {
-                $result['price_product'] = number_format($result['price_product']);
-                $namekeyboard = $result['name_product'] . " - " . $result['price_product'] . $textbotlang['common']['labels']['tomanUnit'];
-            }
-            $productextend['inline_keyboard'][] = [
-                ['text' => $namekeyboard, 'callback_data' => "serviceextendselect_" . $result['code_product']]
-            ];
+        // same list as a new purchase: categories first (when on), then the products in the category's order with promo labels
+        $renewRows = [[['text' => $textbotlang['keyboard']['renewCurrentPlan'], 'callback_data' => "exntedagei"]]];
+        if ($setting['statuscategorygenral'] == "oncategorys") {
+            $kb = keyboardRowsBeforeBack(KeyboardCategory($nameloc['Service_location'], $user['agent'], "product_" . $nameloc['id_invoice'], "extcat_", "AND one_buy_status = '0'"), $renewRows);
+            Editmessagetext($from_id, $message_id, $textbotlang['users']['sell']['selectCategory'], $kb);
+        } else {
+            $query = "SELECT * FROM product WHERE (Location = :loc OR Location = '/all') AND agent = :agent AND one_buy_status = '0'";
+            $kb = keyboardRowsBeforeBack(KeyboardProduct($nameloc['Service_location'], $query, $user['pricediscount'], "serviceextendselect_", false, "product_" . $nameloc['id_invoice'], null, "customsellvolume", [':loc' => $nameloc['Service_location'], ':agent' => $user['agent']]), $renewRows);
+            Editmessagetext($from_id, $message_id, $textbotlang['users']['extend']['selectservice'], $kb);
         }
-        $productextend['inline_keyboard'][] = [
-            ['text' => $textbotlang['keyboard']['renewCurrentPlan'], 'callback_data' => "exntedagei"]
-        ];
-        $productextend['inline_keyboard'][] = [
-            ['text' => $textbotlang['keyboard']['backToServiceInfo'], 'callback_data' => "product_" . $nameloc['id_invoice']]
-        ];
-
-        $json_list_product_lists = json_encode($productextend);
-        Editmessagetext($from_id, $message_id, $textbotlang['users']['extend']['selectservice'], $json_list_product_lists);
     } else {
         $monthkeyboard = keyboardTimeCategory($nameloc['Service_location'], $user['agent'], "productextendmonths_", "product_$id_invoice", false, true);
         Editmessagetext($from_id, $message_id, $textbotlang['users']['sell']['selectDuration'], $monthkeyboard);
     }
+} elseif (preg_match('/^extcat_(\d+)$/', $datain, $dataget)) {
+    $userdate = json_decode($user['Processing_value'], true);
+    $nameloc = is_array($userdate) && !empty($userdate['id_invoice']) ? select("invoice", "*", "id_invoice", $userdate['id_invoice'], "select") : false;
+    $catRow = select("category", "remark", "id", $dataget[1], "select");
+    if ($nameloc == false || !invoiceBelongsToUser($nameloc, $from_id) || !$catRow) {
+        sendmessage($from_id, $textbotlang['users']['extend']['error'], null, 'HTML');
+        return;
+    }
+    $query = "SELECT * FROM product WHERE (Location = :loc OR Location = '/all') AND agent = :agent AND one_buy_status = '0' AND category = :category";
+    $params = [':loc' => $nameloc['Service_location'], ':agent' => $user['agent'], ':category' => $catRow['remark']];
+    Editmessagetext($from_id, $message_id, $textbotlang['users']['extend']['selectservice'], KeyboardProduct($nameloc['Service_location'], $query, $user['pricediscount'], "serviceextendselect_", false, "extend_" . $nameloc['id_invoice'], null, "customsellvolume", $params));
 } elseif ($user['step'] == "gettimecustomvolomforextend") {
     $userdate = json_decode($user['Processing_value'], true);
     $nameloc = select("invoice", "*", "id_invoice", $userdate['id_invoice'], "select");
@@ -1505,40 +1492,12 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $monthenumber = $dataget[1];
     $userdate = json_decode($user['Processing_value'], true);
     $nameloc = select("invoice", "*", "id_invoice", $userdate['id_invoice'], "select");
-    $stmt = $pdo->prepare("SELECT * FROM product WHERE (Location = :service_location OR Location = '/all') AND agent = :agent AND Service_time = :monthe AND one_buy_status = '0'");
-    $stmt->execute([
-        ':service_location' => $nameloc['Service_location'],
-        ':agent' => $user['agent'],
-        'monthe' => $monthenumber
-    ]);
-    $productextend = ['inline_keyboard' => []];
-    $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
-    $statusshowprice = select("shopSetting", "*", "Namevalue", "statusshowprice", "select")['value'];
-    while ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        if (intval($user['pricediscount']) != 0) {
-            $resultper = ($result['price_product'] * $user['pricediscount']) / 100;
-            $result['price_product'] = $result['price_product'] - $resultper;
-        }
-        if ($statusshowprice == "offshowprice") {
-            $namekeyboard = $result['name_product'];
-        } else {
-            $result['price_product'] = number_format($result['price_product']);
-            $namekeyboard = $result['name_product'] . " - " . $result['price_product'] . $textbotlang['common']['labels']['tomanUnit'];
-        }
-        $productextend['inline_keyboard'][] = [
-            ['text' => $namekeyboard, 'callback_data' => "serviceextendselect_" . $result['code_product']]
-        ];
-    }
+    $rows = [];
     if ($nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnVolume'] || $nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnService']) {
-        $productextend['inline_keyboard'][] = [
-            ['text' => $textbotlang['keyboard']['selectCurrentService'], 'callback_data' => "serviceextendselect_pre"]
-        ];
+        $rows[] = [['text' => $textbotlang['keyboard']['selectCurrentService'], 'callback_data' => "serviceextendselect_pre"]];
     }
-    $productextend['inline_keyboard'][] = [
-        ['text' => $textbotlang['keyboard']['backToServiceInfo'], 'callback_data' => "product_" . $nameloc['id_invoice']]
-    ];
-
-    $json_list_product_lists = json_encode($productextend);
+    $query = "SELECT * FROM product WHERE (Location = :loc OR Location = '/all') AND agent = :agent AND Service_time = :monthe AND one_buy_status = '0'";
+    $json_list_product_lists = keyboardRowsBeforeBack(KeyboardProduct($nameloc['Service_location'], $query, $user['pricediscount'], "serviceextendselect_", false, "product_" . $nameloc['id_invoice'], null, "customsellvolume", [':loc' => $nameloc['Service_location'], ':agent' => $user['agent'], ':monthe' => $monthenumber]), $rows);
     Editmessagetext($from_id, $message_id, $textbotlang['users']['extend']['selectservice'], $json_list_product_lists);
 } elseif (preg_match('/^serviceextendselect_(.*)/', $datain, $dataget) || $user['step'] == "getvolumecustomuserforextend" || $datain == "exntedagei") {
     $userdate = json_decode($user['Processing_value'], true);

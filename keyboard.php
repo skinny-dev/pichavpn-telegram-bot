@@ -1370,10 +1370,10 @@ function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $stat
     ];
     return json_encode($product);
 }
-function KeyboardCategory($location, $agent, $backuser = "backuser")
+function KeyboardCategory($location, $agent, $backuser = "backuser", $callbackPrefix = "categorynames_", $productWhere = "")
 {
     global $pdo, $textbotlang;
-    $stmts = $pdo->prepare("SELECT category, COUNT(*) AS c FROM product WHERE (Location = :location OR Location = '/all') AND agent = :agent GROUP BY category");
+    $stmts = $pdo->prepare("SELECT category, COUNT(*) AS c FROM product WHERE (Location = :location OR Location = '/all') AND agent = :agent $productWhere GROUP BY category");
     $stmts->bindParam(':location', $location, PDO::PARAM_STR);
     $stmts->bindParam(':agent', $agent);
     $stmts->execute();
@@ -1394,12 +1394,24 @@ function KeyboardCategory($location, $agent, $backuser = "backuser")
             $list_category['inline_keyboard'][] = [['text' => $label . " | " . ($textbotlang['keyboard']['productSoldOut'] ?? '🔴 ناموجود'), 'callback_data' => "categorysoldout"]];
             continue;
         }
-        $list_category['inline_keyboard'][] = [['text' => $label, 'callback_data' => "categorynames_" . $row['id']]];
+        $list_category['inline_keyboard'][] = [['text' => $label, 'callback_data' => $callbackPrefix . $row['id']]];
     }
     $list_category['inline_keyboard'][] = [
         ['text' => $textbotlang['keyboard']['backToPreviousMenu'], "callback_data" => $backuser],
     ];
     return json_encode($list_category);
+}
+
+/** Adds rows to a keyboard (JSON) just above its last row (the back button). */
+function keyboardRowsBeforeBack(string $json, array $rows): string
+{
+    $kb = json_decode($json, true);
+    $back = array_pop($kb['inline_keyboard']);
+    foreach ($rows as $r) {
+        $kb['inline_keyboard'][] = $r;
+    }
+    $kb['inline_keyboard'][] = $back;
+    return json_encode($kb);
 }
 
 function keyboardTimeCategory($name_panel, $agent, $callback_data = "producttime_", $callback_data_back = "backuser", $statuscustomvolume = false, $statusbtnextend = false)
