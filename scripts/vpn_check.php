@@ -152,7 +152,8 @@ function vc_ws($stream, string $host, string $path): string
 foreach ($users as $username) {
     $inv = select('invoice', '*', 'username', $username, 'select');
     if (!$inv) {
-        echo "\n━━━━ $username: در ربات پیدا نشد\n";
+        echo "\n━━━━ $username: در ربات پیدا نشد (نام کاربری سرویس را از «اطلاعات سرویس» در ربات یا پنل بردارید)\n";
+        $problems[] = "$username: پیدا نشد";
         continue;
     }
     echo "\n━━━━ $username | پنل: {$inv['Service_location']} | محصول: {$inv['name_product']}\n";
