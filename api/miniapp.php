@@ -737,7 +737,7 @@ function mini_custom_price(array $data, string $method): void
         $traffic_price = panelAgentValue($panel['pricecustomvolume'], $agentKey);
         $time_price = panelAgentValue($panel['pricecustomtime'], $agentKey);
         if (intval($statuscustomvolume) == 1 && $panel['type'] != "Manualsale") {
-            $price = ($traffic_price * intval($data['traffic_gb'])) + ($time_price * intval($data['time_days']));
+            $price = customPlanPrice($panel, $agentKey, intval($data['traffic_gb']), intval($data['time_days']));
         } else {
             $price = false;
         }
@@ -860,7 +860,7 @@ function mini_purchase(array $data, string $method): void
             'Service_time' => (int) $customsrvice['time_days'],
             'Location' => $panel['name_panel'],
             'category' => null,
-            'price_product' => ((int) $customsrvice['traffic_gb'] * $custompricevalue) + ((int) $customsrvice['time_days'] * $customtimevalueprice)
+            'price_product' => customPlanPrice($panel, $agentKey, (int) $customsrvice['traffic_gb'], (int) $customsrvice['time_days'])
         );
         if (intval($product['Volume_constraint']) > $maxvolume or intval($product['Volume_constraint']) < $mainvolume) {
             http_response_code(500);

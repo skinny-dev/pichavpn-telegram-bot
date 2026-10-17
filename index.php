@@ -1422,14 +1422,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $product = $stmt->rowCount();
     savedata("clear", "id_invoice", $nameloc['id_invoice']);
     if ($product == 0) {
-        $textcustom = sprintf($textbotlang['users']['sell']['customVolumePrompt'], $custompricevalue, $mainvolume, $maxvolume);
+        $textcustom = customPricePrompt($textbotlang['users']['sell']['customVolumePrompt'], $marzban_list_get, $user['agent'], 'volume', $custompricevalue, $mainvolume, $maxvolume);
         sendmessage($from_id, $textcustom, $backuser, 'html');
         deletemessage($from_id, $message_id);
         step('gettimecustomvolomforextend', $from_id);
         return;
     }
     if ($nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnVolume'] || $nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnService']) {
-        $textcustom = sprintf($textbotlang['users']['sell']['customVolumePrompt2'], $custompricevalue, $mainvolume, $maxvolume);
+        $textcustom = customPricePrompt($textbotlang['users']['sell']['customVolumePrompt2'], $marzban_list_get, $user['agent'], 'volume', $custompricevalue, $mainvolume, $maxvolume);
         sendmessage($from_id, $textcustom, $backuser, 'html');
         deletemessage($from_id, $message_id);
         step('gettimecustomvolomforextend', $from_id);
@@ -1498,7 +1498,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $eextraprice = json_decode($marzban_list_get['pricecustomtime'], true);
     $customtimevalueprice = $eextraprice[$user['agent']];
     savedata("save", "volume", $text);
-    $textcustom = sprintf($textbotlang['users']['sell']['customTimePrompt'], $customtimevalueprice, $maintime, $maxtime);
+    $textcustom = customPricePrompt($textbotlang['users']['sell']['customTimePrompt'], $marzban_list_get, $user['agent'], 'time', $customtimevalueprice, $maintime, $maxtime);
     sendmessage($from_id, $textcustom, $backuser, 'html');
     step('getvolumecustomuserforextend', $from_id);
 } elseif (preg_match('/productextendmonths_(\w+)/', $datain, $dataget)) {
@@ -1591,7 +1591,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $product['name_product'] = $nameloc['name_product'];
         $product['code_product'] = "customvolume";
         $product['note'] = "";
-        $product['price_product'] = (intval($userdate['volume']) * $custompricevalue) + ($text * $customtimevalueprice);
+        $product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], intval($userdate['volume']), $text);
         $product['Service_time'] = $text;
         $product['Volume_constraint'] = $userdate['volume'];
         step("home", $from_id);
@@ -1702,7 +1702,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if ($nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnVolume'] || $nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnService']) {
         $info_product['code_product'] = "pre";
         $info_product['name_product'] = $nameloc['name_product'];
-        $info_product['price_product'] = ($userdate['data_limit'] * $custompricevalue) + ($userdate['time'] * $customtimevalueprice);
+        $info_product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $userdate['data_limit'], $userdate['time']);
         $info_product['Service_time'] = $userdate['time'];
         $info_product['Volume_constraint'] = $userdate['data_limit'];
     } else {
@@ -1754,7 +1754,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if ($nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnVolume'] || $nameloc['name_product'] == $textbotlang['users']['customSellVolume']['btnService']) {
         $prodcut['code_product'] = "custom_volume";
         $prodcut['name_product'] = $nameloc['name_product'];
-        $prodcut['price_product'] = ($userdata['data_limit'] * $custompricevalue) + ($userdata['time'] * $customtimevalueprice);
+        $prodcut['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $userdata['data_limit'], $userdata['time']);
         $prodcut['Service_time'] = $userdata['time'];
         $prodcut['Volume_constraint'] = $userdata['data_limit'];
         $prodcut['inbounds'] = $marzban_list_get['inboundid'];
@@ -3501,7 +3501,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             $maxvolume = $maxvolume[$user['agent']];
             $nullproduct = select("product", "*", null, null, "count");
             if ($nullproduct == 0) {
-                $textcustom = sprintf($textbotlang['users']['sell']['customVolumePrompt3'], $custompricevalue, $mainvolume, $maxvolume);
+                $textcustom = customPricePrompt($textbotlang['users']['sell']['customVolumePrompt3'], $marzban_list_get, $user['agent'], 'volume', $custompricevalue, $mainvolume, $maxvolume);
                 sendmessage($from_id, $textcustom, $backuser, 'html');
                 step('gettimecustomvol', $from_id);
                 return;
@@ -3604,7 +3604,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $mainvolume = $mainvolume[$user['agent']];
         $maxvolume = json_decode($marzban_list_get['maxvolume'], true);
         $maxvolume = $maxvolume[$user['agent']];
-        $textcustom = sprintf($textbotlang['users']['sell']['customVolumePrompt4'], $custompricevalue, $mainvolume, $maxvolume);
+        $textcustom = customPricePrompt($textbotlang['users']['sell']['customVolumePrompt4'], $marzban_list_get, $user['agent'], 'volume', $custompricevalue, $mainvolume, $maxvolume);
         sendmessage($from_id, $textcustom, $backuser, 'html');
         step('gettimecustomvol', $from_id);
         return;
@@ -3731,7 +3731,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $mainvolume = $mainvolume[$user['agent']];
     $maxvolume = json_decode($marzban_list_get['maxvolume'], true);
     $maxvolume = $maxvolume[$user['agent']];
-    $textcustom = sprintf($textbotlang['users']['sell']['customVolumePrompt5'], $custompricevalue, $mainvolume, $maxvolume);
+    $textcustom = customPricePrompt($textbotlang['users']['sell']['customVolumePrompt5'], $marzban_list_get, $user['agent'], 'volume', $custompricevalue, $mainvolume, $maxvolume);
     sendmessage($from_id, $textcustom, $backuser, 'html');
     deletemessage($from_id, $message_id);
     step('gettimecustomvol', $from_id);
@@ -3759,7 +3759,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $eextraprice = json_decode($marzban_list_get['pricecustomtime'], true);
     $customtimevalueprice = $eextraprice[$user['agent']];
     update("user", "Processing_value_one", $text, "id", $from_id);
-    $textcustom = sprintf($textbotlang['users']['sell']['customTimePrompt2'], $customtimevalueprice, $maintime, $maxtime);
+    $textcustom = customPricePrompt($textbotlang['users']['sell']['customTimePrompt2'], $marzban_list_get, $user['agent'], 'time', $customtimevalueprice, $maintime, $maxtime);
     sendmessage($from_id, $textcustom, $backuser, 'html');
     if (in_array(usernameMethodKey($marzban_list_get['MethodUsername']), ['customUsername', 'customUsernameRandom'], true)) {
         step('getvolumecustomusername', $from_id);
@@ -3853,7 +3853,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $info_product['name_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['code_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['Service_time'] = $parts[1];
-        $info_product['price_product'] = ($parts[2] * $custompricevalue) + ($parts[1] * $customtimevalueprice);
+        $info_product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $parts[2], $parts[1]);
     } else {
         $info_product = $pdo->prepare("SELECT * FROM product WHERE code_product = :code_product AND (Location = :location OR Location = '/all') LIMIT 1");
         $info_product->bindValue(':code_product', $loc, PDO::PARAM_STR);
@@ -3940,7 +3940,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $info_product['name_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['code_product'] = "customvolume";
         $info_product['Service_time'] = $parts[1];
-        $info_product['price_product'] = ($parts[2] * $custompricevalue) + ($parts[1] * $customtimevalueprice);
+        $info_product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $parts[2], $parts[1]);
         $info_product['data_limit_reset'] = "no_reset";
     } else {
         $stmt = $pdo->prepare("SELECT * FROM product WHERE code_product = :code_product AND (Location = :location OR Location = '/all') LIMIT 1");
@@ -4300,7 +4300,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $info_product['name_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['code_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['Service_time'] = $parts[1];
-        $info_product['price_product'] = ($parts[2] * $custompricevalue) + ($parts[1] * $customtimevalueprice);
+        $info_product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $parts[2], $parts[1]);
     } else {
         $stmt = $pdo->prepare("SELECT * FROM product WHERE code_product = :code_product AND (Location = :location OR Location = '/all') LIMIT 1");
         $stmt->bindValue(':code_product', $user['Processing_value_one'], PDO::PARAM_STR);
@@ -4393,7 +4393,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
     $eextraprice = json_decode($marzban_list_get['pricecustomvolume'], true);
     $custompricevalue = $eextraprice[$user['agent']];
-    $textcustom = sprintf($textbotlang['users']['sell']['volumePrompt'], $custompricevalue);
+    $textcustom = customPricePrompt($textbotlang['users']['sell']['volumePrompt'], $marzban_list_get, $user['agent'], 'volume', $custompricevalue);
     sendmessage($from_id, $textcustom, $backuser, 'html');
     deletemessage($from_id, $message_id);
     step('gettimecustomvolom', $from_id);
@@ -4419,7 +4419,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         return;
     }
     update("user", "Processing_value_one", $text, "id", $from_id);
-    $textcustom = sprintf($textbotlang['users']['sell']['timePrompt'], $customtimevalueprice, $maintime, $maxtime);
+    $textcustom = customPricePrompt($textbotlang['users']['sell']['timePrompt'], $marzban_list_get, $user['agent'], 'time', $customtimevalueprice, $maintime, $maxtime);
     sendmessage($from_id, $textcustom, $backuser, 'html');
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
     if (in_array(usernameMethodKey($marzban_list_get['MethodUsername']), ['customUsername', 'customUsernameRandom'], true)) {
@@ -4495,7 +4495,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $info_product['name_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['code_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['Service_time'] = $parts[1];
-        $info_product['price_product'] = ($parts[2] * $custompricevalue) + ($parts[1] * $customtimevalueprice);
+        $info_product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $parts[2], $parts[1]);
     } else {
         $__q8 = $pdo->prepare("SELECT * FROM product WHERE code_product = ? AND (Location = ? or Location = '/all') LIMIT 1");
         $__q8->bindValue(1, $loc, PDO::PARAM_STR);
@@ -4529,7 +4529,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $info_product['name_product'] = $textbotlang['users']['customSellVolume']['title'];
         $info_product['code_product'] = "customvolume";
         $info_product['Service_time'] = $parts[1];
-        $info_product['price_product'] = ($parts[2] * $custompricevalue) + ($parts[1] * $customtimevalueprice);
+        $info_product['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $parts[2], $parts[1]);
         $info_product['data_limit_reset'] = "no_reset";
     } else {
         $stmt = $pdo->prepare("SELECT * FROM product WHERE code_product = :code_product AND (Location = :location OR Location = '/all') LIMIT 1");
@@ -5655,7 +5655,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         if ($codeproduct == "custom_volume") {
             $prodcut['code_product'] = "custom_volume";
             $prodcut['name_product'] = $nameloc['name_product'];
-            $prodcut['price_product'] = ($service_other['volumebuy'] * $custompricevalue) + ($nameloc['Service_time'] * $customtimevalueprice);
+            $prodcut['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $service_other['volumebuy'], $nameloc['Service_time']);
             $prodcut['Service_time'] = $service_other['Service_time'];
             $prodcut['Volume_constraint'] = $service_other['volumebuy'];
         } else {
@@ -5785,7 +5785,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         if ($codeproduct == "custom_volume") {
             $prodcut['code_product'] = "custom_volume";
             $prodcut['name_product'] = $nameloc['name_product'];
-            $prodcut['price_product'] = ($service_other['volumebuy'] * $custompricevalue) + ($service_other['Service_time'] * $customtimevalueprice);
+            $prodcut['price_product'] = customPlanPrice($marzban_list_get, $user['agent'], $service_other['volumebuy'], $service_other['Service_time']);
             $prodcut['Service_time'] = $service_other['Service_time'];
             $prodcut['Volume_constraint'] = $service_other['volumebuy'];
         } else {
