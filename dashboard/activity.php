@@ -45,6 +45,7 @@ function picha_activity(PDO $pdo, int $jy, int $jm): array
     $s['orders'] = $byDay($tsInv, 'invoice i', $sale);
     $s['orders_sum'] = $byDay($tsInv, 'invoice i', $sale, 'SUM(CAST(i.price_product AS SIGNED))');
     $s['renew'] = $byDay($tsSo, 'service_other', "type IN ('extend_user','extend_user_by_admin') AND LOWER(status) = 'paid'");
+    $s['renew_sum'] = $byDay($tsSo, 'service_other', "type IN ('extend_user','extend_user_by_admin') AND LOWER(status) = 'paid'", 'SUM(CAST(price AS SIGNED))');
     $s['new_users'] = $byDay('CAST(register AS UNSIGNED)', 'user', "register REGEXP '^[0-9]+$'");
     $s['tests'] = $byDay($tsInv, 'invoice i', "i.name_product LIKE '%تست%'");
     // expenses = purchases + operating costs (dividends are not an expense), plus Mirza Pro «cost» rows

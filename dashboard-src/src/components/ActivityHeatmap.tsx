@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
-type Key = 'revenue' | 'orders' | 'orders_sum' | 'renew' | 'new_users' | 'tests' | 'expenses' | 'support' | 'net'
+type Key = 'revenue' | 'orders' | 'orders_sum' | 'renew' | 'renew_sum' | 'new_users' | 'tests' | 'expenses' | 'support' | 'net'
 interface Activity { year: number; month: number; title: string; days: { day: number; weekday: number; future: boolean }[]; series: Record<Key, number[]>; totals: Record<Key, number> }
 
 // one hue per job: blue = activity/magnitude, orange = money going out, net = diverging blue/red around a gray zero
@@ -16,14 +16,14 @@ const BLUE = '42 120 214'
 const ORANGE = '235 104 52'
 const RED = '214 64 52'
 const ROWS: { key: Key; label: string; money?: boolean; hue: string }[] = [
-  { key: 'revenue', label: 'پول دریافتی', money: true, hue: BLUE },
-  { key: 'orders', label: 'سفارش', hue: BLUE },
+  { key: 'revenue', label: 'پول دریافتی (کل واریزها)', money: true, hue: BLUE },
+  { key: 'orders', label: 'خرید سرویس', hue: BLUE },
   { key: 'renew', label: 'تمدید', hue: BLUE },
   { key: 'new_users', label: 'کاربر جدید', hue: BLUE },
   { key: 'tests', label: 'اکانت تست', hue: BLUE },
   { key: 'support', label: 'پیام پشتیبانی', hue: BLUE },
   { key: 'expenses', label: 'هزینه', money: true, hue: ORANGE },
-  { key: 'net', label: 'سود روز', money: true, hue: BLUE },
+  { key: 'net', label: 'دریافتی منهای هزینه', money: true, hue: BLUE },
 ]
 const LEVELS = [0.22, 0.45, 0.7, 1]
 /** signed toman, minus sign kept in front for RTL text */
@@ -119,15 +119,20 @@ export function ActivityHeatmap() {
               <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-4" aria-live="polite">
                 <div className="col-span-2 font-medium sm:col-span-4">{d.days[focus].day} {d.title}{d.days[focus].future ? ' (هنوز نرسیده)' : ''}</div>
                 {[
-                  ['پول دریافتی', fmtToman(d.series.revenue[focus])],
-                  ['سفارش', `${fmtNum(d.series.orders[focus])} · ${fmtToman(d.series.orders_sum[focus])}`],
-                  ['تمدید', fmtNum(d.series.renew[focus])],
+                  ['پول دریافتی (کل واریزها)', fmtToman(d.series.revenue[focus])],
+                  ['خرید سرویس', `${fmtNum(d.series.orders[focus])} · ${fmtToman(d.series.orders_sum[focus])}`],
+                  ['تمدید', `${fmtNum(d.series.renew[focus])} · ${fmtToman(d.series.renew_sum?.[focus] ?? 0)}`],
                   ['کاربر جدید', fmtNum(d.series.new_users[focus])],
                   ['اکانت تست', fmtNum(d.series.tests[focus])],
                   ['پیام پشتیبانی', fmtNum(d.series.support[focus])],
                   ['هزینه', fmtToman(d.series.expenses[focus])],
-                  ['سود روز', fmtSigned(d.series.net[focus])],
-                ].map(([k, v]) => <div key={k} className="min-w-0"><div className="text-xs text-muted-foreground">{k}</div><div className={cn('tabular truncate font-semibold', k === 'سود روز' && d.series.net[focus] < 0 && 'text-destructive')}>{v}</div></div>)}
+                  ['دریافتی منهای هزینه', fmtSigned(d.series.net[focus])],
+                ].map(([k, v]) => <div key={k} className="min-w-0"><div className="text-xs text-muted-foreground">{k}</div><div className={cn('tabular truncate font-semibold', k === 'دریافتی منهای هزینه' && d.series.net[focus] < 0 && 'text-destructive')}>{v}</div></div>)}
+                <p className="col-span-2 text-xs leading-6 text-muted-foreground sm:col-span-4">
+                  «پول دریافتی» همهٔ پولی است که آن روز واریز شده (خرید، تمدید، شارژ کیف پول) — سود نیست.
+                  «خرید سرویس» و «تمدید» ارزش سرویس‌هایی است که آن روز فروخته شد؛ بخشی از آن ممکن است از موجودی کیف پولِ روزهای قبل پرداخت شده باشد.
+                  «دریافتی منهای هزینه» = پول دریافتی − هزینه‌های ثبت‌شدهٔ همان روز.
+                </p>
               </div>
             )}
 
