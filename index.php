@@ -6727,7 +6727,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ]
         ]
     ]);
-    sendmessage($from_id, sprintf($textbotlang['users']['extend']['renewalinvoice'], $username, $prodcut['name_product'], $prodcut['price_product'], $prodcut['Service_time'], $prodcut['Volume_constraint'], $prodcut['note'], $user['Balance']), $keyboardextend, 'html');
+    sendmessage($from_id, sprintf($textbotlang['users']['extend']['renewalinvoice'], $username, $prodcut['name_product'], number_format((float) $prodcut['price_product']), $prodcut['Service_time'], $prodcut['Volume_constraint'], $prodcut['note'], number_format((float) $user['Balance'])), $keyboardextend, 'html');
 } elseif (preg_match('/^confirmserivces-(.*)-(.*)/', $datain, $dataget)) {
     $codeproduct = $dataget[1];
     $usernamePanelExtends = $dataget[2];
