@@ -3872,10 +3872,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if (intval($info_product['Service_time']) == 0)
         $info_product['Service_time'] = $textbotlang['users']['status']['unlimited'];
     $info_product_price_product = number_format($info_product['price_product']);
+    $promoParts = function_exists('promoInvoiceParts') ? promoInvoiceParts($info_product, $info_product['price_product']) : null; // running promotion: struck old price + clean name
+    if ($promoParts) {
+        $info_product_price_product = $promoParts['price'];
+    }
     $userBalance = number_format($user['Balance']);
     $replacements = [
         '{username}' => $username_ac,
-        '{name_product}' => $info_product['name_product'],
+        '{name_product}' => $promoParts['name'] ?? $info_product['name_product'],
         '{Service_time}' => $info_product['Service_time'],
         '{note}' => $info_product['note'] ?? '',
         '{price}' => $info_product_price_product,

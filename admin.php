@@ -344,6 +344,29 @@ if ($datain == "paygwback") {
         . "🤝 <code>/dividend 10000000 سهم شریک</code> — سود سهام / برداشت شرکا (هزینه حساب نمی‌شود)\n"
         . "🏦 <code>/capital 5000000 سرمایه</code> — ورود سرمایه (جدا از فروش و سود)\n\n"
         . "نتیجه در «آمار» به‌صورت: فروش − خرید = سود ناخالص ← − هزینه‌ها = سود خالص ← − سهام = سود باقی‌مانده.", null, 'HTML');
+} elseif (preg_match('/^\/promoemoji(?:\s+(gift))?/u', (string) $text, $pe) && $adminrulecheck['rule'] == "administrator") {
+    // /promoemoji 🏷  (premium emoji)  -> the icon of discounted products;  /promoemoji gift 🎁 -> bonus-GB products
+    $peId = null;
+    foreach ((array) ($update['message']['entities'] ?? []) as $ent) {
+        if (($ent['type'] ?? '') === 'custom_emoji' && !empty($ent['custom_emoji_id'])) {
+            $peId = (string) $ent['custom_emoji_id'];
+            break;
+        }
+    }
+    if ($peId === null || !function_exists('premiumEmojiFile')) {
+        sendmessage($from_id, "یک ایموجی <b>پرمیوم</b> بعد از دستور بفرستید، مثلاً:\n<code>/promoemoji</code> ‌+ ایموجی تخفیف از پک خودتان\n<code>/promoemoji gift</code> ‌+ ایموجی هدیه (برای تخفیف گیگی)", null, 'HTML');
+        return;
+    }
+    $peFile = premiumEmojiFile();
+    $peCfg = is_file($peFile) ? (json_decode((string) file_get_contents($peFile), true) ?: []) : [];
+    $peCfg['enabled'] = true;
+    $peCfg['map'] = is_array($peCfg['map'] ?? null) ? $peCfg['map'] : [];
+    $peKey = !empty($pe[1]) ? '🎁' : '🏷';
+    $peCfg['map'][$peKey] = $peId;
+    @mkdir(dirname($peFile), 0775, true);
+    file_put_contents($peFile, json_encode($peCfg, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
+    premiumEmojiConfig(true);
+    sendmessage($from_id, "✅ ایموجی " . (!empty($pe[1]) ? 'هدیه' : 'تخفیف') . " ذخیره شد: <tg-emoji emoji-id=\"{$peId}\">{$peKey}</tg-emoji>\nاز این به بعد روی دکمهٔ محصولات " . (!empty($pe[1]) ? 'گیگ هدیه' : 'تخفیف‌دار') . " نشان داده می‌شود.", null, 'HTML');
 } elseif (preg_match('/^\/(expense|capital|ad|buy|salary|server|tools|fee|tax|dividend)\s+(\d+)\s*(.*)$/su', (string) $text, $acc) && $adminrulecheck['rule'] == "administrator") {
     // /ad 500000 کمپین اینستاگرام            -> advertising expense, now
     // /ad 500000 کمپین اینستاگرام @1405/07/14 15:30   -> same, on that date/time (date alone = 12:00)

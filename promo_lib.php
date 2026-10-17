@@ -143,7 +143,7 @@ function promoStrike(string $s): string
  */
 function promoEmoji(string $type): string
 {
-    $candidates = $type === 'percent' ? ['🏷', '💸', '🤑', '🔖', '💰', '🔥'] : ['🎁', '🎉', '🎀', '🔥'];
+    $candidates = $type === 'percent' ? ['🏷', '💸', '🤑', '🔖', '💰', '🔥'] : ['🎁', '🎉', '🎀', '🔥']; // /promoemoji in the bot sets 🏷 / 🎁 to the premium emoji you pick
     $map = function_exists('premiumEmojiConfig') ? (premiumEmojiConfig()['map'] ?? []) : [];
     foreach ($candidates as $e) {
         if (isset($map[$e])) {
@@ -159,11 +159,8 @@ function promoLtr(string $s): string
     return "\u{2066}" . $s . "\u{2069}";
 }
 
-/**
- * Button text of a product during a promotion, e.g. «🏷 40 گیگ — 2̶0̶0̶,̶0̶0̶0̶ 160,000 تومان» or «🎁 50 گیگ (+10 هدیه) — 144,000 تومان».
- * One emoji only (the catalog emoji is replaced), the old price struck through, no extra words.
- */
-function promoButtonLabel(array $product, string $label): string
+/** The running promotion's item for a product id (null when none / ended). Cached per request. */
+function promoItem(int $productId): ?array
 {
     static $byId = null;
     if ($byId === null) {
@@ -175,28 +172,55 @@ function promoButtonLabel(array $product, string $label): string
             }
         }
     }
-    $it = $byId[(int) ($product['id'] ?? 0)] ?? null;
+    return $byId[$productId] ?? null;
+}
+
+/** Product name without a price written in it («40 گیگ — 200,000 تومان» → «40 گیگ»): during a promotion that price is wrong. */
+function promoStripPrice(string $name): string
+{
+    $out = preg_replace('/\s*[—–\-|]?\s*[\d,٬۰-۹]{3,}\s*(?:هزار\s*)?(?:تومان|تومن)/u', '', $name);
+    return trim((string) ($out ?? $name)) ?: $name;
+}
+
+/**
+ * Button text of a product during a promotion, e.g. «🏷 40 گیگ — 2̶0̶0̶,̶0̶0̶0̶ 160,000 تومان» or «🎁 50 گیگ (+10 هدیه) — 144,000 تومان».
+ * One emoji only (the catalog emoji is replaced), the price written in the name is replaced by the real old/new price.
+ */
+function promoButtonLabel(array $product, string $label): string
+{
+    $it = promoItem((int) ($product['id'] ?? 0));
     if (!$it) {
         return $label;
     }
     // drop the catalog emoji (⚡ ⭐ 💎 …) in front: the promotion emoji takes its place
     $label = preg_replace('/^\s*(?:(?:<tg-emoji\b[^>]*>.*?<\/tg-emoji>|\p{Extended_Pictographic}\x{FE0F}?)\s*)+/u', '', $label) ?? $label;
+    $base = promoStripPrice($label);
     if ($it['type'] === 'percent') {
-        $old = number_format($it['old_price']);
-        $new = number_format($it['new_price']);
-        if (strpos($label, $old) !== false) {
-            $label = str_replace($old, promoLtr(promoStrike($old)) . ' ' . promoLtr($new), $label);
-        } else {
-            $label .= ' — ' . promoLtr(promoStrike($old)) . ' ' . promoLtr($new) . ' تومان';
-        }
-    } else {
-        $old = promoNum($it['old_gb']);
-        $bonus = promoNum($it['new_gb'] - $it['old_gb']);
-        $count = 0;
-        $label = preg_replace('/(?<![\d.])' . preg_quote($old, '/') . '(\s*گیگ)/u', promoNum($it['new_gb']) . '$1 (+' . $bonus . ' هدیه)', $label, 1, $count) ?? $label;
-        if (!$count) {
-            $label .= ' (+' . $bonus . ' گیگ هدیه)';
-        }
+        return promoEmoji('percent') . ' ' . $base . ' — ' . promoLtr(promoStrike(number_format($it['old_price']))) . ' ' . promoLtr(number_format($it['new_price'])) . ' تومان';
     }
-    return promoEmoji($it['type']) . ' ' . $label;
+    $old = promoNum($it['old_gb']);
+    $bonus = promoNum($it['new_gb'] - $it['old_gb']);
+    $count = 0;
+    $base = preg_replace('/(?<![\d.])' . preg_quote($old, '/') . '(\s*گیگ)/u', promoNum($it['new_gb']) . '$1 (+' . $bonus . ' هدیه)', $base, 1, $count) ?? $base;
+    if (!$count) {
+        $base .= ' (+' . $bonus . ' گیگ هدیه)';
+    }
+    return promoEmoji('bonus_gb') . ' ' . $base . ' — ' . promoLtr(number_format($it['new_price'])) . ' تومان';
+}
+
+/**
+ * Pre-invoice values during a promotion: ['name' => clean name, 'price' => HTML «<s>200,000</s> 160,000»].
+ * $finalPrice is what the customer will really pay (after any personal discount). null when the product is not promoted.
+ */
+function promoInvoiceParts(array $product, $finalPrice): ?array
+{
+    $it = promoItem((int) ($product['id'] ?? 0));
+    if (!$it) {
+        return null;
+    }
+    $name = promoStripPrice((string) ($product['name_product'] ?? ''));
+    if ($it['type'] === 'percent') {
+        return ['name' => promoEmoji('percent') . ' ' . $name, 'price' => '<s>' . number_format($it['old_price']) . '</s> ' . number_format((float) $finalPrice)];
+    }
+    return ['name' => promoEmoji('bonus_gb') . ' ' . $name . ' (+' . promoNum($it['new_gb'] - $it['old_gb']) . ' گیگ هدیه)', 'price' => number_format((float) $finalPrice)];
 }
