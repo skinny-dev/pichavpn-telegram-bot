@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { fmtCompact, fmtNum, fmtToman, fmtTs } from '@/lib/format'
 import { StatCard } from '@/components/Stat'
+import { ActivityHeatmap } from '@/components/ActivityHeatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +33,8 @@ export default function Overview() {
         <StatCard icon={Clock} label="پرداخت در انتظار تأیید" value={fmtNum(d.pending_payments)} tone={d.pending_payments ? 'warn' : 'default'} hint={d.pending_payments ? <Link className="text-primary underline" to="/accounting">بررسی</Link> : undefined} />
         <StatCard icon={Banknote} label="هزینه‌های ماه" value={fmtCompact(d.month.exp_sum)} tone={d.month.exp_sum ? 'danger' : 'default'} />
       </div>
+
+      <ActivityHeatmap />
 
       <Card>
         <CardHeader><CardTitle className="text-base">فروش ۳۰ روز اخیر</CardTitle></CardHeader>

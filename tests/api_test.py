@@ -412,6 +412,12 @@ s, r = call('pay_confirm', {'order': 'pp_ok'}); check('already delivered order r
 s, r = call('pay_confirm', {'order': 'pp_rej'}); check('rejected payment needs explicit override (409)', s == 409, (s, r))
 sql("DELETE FROM Payment_report WHERE id_order LIKE 'pp_%'; DELETE FROM invoice WHERE id_invoice LIKE 'ppi%'; DELETE FROM service_other WHERE username LIKE 'pp_%'")
 
+# monthly activity heatmap
+s, r = call('activity', month='1405/01'); check('activity: Farvardin has 31 days, starts on Saturday', s == 200 and len(r['days']) == 31 and r['days'][0]['weekday'] == 0, (s, str(r)[:200]))
+s, r = call('activity', month='1405/07'); check('activity: Mehr has 30 days and all series', s == 200 and len(r['days']) == 30 and all(len(v) == 30 for v in r['series'].values()) and set(r['series']) >= {'revenue','orders','renew','new_users','expenses','net','support','tests'}, (s, str(r)[:200]))
+check('activity: net = revenue - expenses each day', all(n == rv - e for n, rv, e in zip(r['series']['net'], r['series']['revenue'], r['series']['expenses'])), r['series'])
+s, r = call('activity'); check('activity: current month by default', s == 200 and r['days'], (s, str(r)[:200]))
+
 # manual orders (customers outside Telegram): validation paths only, creation needs a real VPN panel
 s, r = call('order_options'); check('order options: panels + products', s == 200 and 'panels' in r and 'products' in r, (s, r))
 s, r = call('order_create', {'panel': 'nope', 'product_id': 1}); check('manual order: unknown panel 404', s == 404, (s, r))

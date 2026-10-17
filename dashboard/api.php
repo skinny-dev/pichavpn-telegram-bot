@@ -25,6 +25,7 @@ require_once __DIR__ . '/../support_files.php';
 require_once __DIR__ . '/../referral_links.php';
 require_once __DIR__ . '/manual_order.php';
 require_once __DIR__ . '/payments_admin.php';
+require_once __DIR__ . '/activity.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
@@ -885,6 +886,19 @@ try {
             $d = statsCollect($pdo, $p['start'], $p['end']);
             $all = $period === 'all' ? $d : statsCollect($pdo, 0, time());
             out(['ok' => true, 'period' => $period, 'title' => $p['title'], 'start' => $p['start'], 'end' => $p['end'], 'data' => $d, 'all' => $all, 'overall' => $period === 'all' ? statsOverall($pdo) : null, 'kinds' => array_map(fn($k, $l) => ['key' => $k, 'label' => $l, 'group' => accKindGroup($k)], array_keys(accExpenseKinds()), accExpenseKinds()), 'text' => strip_tags(statsReport($pdo, $period))]);
+
+        case 'activity':
+            // ?month=1405/07 (Jalali); default = current month
+            if (!function_exists('jalali_to_gregorian')) {
+                require_once __DIR__ . '/../jdf.php';
+            }
+            $ym = (string) ($_GET['month'] ?? '');
+            if (preg_match('#^(\d{4})[/-](\d{1,2})$#', strtr($ym, ['۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9']), $m) && (int) $m[2] >= 1 && (int) $m[2] <= 12) {
+                [$jy, $jm] = [(int) $m[1], (int) $m[2]];
+            } else {
+                [$jy, $jm] = array_map('intval', explode('/', jdate('Y/n', time(), '', 'Asia/Tehran', 'en')));
+            }
+            out(['ok' => true] + picha_activity($pdo, $jy, $jm));
 
         case 'overview':
             $today = statsCollect($pdo, statsPeriod('today')['start'], time());
