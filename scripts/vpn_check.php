@@ -151,13 +151,26 @@ function vc_ws($stream, string $host, string $path): string
 
 foreach ($users as $username) {
     $inv = select('invoice', '*', 'username', $username, 'select');
-    if (!$inv) {
-        echo "\n━━━━ $username: در ربات پیدا نشد (نام کاربری سرویس را از «اطلاعات سرویس» در ربات یا پنل بردارید)\n";
-        $problems[] = "$username: پیدا نشد";
-        continue;
+    $d = null;
+    if ($inv) {
+        echo "\n━━━━ $username | پنل: {$inv['Service_location']} | محصول: {$inv['name_product']}\n";
+        $d = $panel->DataUser($inv['Service_location'], $username);
+    } else {
+        // made in the panel, not through the bot: look it up on every active panel
+        foreach ($pdo->query("SELECT name_panel FROM marzban_panel WHERE status != 'disable'")->fetchAll(PDO::FETCH_COLUMN) as $pn) {
+            $try = $panel->DataUser($pn, $username);
+            if (($try['status'] ?? 'Unsuccessful') !== 'Unsuccessful') {
+                $d = $try;
+                echo "\n━━━━ $username | پنل: $pn | (در ربات ثبت نشده، فقط در پنل)\n";
+                break;
+            }
+        }
+        if (!$d) {
+            echo "\n━━━━ $username: نه در ربات پیدا شد نه در پنل‌ها\n";
+            $problems[] = "$username: پیدا نشد";
+            continue;
+        }
     }
-    echo "\n━━━━ $username | پنل: {$inv['Service_location']} | محصول: {$inv['name_product']}\n";
-    $d = $panel->DataUser($inv['Service_location'], $username);
     if (($d['status'] ?? '') === 'Unsuccessful') {
         echo "❌ پنل جواب نداد: " . ($d['msg'] ?? '') . "\n";
         $problems[] = "$username: پنل جواب نمی‌دهد";
