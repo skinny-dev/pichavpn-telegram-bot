@@ -51,6 +51,8 @@ export function ActivityHeatmap() {
   const d = q.data
   const todayIdx = useMemo(() => (d ? d.days.findIndex((x, i) => !x.future && (i === d.days.length - 1 || d.days[i + 1].future)) : -1), [d])
   const [sel, setSel] = useState<number | null>(null)
+  const [tab, setTab] = useState<Key>('revenue')
+  const row = ROWS.find((x) => x.key === tab) ?? ROWS[0]
   const focus = sel ?? (todayIdx >= 0 ? todayIdx : null)
   const cur = d ? { y: d.year, m: d.month } : null
   const go = (delta: number) => { if (cur) { setSel(null); setYm(jMonthShift(cur.y, cur.m, delta)) } }
@@ -70,47 +72,48 @@ export function ActivityHeatmap() {
       <CardContent className="grid min-w-0 gap-3">
         {!d ? <Skeleton className="h-64 w-full" /> : (
           <>
-            <div className="grid min-w-0 gap-2.5" role="grid" aria-label={`فعالیت روزانه ${d.title}`}>
-              {ROWS.map((r) => {
-                const vals = d.series[r.key]
-                const max = Math.max(...vals.map(Math.abs), 0)
-                return (
-                  <div key={r.key} className="grid min-w-0 gap-1 sm:grid-cols-[6.5rem_minmax(0,1fr)_5.5rem] sm:items-center sm:gap-2" role="row">
-                    <div className="flex items-baseline justify-between gap-2 text-xs sm:contents">
-                      <span className="text-muted-foreground">{r.label}</span>
-                      <span className="tabular font-medium sm:order-last sm:text-end" dir="ltr">{r.money ? (d.totals[r.key] < 0 ? '− ' : '') + fmtCompact(Math.abs(d.totals[r.key])) : fmtNum(d.totals[r.key])}</span>
-                    </div>
-                    <div className="grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${d.days.length}, minmax(0, 1fr))` }}>
-                      {vals.map((v, i) => {
-                        const day = d.days[i]
-                        const bg = day.future ? undefined : cellColor(v, max, r.hue, r.key === 'net')
-                        return (
-                          <button
-                            key={i}
-                            type="button"
-                            role="gridcell"
-                            aria-label={`${day.day} ${d.title}: ${r.label} ${r.money ? fmtSigned(v) : fmtNum(v)}`}
-                            onMouseEnter={() => setSel(i)}
-                            onFocus={() => setSel(i)}
-                            onClick={() => setSel(i)}
-                            className={cn('aspect-square min-h-[9px] rounded-[3px] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-ring',
-                              day.future ? 'bg-muted/30' : 'bg-muted', focus === i && 'ring-1 ring-foreground/60', day.weekday === 6 && !bg && !day.future && 'bg-muted/60')}
-                            style={bg ? { background: bg } : undefined}
-                          />
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-              {/* day axis */}
-              <div className="grid min-w-0 gap-1 sm:grid-cols-[6.5rem_minmax(0,1fr)_5.5rem] sm:gap-2" aria-hidden>
-                <span className="hidden sm:block" />
-                <div className="grid gap-[2px] text-center text-[10px] text-muted-foreground" style={{ gridTemplateColumns: `repeat(${d.days.length}, minmax(0, 1fr))` }}>
-                  {d.days.map((x) => <span key={x.day} className="tabular">{x.day === 1 || x.day % 5 === 0 ? x.day : ''}</span>)}
-                </div>
-              </div>
+            {/* metric tabs */}
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="شاخص">
+              {ROWS.map((r) => (
+                <button key={r.key} type="button" role="tab" aria-selected={tab === r.key} onClick={() => setTab(r.key)}
+                  className={cn('whitespace-nowrap rounded-full border px-3 py-1 text-sm transition-colors hover:bg-accent', tab === r.key && 'border-primary bg-primary/10 font-medium text-primary')}>
+                  {r.label}
+                </button>
+              ))}
             </div>
+            {(() => {
+              const r = ROWS.find((x) => x.key === tab) ?? ROWS[0]
+              const vals = d.series[r.key]
+              const max = Math.max(...vals.map(Math.abs), 0)
+              const total = d.totals[r.key]
+              const active = vals.filter((v, i) => v !== 0 && !d.days[i].future).length
+              return (
+                <div className="grid min-w-0 gap-2" role="tabpanel">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-2xl font-bold tabular">{r.money ? fmtSigned(total) : fmtNum(total)}</span>
+                    <span className="text-xs text-muted-foreground">جمع {r.label} در {d.title} · {fmtNum(active)} روز فعال</span>
+                  </div>
+                  <div className="grid gap-[3px] sm:gap-1" role="grid" aria-label={`${r.label} روزانه ${d.title}`} style={{ gridTemplateColumns: `repeat(${d.days.length}, minmax(0, 1fr))` }}>
+                    {vals.map((v, i) => {
+                      const day = d.days[i]
+                      const bg = day.future ? undefined : cellColor(v, max, r.hue, r.key === 'net')
+                      return (
+                        <button key={i} type="button" role="gridcell"
+                          aria-label={`${day.day} ${d.title}: ${r.label} ${r.money ? fmtSigned(v) : fmtNum(v)}`}
+                          onMouseEnter={() => setSel(i)} onFocus={() => setSel(i)} onClick={() => setSel(i)}
+                          className={cn('aspect-[3/5] min-h-[22px] rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring sm:aspect-[2/3] sm:rounded-[4px]',
+                            day.future ? 'bg-muted/30' : 'bg-muted', focus === i && 'ring-2 ring-foreground/70')}
+                          style={bg ? { background: bg } : undefined}
+                        />
+                      )
+                    })}
+                  </div>
+                  <div className="grid gap-[3px] text-center text-[10px] text-muted-foreground sm:gap-1" aria-hidden style={{ gridTemplateColumns: `repeat(${d.days.length}, minmax(0, 1fr))` }}>
+                    {d.days.map((x) => <span key={x.day} className={cn('tabular', x.weekday === 6 && 'text-destructive/80')}>{x.day === 1 || x.day % 5 === 0 ? x.day : ''}</span>)}
+                  </div>
+                </div>
+              )
+            })()}
 
             {focus !== null && d.days[focus] && (
               <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-4" aria-live="polite">
@@ -129,10 +132,9 @@ export function ActivityHeatmap() {
             )}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">کم {LEVELS.map((l) => <i key={l} className="inline-block size-2.5 rounded-[3px]" style={{ background: `rgb(${BLUE} / ${l})` }} />)} زیاد</span>
-              <span className="inline-flex items-center gap-1"><i className="inline-block size-2.5 rounded-[3px]" style={{ background: `rgb(${ORANGE} / 0.7)` }} />هزینه</span>
-              <span className="inline-flex items-center gap-1"><i className="inline-block size-2.5 rounded-[3px]" style={{ background: `rgb(${RED} / 0.7)` }} />روز با ضرر</span>
-              <span>هر ردیف نسبت به بیشترین روز همان ردیف رنگ می‌گیرد</span>
+              <span className="inline-flex items-center gap-1">کم {LEVELS.map((l) => <i key={l} className="inline-block size-2.5 rounded-[3px]" style={{ background: `rgb(${row.hue} / ${l})` }} />)} زیاد</span>
+              {tab === 'net' && <span className="inline-flex items-center gap-1"><i className="inline-block size-2.5 rounded-[3px]" style={{ background: `rgb(${RED} / 0.7)` }} />روز با ضرر</span>}
+              <span>رنگ هر روز نسبت به بیشترین روز همان ماه</span>
             </div>
           </>
         )}
