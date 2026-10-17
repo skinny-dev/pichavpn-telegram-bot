@@ -143,7 +143,7 @@ function promoStrike(string $s): string
  */
 function promoEmoji(string $type): string
 {
-    $candidates = $type === 'percent' ? ['🏷', '💸', '🤑', '🔖', '💰', '🔥'] : ['🎁', '🎉', '🎀', '🔥']; // /promoemoji in the bot sets 🏷 / 🎁 to the premium emoji you pick
+    $candidates = $type === 'percent' ? ['🏷', '🛍', '💸', '🤑', '🔖', '💰', '🔥'] : ['🎁', '🎉', '🎀', '🔥']; // /promoemoji in the bot sets 🏷 / 🎁 to the premium emoji you pick
     $map = function_exists('premiumEmojiConfig') ? (premiumEmojiConfig()['map'] ?? []) : [];
     foreach ($candidates as $e) {
         if (isset($map[$e])) {
