@@ -77,6 +77,10 @@ export default function Stats() {
               <Row label="خرید نمایندگان پیشرفته" count={d.agent_n2} sum={d.agent_n2_sum} />
               <Row label="تمدید" count={d.renew} sum={d.renew_sum} />
               <Row label="حجم اضافه" count={d.extra} sum={d.extra_sum} />
+              <TextRow label="مشتری‌های این بازه (خرید کردند / پول دادند)" value={`${fmtNum(d.buyers ?? 0)} / ${fmtNum(d.payers ?? 0)} نفر`} />
+              <Row label="میانگین پرداخت هر مشتری" sum={d.payers ? d.revenue / d.payers : 0} />
+              <Row label="میانگین هر سفارش" sum={d.orders ? d.orders_sum / d.orders : 0} />
+              <TextRow label="سفارش به ازای هر مشتری" value={d.buyers ? fmtNum2(d.orders / d.buyers) : '—'} />
             </Section>
             <Section title="صورت سود و زیان" icon={Scale}>
               <Row label="فروش (پول دریافتی)" count={d.count_all} sum={d.revenue} />
@@ -114,7 +118,7 @@ export default function Stats() {
                   <Row label="موجودی کیف پول‌ها" sum={q.data.overall.balance} />
                 </Section>
                 <Section title="شاخص‌ها" icon={Coins}>
-                  <Row label="میانگین درآمد هر مشتری" sum={q.data.overall.buyers ? d.revenue / q.data.overall.buyers : 0} />
+                  <Row label="درآمد هر مشتری از ابتدا (کل ÷ همه مشتری‌ها)" sum={q.data.overall.buyers ? d.revenue / q.data.overall.buyers : 0} />
                   <TextRow label="سهم تمدید از درآمد" value={pct(d.renew_sum, d.revenue)} />
                   <TextRow label="وفاداری (۲ خرید/تمدید یا بیشتر)" value={pct(q.data.overall.repeat_buyers, q.data.overall.buyers)} />
                   <Row label="درآمد ۳۰ روز اخیر" sum={q.data.overall.revenue_30d} />

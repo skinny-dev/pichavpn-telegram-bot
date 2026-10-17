@@ -236,6 +236,11 @@ function statsCollect(PDO $pdo, $start, $end)
     $row = $one("SELECT COUNT(*) c, SUM(CAST(price AS SIGNED)) p $pay AND Payment_Method IN (" . STATS_ADMIN_SALE . ')', $p);
     $r['admin_in'] = (int) $n($row['c']);
     $r['admin_in_sum'] = $n($row['p']);
+    // customers who paid in the period (cash in, same rules as revenue) and customers who bought (orders)
+    $row = $one("SELECT COUNT(DISTINCT id_user) c $pay AND Payment_Method NOT IN (" . STATS_NON_CASH . ") AND id_user IS NOT NULL AND id_user != ''", $p);
+    $r['payers'] = (int) $n($row['c']);
+    $row = $one("SELECT COUNT(DISTINCT i.id_user) c $inv", $p);
+    $r['buyers'] = (int) $n($row['c']);
 
     // withdrawals
     if (statsHas($pdo, 'wallet_withdraw')) {
@@ -409,6 +414,10 @@ function statsReport(PDO $pdo, $key)
     $L[] = '🛍 تعداد فروش : ' . $n($d['orders']) . ' عدد — ' . $n($d['orders_sum']) . ' تومان';
     $L[] = '🆕 خرید اول : ' . $n($d['first']) . ' عدد — ' . $n($d['first_sum']) . ' تومان' . ($d['orders'] ? ' (' . statsPct($d['first'], $d['orders']) . '٪ فروش)' : '');
     $L[] = '🧲 تمدید : ' . $n($d['renew']) . ' عدد — ' . $n($d['renew_sum']) . ' تومان';
+    if (($d['buyers'] ?? 0) > 0 || ($d['payers'] ?? 0) > 0) {
+        $L[] = '👤 مشتری‌های این بازه : ' . $n($d['buyers']) . ' نفر خرید کردند · ' . $n($d['payers']) . ' نفر پول دادند';
+        $L[] = '💳 میانگین پرداخت هر مشتری : ' . $n($d['payers'] ? $d['revenue'] / $d['payers'] : 0) . ' تومان · میانگین هر سفارش : ' . $n($d['orders'] ? $d['orders_sum'] / $d['orders'] : 0) . ' تومان · سفارش به ازای هر مشتری : ' . ($d['buyers'] ? round($d['orders'] / $d['buyers'], 2) : 0);
+    }
     $L[] = '📦 حجم اضافه : ' . $n($d['extra']) . ' عدد — ' . $n($d['extra_sum']) . ' تومان';
     $L[] = '🛒 خرید نمایندگان عادی : ' . $n($d['agent_n']) . ' عدد — ' . $n($d['agent_n_sum']) . ' تومان';
     $L[] = '🛒 خرید نمایندگان پیشرفته : ' . $n($d['agent_n2']) . ' عدد — ' . $n($d['agent_n2_sum']) . ' تومان';
@@ -457,7 +466,7 @@ function statsReport(PDO $pdo, $key)
     if ($key === 'all') {
         $L[] = '';
         $L[] = '📈 <b>شاخص‌ها</b>';
-        $L[] = '• میانگین درآمد هر مشتری : ' . $n($o['buyers'] ? $d['revenue'] / $o['buyers'] : 0) . ' تومان';
+        $L[] = '• درآمد هر مشتری از ابتدا (کل درآمد ÷ همه مشتری‌ها) : ' . $n($o['buyers'] ? $d['revenue'] / $o['buyers'] : 0) . ' تومان';
         $L[] = '• سهم تمدید از درآمد : ' . statsPct($d['renew_sum'], $d['revenue']) . '٪';
         $L[] = '• وفاداری (مشتری با ۲ خرید/تمدید یا بیشتر) : ' . statsPct($o['repeat_buyers'], $o['buyers']) . '٪';
         $L[] = '• درآمد ۳۰ روز اخیر : ' . $n($o['revenue_30d']) . ' تومان · حجم : ' . $vol($o['volume_30d']) . ' گیگابایت';
