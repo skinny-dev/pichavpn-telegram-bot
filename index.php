@@ -1625,11 +1625,21 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     ]);
     if (intval($user['pricediscount']) != 0) {
         $result = ($product['price_product'] * $user['pricediscount']) / 100;
-        $pricelastextend = number_format(round($product['price_product'] - $result, 0));
+        $pricelastextendRaw = round($product['price_product'] - $result, 0);
     } else {
-        $pricelastextend = $product['price_product'];
+        $pricelastextendRaw = $product['price_product'];
     }
-    $textextend = sprintf($textbotlang['users']['extend']['invoiceCreated'], $nameloc['username'], $product['name_product'], $pricelastextend, $product['Service_time'], $product['Volume_constraint'], $product['note'], $user['Balance']);
+    $pricelastextend = number_format((float) $pricelastextendRaw);
+    $extendName = $product['name_product'];
+    $promoParts = function_exists('promoInvoiceParts') ? promoInvoiceParts($product, $pricelastextendRaw) : null; // running promotion: struck old price + clean name
+    if ($promoParts) {
+        $pricelastextend = $promoParts['price'];
+        $extendName = $promoParts['name'];
+    }
+    if (function_exists('promoQuote') && ($promoQuote = promoQuote($product))) {
+        savedata("save", "promo_quote", $promoQuote);
+    }
+    $textextend = sprintf($textbotlang['users']['extend']['invoiceCreated'], $nameloc['username'], $extendName, $pricelastextend, $product['Service_time'], $product['Volume_constraint'], $product['note'], number_format((float) $user['Balance']));
     if ($user['step'] == "getvolumecustomuserforextend") {
         sendmessage($from_id, $textextend, $keyboardextend, 'HTML');
     } else {
@@ -1756,6 +1766,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ':code_product' => $userdata['code_product'],
         ]);
         $prodcut = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (is_array($prodcut) && function_exists('promoApplyQuote')) {
+            $prodcut = promoApplyQuote($prodcut, $userdata['promo_quote'] ?? null); // promotion ended after the invoice: keep the shown price
+        }
     }
     $pricelastextend = $prodcut['price_product'];
     if ($prodcut == false || !in_array($nameloc['Status'], ['active', 'end_of_time', 'end_of_volume', 'sendedwarn', 'send_on_hold'])) {
@@ -3876,6 +3889,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if ($promoParts) {
         $info_product_price_product = $promoParts['price'];
     }
+    if (function_exists('promoQuote') && ($promoQuote = promoQuote($info_product))) {
+        savedata("save", "promo_quote", $promoQuote); // the price on this pre-invoice stays valid for an hour
+    }
     $userBalance = number_format($user['Balance']);
     $replacements = [
         '{username}' => $username_ac,
@@ -3933,6 +3949,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ':location' => $userdate['name_panel']
         ]);
         $info_product = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (is_array($info_product) && function_exists('promoApplyQuote')) {
+            $info_product = promoApplyQuote($info_product, $userdate['promo_quote'] ?? null); // promotion ended after the pre-invoice: keep the shown price
+        }
     }
     if (!isset($info_product['price_product'])) {
         sendmessage($from_id, $textbotlang['users']['sell']['restartProcess'], $keyboard, 'HTML');
@@ -6727,7 +6746,8 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             ]
         ]
     ]);
-    sendmessage($from_id, sprintf($textbotlang['users']['extend']['renewalinvoice'], $username, $prodcut['name_product'], number_format((float) $prodcut['price_product']), $prodcut['Service_time'], $prodcut['Volume_constraint'], $prodcut['note'], number_format((float) $user['Balance'])), $keyboardextend, 'html');
+    $renewParts = function_exists('promoInvoiceParts') ? promoInvoiceParts($prodcut, $prodcut['price_product']) : null;
+    sendmessage($from_id, sprintf($textbotlang['users']['extend']['renewalinvoice'], $username, $renewParts['name'] ?? $prodcut['name_product'], $renewParts['price'] ?? number_format((float) $prodcut['price_product']), $prodcut['Service_time'], $prodcut['Volume_constraint'], $prodcut['note'], number_format((float) $user['Balance'])), $keyboardextend, 'html');
 } elseif (preg_match('/^confirmserivces-(.*)-(.*)/', $datain, $dataget)) {
     $codeproduct = $dataget[1];
     $usernamePanelExtends = $dataget[2];

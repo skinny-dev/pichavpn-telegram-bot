@@ -12,6 +12,15 @@ t('round up to 5,000: 120,000', promoPrice(144000, 20, 5000, 'up') === 120000);
 t('price stripped from name', promoStripPrice('40 گیگ — 200,000 تومان') === '40 گیگ' && promoStripPrice('نامحدود') === 'نامحدود');
 t('strike adds combining stroke', promoStrike('60') === "6\u{0336}0\u{0336}");
 t('number trimming', promoNum(40.0) === '40' && promoNum(10.5) === '10.5');
+// a price quote from the invoice survives the promotion ending before «تایید» (for an hour), and only ever helps the customer
+$prod = ['code_product' => 'p40', 'price_product' => 200000, 'Volume_constraint' => 40];
+$q = ['code' => 'p40', 'price' => 160000, 'gb' => 40, 'at' => 1000];
+t('quote keeps the invoice price after the promotion ended', promoApplyQuote($prod, $q, 1000 + 600)['price_product'] === 160000);
+t('quote expires after an hour', promoApplyQuote($prod, $q, 1000 + 3601)['price_product'] === 200000);
+t('quote for another product is ignored', promoApplyQuote(['code_product' => 'p80'] + $prod, $q, 1100)['price_product'] === 200000);
+t('quote never raises the price', promoApplyQuote(['price_product' => 150000] + $prod, $q, 1100)['price_product'] === 150000);
+t('bonus GB quote keeps the bigger volume', promoApplyQuote($prod, ['gb' => 50, 'price' => 200000] + $q, 1100)['Volume_constraint'] == 50);
+t('no quote = unchanged', promoApplyQuote($prod, null) === $prod);
 // labels (each in its own process because the promotion is cached per request)
 $run = function (array $state, string $label): string {
     $dir = sys_get_temp_dir() . '/promo' . getmypid() . rand();

@@ -224,3 +224,35 @@ function promoInvoiceParts(array $product, $finalPrice): ?array
     }
     return ['name' => promoEmoji('bonus_gb') . ' ' . $name . ' (+' . promoNum($it['new_gb'] - $it['old_gb']) . ' گیگ هدیه)', 'price' => number_format((float) $finalPrice)];
 }
+
+/**
+ * Price quote: the invoice a customer saw during a promotion stays valid for PROMO_QUOTE_TTL seconds even if the
+ * promotion ends before they press «تایید». Stored with the purchase/renewal state (savedata) and only ever LOWERS
+ * the price / raises the volume to what the invoice showed — never the other way round.
+ */
+const PROMO_QUOTE_TTL = 3600;
+
+function promoQuote(array $product): ?array
+{
+    $it = promoItem((int) ($product['id'] ?? 0));
+    if (!$it) {
+        return null;
+    }
+    return ['code' => (string) ($product['code_product'] ?? ''), 'price' => (int) $it['new_price'], 'gb' => (float) $it['new_gb'], 'at' => time()];
+}
+
+/** Applies a saved quote to the product row read again at confirmation time. */
+function promoApplyQuote(array $product, $quote, ?int $now = null): array
+{
+    $now = $now ?? time();
+    if (!is_array($quote) || ($quote['code'] ?? null) !== (string) ($product['code_product'] ?? '') || $now - (int) ($quote['at'] ?? 0) > PROMO_QUOTE_TTL) {
+        return $product;
+    }
+    if ((int) $quote['price'] > 0 && (int) $quote['price'] < (int) $product['price_product']) {
+        $product['price_product'] = (int) $quote['price'];
+    }
+    if ((float) $quote['gb'] > (float) $product['Volume_constraint']) {
+        $product['Volume_constraint'] = $quote['gb'];
+    }
+    return $product;
+}
