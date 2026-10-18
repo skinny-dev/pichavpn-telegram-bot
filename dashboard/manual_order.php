@@ -11,10 +11,41 @@ function picha_bot_layer(): void
         return;
     }
     $from_id = 0;
+    // the same files a payment webhook loads before DirectPayment(): Telegram calls, dates, panels, keyboards
+    require_once __DIR__ . '/../botapi.php';
+    require_once __DIR__ . '/../jdf.php';
     require_once __DIR__ . '/../function.php';
     require_once __DIR__ . '/../panels.php';
     $textbotlang = languagechange();
     $ManagePanel = new ManagePanel();
+    picha_bot_keyboards();
+}
+
+/** Runs keyboard.php as if at the top level: it reads and creates globals ($keyboard, $Confirm_pay, ...). */
+function picha_bot_keyboards(): void
+{
+    if (isset($GLOBALS['keyboard'], $GLOBALS['Confirm_pay'])) {
+        return;
+    }
+    $skip = ['GLOBALS', '_GET', '_POST', '_COOKIE', '_FILES', '_SERVER', '_ENV', '_REQUEST', '_SESSION'];
+    foreach (array_keys($GLOBALS) as $k) {
+        if (!in_array($k, $skip, true) && preg_match('/^[A-Za-z_]\w*$/', $k)) {
+            $$k = &$GLOBALS[$k];
+        }
+    }
+    unset($k, $skip);
+    $cwd = getcwd();
+    chdir(dirname(__DIR__));
+    try {
+        require_once dirname(__DIR__) . '/keyboard.php';
+    } finally {
+        chdir($cwd);
+    }
+    foreach (get_defined_vars() as $k => $v) {
+        if (!array_key_exists($k, $GLOBALS) && $k !== 'cwd') {
+            $GLOBALS[$k] = $v;
+        }
+    }
 }
 
 function picha_order_options(PDO $pdo): array

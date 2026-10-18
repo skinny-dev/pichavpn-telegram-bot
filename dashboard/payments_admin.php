@@ -102,11 +102,15 @@ function picha_pay_confirm(PDO $pdo, string $orderId, bool $allowRejected): arra
         }
     }
     picha_bot_layer();
+    $cwd = getcwd();
     try {
-        DirectPayment($orderId);
+        chdir(dirname(__DIR__)); // the bot code uses paths relative to its own folder
+        DirectPayment($orderId, dirname(__DIR__) . '/images.jpg');
     } catch (Throwable $e) {
         error_log('panel pay_confirm: DirectPayment failed for ' . $orderId . ': ' . $e->getMessage());
         throw new PichaError('پرداخت تأیید شد ولی تحویل سرویس خطا داد: ' . $e->getMessage(), 502);
+    } finally {
+        chdir($cwd);
     }
     $after = $pdo->prepare("SELECT * FROM Payment_report WHERE id_order = ?");
     $after->execute([$orderId]);
