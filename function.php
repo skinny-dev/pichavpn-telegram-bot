@@ -1194,6 +1194,19 @@ function claimPaymentPaid($order_id)
     return $stmt->rowCount() >= 1;
 }
 
+/**
+ * Marks a payment as refunded to the wallet; true only the first time. The order part of id_invoice gets a
+ * «refunded|» prefix, so a later retry (panel «تأیید», webhook repeat) can neither refund nor deliver it again.
+ */
+function paymentRefundOnce($order_id): bool
+{
+    global $pdo;
+    $st = $pdo->prepare("UPDATE Payment_report SET id_invoice = CONCAT('refunded|', id_invoice) WHERE id_order = ? AND id_invoice NOT LIKE 'refunded|%'");
+    $st->execute([(string) $order_id]);
+    clearSelectCache('Payment_report');
+    return $st->rowCount() > 0;
+}
+
 function DirectPayment($order_id, $image = 'images.jpg')
 {
     global $pdo, $ManagePanel, $textbotlang, $keyboardextendfnished, $keyboard, $Confirm_pay, $from_id, $message_id;
@@ -1208,11 +1221,27 @@ function DirectPayment($order_id, $image = 'images.jpg')
     $format_price_cart = number_format($Payment_report['price']);
     $Balance_id = select("user", "*", "id", $Payment_report['id_user'], "select");
     $steppay = explode("|", $Payment_report['id_invoice']);
+    if ($steppay[0] === 'refunded') {
+        return; // already given back to the wallet (paymentRefundOnce): never deliver or credit it again
+    }
     $stmtReset = $pdo->prepare("UPDATE user SET Processing_value = '0', Processing_value_one = '0', Processing_value_tow = '0', Processing_value_four = '0' WHERE id = ?");
     $stmtReset->execute([$Balance_id['id']]);
     clearSelectCache('user');
     if ($steppay[0] == "getconfigafterpay") {
         $get_invoice = select("invoice", "*", "username", $steppay[1], "select");
+        if (!$get_invoice) {
+            // the unpaid order was removed (e.g. confirmed long after it was cleaned up): the money goes to the wallet, once
+            if (paymentRefundOnce($order_id)) {
+                $balance = (int) $Balance_id['Balance'] + (int) $Payment_report['price'];
+                update("user", "Balance", $balance, "id", $Balance_id['id']);
+                sendmessage($Balance_id['id'], sprintf($textbotlang['users']['Balance']['refundOrderMissing'] ?? '💎 سفارش شما دیگر موجود نبود؛ مبلغ %s تومان به کیف پول شما اضافه شد. از «خرید اشتراک» با موجودی کیف پول خرید کنید.', number_format((int) $Payment_report['price'])), $keyboard, 'HTML');
+                $texterros = sprintf($textbotlang['Admin']['reportgroup']['errorConfigCreate'], 'سفارش «' . $steppay[1] . '» پیدا نشد (حذف شده). مبلغ ' . number_format((int) $Payment_report['price']) . ' تومان به کیف پول مشتری برگشت.', $Balance_id['id'], $Balance_id['username'], '-');
+                if (strlen($setting['Channel_Report']) > 0) {
+                    telegram('sendmessage', ['chat_id' => $setting['Channel_Report'], 'message_thread_id' => $errorreport, 'text' => $texterros, 'parse_mode' => "HTML"]);
+                }
+            }
+            return;
+        }
         if ($get_invoice['Status'] == "active") {
             return;
         }
@@ -1261,10 +1290,14 @@ function DirectPayment($order_id, $image = 'images.jpg')
                 update("invoice", "Status", $invoiceStatusBefore, "id_invoice", $get_invoice['id_invoice']);
             }
             $dataoutput['msg'] = json_encode($dataoutput['msg'] ?? $dataoutput ?? 'unknown error');
-            $balance = $Balance_id['Balance'] + $Payment_report['price'];
-            update("user", "Balance", $balance, "id", $Balance_id['id']);
-            sendmessage($Balance_id['id'], $textbotlang['users']['sell']['errorConfig'], $keyboard, 'HTML');
-            sendmessage($Balance_id['id'], sprintf($textbotlang['users']['Balance']['refundCreateFailed'], $balance), $keyboard, 'HTML');
+            if (paymentRefundOnce($order_id)) { // a retry of the same payment never refunds it again
+                $balance = $Balance_id['Balance'] + $Payment_report['price'];
+                update("user", "Balance", $balance, "id", $Balance_id['id']);
+                sendmessage($Balance_id['id'], $textbotlang['users']['sell']['errorConfig'], $keyboard, 'HTML');
+                sendmessage($Balance_id['id'], sprintf($textbotlang['users']['Balance']['refundCreateFailed'], number_format((int) $Payment_report['price'])), $keyboard, 'HTML');
+            } else {
+                $dataoutput['msg'] .= ' (این پرداخت قبلاً به کیف پول برگشت داده شده بود؛ دوباره اضافه نشد)';
+            }
             $texterros = sprintf($textbotlang['Admin']['reportgroup']['errorConfigCreate'], $dataoutput['msg'], $Balance_id['id'], $Balance_id['username'], $marzban_list_get['name_panel']);
             if (strlen($setting['Channel_Report']) > 0) {
                 telegram('sendmessage', [

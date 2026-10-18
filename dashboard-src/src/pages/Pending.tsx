@@ -20,7 +20,7 @@ const PROBLEMS: Record<string, { label: string; hint: string; tone: string }> = 
   expire: { label: 'منقضی شده', hint: 'مهلت پرداخت تمام شد؛ اگر پول رسیده، تأیید کنید', tone: 'bg-muted text-muted-foreground' },
   reject: { label: 'رد شده', hint: 'ادمین رد کرده', tone: 'bg-muted text-muted-foreground' },
 }
-const KINDS: Record<string, string> = { new: 'خرید جدید', renew: 'تمدید', volume: 'حجم اضافه', time: 'زمان اضافه', topup: 'شارژ کیف پول' }
+const KINDS: Record<string, string> = { new: 'خرید جدید', renew: 'تمدید', volume: 'حجم اضافه', time: 'زمان اضافه', topup: 'شارژ کیف پول', refunded: 'برگشت به کیف پول' }
 const METHODS: Record<string, string> = { variza: 'واریزا', 'کارت به کارت': 'کارت به کارت', 'Star Telegram': 'استار تلگرام' }
 
 /** «معلق‌ها»: payments that need a person, especially «paid but not delivered». */

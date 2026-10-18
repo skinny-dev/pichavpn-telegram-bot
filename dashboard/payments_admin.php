@@ -6,7 +6,7 @@
 function picha_pay_purpose(string $idInvoice): array
 {
     $p = explode('|', $idInvoice, 2);
-    $map = ['getconfigafterpay' => 'new', 'getextenduser' => 'renew', 'getextravolumeuser' => 'volume', 'getextratimeuser' => 'time'];
+    $map = ['refunded' => 'refunded', 'getconfigafterpay' => 'new', 'getextenduser' => 'renew', 'getextravolumeuser' => 'volume', 'getextratimeuser' => 'time'];
     $kind = $map[$p[0]] ?? 'topup';
     $target = '';
     $value = '';
@@ -84,6 +84,9 @@ function picha_pay_confirm(PDO $pdo, string $orderId, bool $allowRejected): arra
         throw new PichaError('پرداخت پیدا نشد', 404);
     }
     $purpose = picha_pay_purpose((string) $row['id_invoice']);
+    if ($purpose['kind'] === 'refunded') {
+        throw new PichaError('این پرداخت قبلاً به کیف پول مشتری برگشت داده شده (سفارشش ساخته نشد یا حذف شده بود)', 409);
+    }
     if ($row['payment_Status'] === 'paid') {
         if ($purpose['kind'] !== 'new') {
             throw new PichaError('این پرداخت قبلاً تأیید شده؛ تمدید/افزایش را دستی در پنل VPN انجام دهید (برای جلوگیری از دوبار تمدید، خودکار تکرار نمی‌شود)', 409);
