@@ -122,6 +122,18 @@ if ($user == false) {
         'limitchangeloc' => ''
     );
 }
+// A button press while the bot waits for typed input (custom volume / days / service name) means the customer moved
+// on: drop the waiting step so the button's own handler runs (e.g. a product button no longer answers «حجم نامعتبر»).
+if ($datain !== '' && in_array($user['step'] ?? '', ['gettimecustomvol', 'getvolumecustomuser', 'getvolumecustomusername', 'gettimecustomvolom',
+    'getvolumecustomuserom', 'getvolumecustomusernameom', 'gettimecustomvolomforextend', 'getvolumecustomuserforextend', 'statusnamecustom', 'selectusernamecustom'], true)) {
+    step('home', $from_id);
+    $user['step'] = 'home';
+}
+// Volume / days answers: «40 گیگ», «30 روز», « 40 » → 40 (only when the reply holds exactly one number)
+if ($datain === '' && is_string($text) && in_array($user['step'] ?? '', ['gettimecustomvol', 'getvolumecustomuser', 'gettimecustomvolom', 'getvolumecustomuserom',
+    'gettimecustomvolomforextend', 'getvolumecustomuserforextend'], true) && preg_match('/^\D*?(\d+)\D*$/u', trim($text), $numOnly)) {
+    $text = $numOnly[1];
+}
 $admin_ids = select("admin", "id_admin", null, null, "FETCH_COLUMN");
 if (!is_array($admin_ids)) {
     $admin_ids = [];

@@ -375,8 +375,9 @@ function pinmessage($from_id,$message_id){
 ]);
  }
 function convertPersianNumbersToEnglish($string) {
-    $persian_numbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-    $english_numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    // Persian (۰-۹) and Arabic-keyboard (٠-٩) digits
+    $persian_numbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹', '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    $english_numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
     return str_replace($persian_numbers, $english_numbers, $string);
 }
