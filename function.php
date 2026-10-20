@@ -3014,6 +3014,12 @@ function createPayVariza($price, $order_id)
             'expires_in' => '1h',
         ], JSON_UNESCAPED_UNICODE),
     ]);
+    // optional route out through Iran when variza.ir refuses foreign servers (scripts/variza_proxy.php)
+    $proxy = trim((string) getPaySettingValue('variza_proxy', ''));
+    if ($proxy !== '' && $proxy !== '0') {
+        curl_setopt($curl, CURLOPT_PROXY, $proxy);
+        curl_setopt($curl, CURLOPT_NOPROXY, '');
+    }
     $response = curl_exec($curl);
     if ($response === false) {
         $err = curl_error($curl);
