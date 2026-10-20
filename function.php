@@ -2827,6 +2827,9 @@ function deleteFolder($folderPath)
 }
 function isBase64($string)
 {
+    if (!is_string($string)) {
+        return false;
+    }
     if (base64_encode(base64_decode($string, true)) === $string) {
         return true;
     }
