@@ -374,32 +374,68 @@ function ssFa($s): string
     return strtr((string) $s, ['0' => '۰', '1' => '۱', '2' => '۲', '3' => '۳', '4' => '۴', '5' => '۵', '6' => '۶', '7' => '۷', '8' => '۸', '9' => '۹', '.' => '٫']);
 }
 
-/** The channel message (HTML). Emoji become the premium pack's when they are mapped (premium_emoji layer). */
+/** 🟢 good / 🟡 slow / 🟠 very slow / 🔴 down, from ping (ms) and speed (Mbps). */
+function ssDot(array $r): string
+{
+    if (empty($r['ok'])) {
+        return '🔴';
+    }
+    $ping = (int) $r['ping'];
+    $speed = $r['speed'];
+    if ($ping > 1500 || ($speed !== null && $speed < 2)) {
+        return '🟠';
+    }
+    return ($ping <= 600 && ($speed === null || $speed >= 10)) ? '🟢' : '🟡';
+}
+
+/** «🇹🇷 ☁️ ترکیه» → [flags «🇹🇷», text «ترکیه», tunnel?]. «🇹🇷 🇮🇷 تونل ترکیه» → [«🇹🇷🇮🇷», «تونل ترکیه», true]. */
+function ssSplitName(string $name): array
+{
+    $tunnel = mb_strpos($name, 'تونل') !== false || mb_strpos($name, "🇮🇷") !== false;
+    preg_match_all('/[\x{1F1E6}-\x{1F1FF}]{2}/u', $name, $m);
+    $flags = implode('', array_unique($m[0]));
+    $text = preg_replace('/[\x{1F1E6}-\x{1F1FF}]|\x{2601}\x{FE0F}?/u', '', $name);
+    $text = trim(preg_replace('/\s+/u', ' ', (string) $text));
+    return [$flags, $text, $tunnel];
+}
+
+/**
+ * The status message (HTML, right-to-left): one line per location «🇹🇷🇮🇷 تونل ترکیه | پینگ ۵۹۵ms | 🟡», direct and tunnel
+ * locations in two quoted blocks. Emoji become the premium pack's when they are mapped (premium_emoji layer).
+ */
 function ssMessage(array $results, array $cfg, ?int $now = null): string
 {
     $now = $now ?? time();
+    $rlm = "\u{200F}";
+    // untestable protocols (hysteria, wireguard…) and info entries without a name (✅ ⌛ ∞ 📊) are left out
+    $results = array_values(array_filter($results, fn($r) => (empty($r['error']) || strpos((string) $r['error'], 'تست نمی') === false)
+        && preg_match('/\p{L}/u', ssSplitName((string) $r['name'])[1])));
+    $groups = ['direct' => [], 'tunnel' => []];
     $up = 0;
-    $lines = [];
-    // protocols Xray cannot test (hysteria, wireguard…) are left out rather than shown as down
-    $results = array_values(array_filter($results, fn($r) => empty($r['error']) || strpos((string) $r['error'], 'تست نمی') === false));
     foreach ($results as $r) {
-        $name = htmlspecialchars((string) $r['name'], ENT_QUOTES);
-        if (empty($r['ok'])) {
-            $lines[] = "🔴 <b>$name</b>\n      ❌ قطع";
-            continue;
-        }
-        $up++;
-        $ping = (int) $r['ping'];
-        $speed = $r['speed'];
-        $dot = ($ping <= 600 && ($speed === null || $speed >= 10)) ? '🟢' : ($ping <= 1500 ? '🟡' : '🟠');
-        $lines[] = "$dot <b>$name</b>\n      ⚡️ پینگ: <b>" . ssFa($ping) . "</b> ms   🚀 سرعت: <b>" . ($speed === null ? '—' : ssFa($speed)) . '</b> Mbps';
+        [$flags, $text, $tunnel] = ssSplitName((string) $r['name']);
+        $dot = ssDot($r);
+        $up += empty($r['ok']) ? 0 : 1;
+        $label = htmlspecialchars(trim($flags . ' ' . $text), ENT_QUOTES);
+        $value = empty($r['ok']) ? 'قطع' : 'پینگ ' . ssFa((int) $r['ping']) . 'ms';
+        $groups[$tunnel ? 'tunnel' : 'direct'][] = $rlm . $label . ' | ' . $value . ' | ' . $dot;
     }
     $total = count($results);
-    $date = function_exists('jdate') ? jdate('l j F Y — H:i', $now, '', 'Asia/Tehran') : date('Y-m-d H:i', $now);
-    $head = '📡 <b>' . htmlspecialchars($cfg['title'], ENT_QUOTES) . "</b>\n🕒 " . $date . "\n\n";
-    $head .= ($up === $total ? '✅' : ($up === 0 ? '🚨' : '⚠️')) . ' <b>' . ssFa($up) . ' از ' . ssFa($total) . '</b> لوکیشن فعال' . "\n\n";
-    $foot = "\n\n🟢 عالی   🟡 کند   🔴 قطع\n🔄 بروزرسانی خودکار هر " . ssFa(round($cfg['every_minutes'] / 60, 1) == (int) round($cfg['every_minutes'] / 60) && $cfg['every_minutes'] >= 60 ? (int) round($cfg['every_minutes'] / 60) . ' ساعت' : $cfg['every_minutes'] . ' دقیقه');
-    return $head . implode("\n\n", $lines) . $foot;
+    $date = function_exists('jdate') ? jdate('j F — H:i', $now, '', 'Asia/Tehran') : date('m-d H:i', $now);
+    $every = $cfg['every_minutes'] >= 60 && $cfg['every_minutes'] % 60 === 0 ? ssFa($cfg['every_minutes'] / 60) . ' ساعت' : ssFa($cfg['every_minutes']) . ' دقیقه';
+    $L = [];
+    $L[] = $rlm . '📡 <b>' . htmlspecialchars($cfg['title'], ENT_QUOTES) . '</b>';
+    $L[] = $rlm . '🕒 ' . $date . '  •  ' . ($up === $total ? '✅' : ($up === 0 ? '🚨' : '⚠️')) . ' <b>' . ssFa($up) . ' از ' . ssFa($total) . '</b> فعال';
+    foreach (['direct' => '🌐 <b>مستقیم</b>', 'tunnel' => '🛡 <b>تونل</b>'] as $k => $title) {
+        if ($groups[$k]) {
+            $L[] = '';
+            $L[] = $rlm . $title;
+            $L[] = '<blockquote>' . implode("\n", $groups[$k]) . '</blockquote>';
+        }
+    }
+    $L[] = '';
+    $L[] = $rlm . '🟢 عالی  🟡 متوسط  🟠 کند  🔴 قطع  •  🔄 هر ' . $every;
+    return implode("\n", $L);
 }
 
 /** Where to post: [chat_id, topic id or null]. «reports» = the report group, in its own topic (created once). */
