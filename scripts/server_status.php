@@ -111,8 +111,16 @@ try {
 
         case 'post':
         case 'auto':
-            if ($cmd === 'auto' && $cfg['source'] === 'agent') {
-                exit(0); // the server inside Iran runs the test on its own schedule
+            if ($cfg['source'] === 'agent') {
+                if ($cmd === 'auto') {
+                    exit(0); // the server inside Iran runs the test on its own schedule
+                }
+                if (!in_array('--here', $argv, true)) {
+                    out('⚠️ حالت «تست از ایران» روشن است: این سرور در آلمان است و عددهایش با ایران فرق دارد، پس پست عوض نشد.');
+                    out('   تست و ارسال را روی سرور ایران بزنید:  bash /opt/picha-agent/run.sh');
+                    out('   (اگر واقعاً تست از همین سرور را می‌خواهید: post --here)');
+                    exit(1);
+                }
             }
             if ($cmd === 'auto') {
                 $state = ssState();
