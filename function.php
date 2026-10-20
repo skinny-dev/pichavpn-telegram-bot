@@ -4,6 +4,7 @@ require_once __DIR__ . '/referral_links.php';
 require_once __DIR__ . '/receipt_rules.php';
 require_once __DIR__ . '/promo_lib.php';
 require_once __DIR__ . '/custom_price.php';
+require_once __DIR__ . '/payment_alerts.php';
 require_once 'vendor/autoload.php';
 require 'config.php';
 ini_set('error_log', 'error_log');

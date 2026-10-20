@@ -4818,6 +4818,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $pay = createPayaqayepardakht($user['Processing_value'], $randomString);
         if ($pay['status'] != "success") {
             $text_error = json_encode($pay);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorAqayePardakhtLink'], $text_error, $from_id, $username);
@@ -4876,6 +4877,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $pay = createPayZarinpal($user['Processing_value'], $randomString);
         if ($pay['data']['code'] != 100) {
             $text_error = json_encode($pay['errors']);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorZarinpalLink'], $text_error, $from_id, $username);
@@ -4936,6 +4938,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $pay = createPayVariza($user['Processing_value'], $randomString);
         if (!isset($pay['pay_url']) || empty($pay['pay_url'])) {
             $text_error = isset($pay['error']) ? $pay['error'] : json_encode($pay);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorZarinpalLink'] ?? 'Variza link error: %s user %s', $text_error, $from_id);
@@ -4983,6 +4986,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } elseif ($datain == "plisio") {
         $rates = rate_arze();
         if ($rates === null) {
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             return;
@@ -5015,6 +5019,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $stmt->execute([$from_id, $randomString, $dateacc, $user['Processing_value'], $payment_Status, $Payment_Method, $invoice, $pay['txn_id']]);
         if (isset($pay['message'])) {
             $text_error = $pay['message'];
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorCryptoLink'], $text_error, $from_id, $username);
@@ -5054,6 +5059,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } elseif ($datain == "nowpayment") {
         $rates = rate_arze();
         if ($rates === null) {
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             return;
@@ -5082,6 +5088,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $stmt->execute([$from_id, $randomString, $dateacc, $user['Processing_value'], $payment_Status, $Payment_Method, $invoice, $pay['id']]);
         if (!isset($pay['id'])) {
             $text_error = json_encode($pay);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorCryptoLink2'], $text_error, $from_id, $username);
@@ -5121,6 +5128,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } elseif ($datain == "iranpay1") {
         $rates = rate_arze();
         if ($rates === null || empty($rates['TRX']) || empty($rates['USD'])) {
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             return;
@@ -5149,6 +5157,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $pay = createInvoiceiranpay1($user['Processing_value'], $randomString);
         if ($pay['status'] != "100") {
             $text_error = $pay['message'];
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorPaymentLink'], $text_error, $from_id, $Payment_Method, $username);
@@ -5206,6 +5215,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $payment = trnado($randomString, $user['Processing_value']);
         if (empty($payment['success'])) {
             $text_error = json_encode($payment);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorPaymentLink2'], $text_error, $from_id, $Payment_Method, $username);
@@ -5283,6 +5293,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $pay = createPayiranpay4($user['Processing_value'], $randomString);
         if (empty($pay['success']) || empty($pay['payment_link'])) {
             $text_error = json_encode($pay);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorPaymentLink3'], $text_error, $from_id, $Payment_Method, $username);
@@ -5321,6 +5332,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         }
         $rates = rate_arze();
         if ($rates === null) {
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             return;
@@ -5349,6 +5361,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $paylink = createInvoice($trxprice);
         if (!$paylink['success']) {
             $text_error = $paylink['message'];
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorPaymentLink3'], $text_error, $from_id, $Payment_Method, $username);
@@ -5389,6 +5402,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } elseif ($datain == "digitaltron") {
         $rates = rate_arze();
         if ($rates === null) {
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             return;
@@ -5444,6 +5458,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } elseif ($datain == "startelegrams") {
         $rates = rate_arze(['USD', 'Ton']);
         if ($rates === null) {
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             return;
@@ -5484,6 +5499,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         ]);
         if ($straCreateLink['ok'] == false) {
             $text_error = json_encode($straCreateLink);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorStarInvoice'], $text_error, $from_id, $Payment_Method, $username);
