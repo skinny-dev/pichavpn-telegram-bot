@@ -437,13 +437,17 @@ mkdir -p "\$DIR" && cd "\$DIR" || exit 1
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
 exec 9>"\$DIR/lock"; flock -n 9 || exit 0
 if [ ! -x ./xray ]; then
-  curl -fsS -m 300 "\$URL?a=xray&key=\$KEY" -o xray.tmp && chmod +x xray.tmp && mv xray.tmp xray || { echo "xray download failed"; exit 1; }
+  echo "⬇️  downloading Xray from the bot (first run only, ~30 MB)…"
+  curl -fS --progress-bar -m 600 "\$URL?a=xray&key=\$KEY" -o xray.tmp && chmod +x xray.tmp && mv xray.tmp xray || { echo "xray download failed"; exit 1; }
 fi
-curl -fsS -m 60 "\$URL?a=config&key=\$KEY" -o config.json || { echo "job download failed"; exit 1; }
+echo "📥 getting the test job…"
+curl -fsS -m 120 "\$URL?a=config&key=\$KEY" -o config.json || { echo "job download failed"; exit 1; }
 curl -fsS -m 60 "\$URL?a=list&key=\$KEY" -o list.txt || exit 1
 ./xray run -c config.json > xray.log 2>&1 &
 XP=\$!
 sleep 3
+TOTAL=\$(grep -c . list.txt); N=0
+echo "🧪 testing \$TOTAL locations…"
 : > result.txt
 while IFS=\$'\t' read -r idx port; do
   [ -z "\$port" ] && continue
@@ -454,9 +458,11 @@ while IFS=\$'\t' read -r idx port; do
   done
   r=\$(curl -s -o /dev/null -w '%{size_download} %{time_total} %{time_starttransfer}' --noproxy '' --socks5-hostname "127.0.0.1:\$port" -m \$((SECS+3)) "\$DL_URL")
   echo "\$line \${r:-0 0 0}" >> result.txt
+  N=\$((N+1)); echo "   \$N/\$TOTAL  ping: \$(echo "\$line" | awk '{print \$2"/"\$3}')  download: \$(echo "\$r" | awk '{print \$1}') bytes"
 done < list.txt
 kill \$XP 2>/dev/null
-curl -fsS -m 60 -X POST --data-binary @result.txt "\$URL?a=result&key=\$KEY" && echo
+echo "📤 sending the result to the bot…"
+curl -fsS -m 120 -X POST --data-binary @result.txt "\$URL?a=result&key=\$KEY" && echo " ✅"
 SH;
 }
 
