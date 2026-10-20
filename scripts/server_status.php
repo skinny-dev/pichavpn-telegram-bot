@@ -11,6 +11,8 @@
 //   php scripts/server_status.php name "config name" "نام نمایشی"   |   hide "config name"   |   unhide "config name"
 //   php scripts/server_status.php show                         # current settings
 //   php scripts/server_status.php auto                         # what cron runs (posts only when due)
+//   php scripts/server_status.php agent-setup [--label="🇮🇷 ایران"]   # test from a server inside Iran instead (prints its install commands)
+//   php scripts/server_status.php local                         # back to testing from this server
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -109,6 +111,9 @@ try {
 
         case 'post':
         case 'auto':
+            if ($cmd === 'auto' && $cfg['source'] === 'agent') {
+                exit(0); // the server inside Iran runs the test on its own schedule
+            }
             if ($cmd === 'auto') {
                 $state = ssState();
                 if (empty($cfg['enabled']) || time() - (int) ($state['last_run'] ?? 0) < $cfg['every_minutes'] * 60 - 60) {
@@ -125,6 +130,31 @@ try {
             $id = ssPost($html, $cfg);
             ssSaveState(['last_results' => $results, 'last_ok' => time()] + ssState());
             out("✅ ارسال شد (پیام $id)");
+            break;
+
+        case 'agent-setup':
+            if ($cfg['agent_key'] === '') {
+                $cfg['agent_key'] = bin2hex(random_bytes(16));
+            }
+            $cfg['source'] = 'agent';
+            if (isset($opt['label'])) {
+                $cfg['agent_label'] = (string) $opt['label'];
+            }
+            ssSaveConfig($cfg);
+            if (!ssXrayPath($cfg)) {
+                out('⚠️ اول روی همین سرور  php scripts/server_status.php install-xray  را بزنید (سرور ایران Xray را از اینجا می‌گیرد)');
+            }
+            $u = 'https://' . $domainhosts . '/status_agent.php?a=script&key=' . $cfg['agent_key'];
+            out("✅ حالت تست از ایران روشن شد. روی سرور ایران این سه خط را بزنید:\n");
+            out("mkdir -p /opt/picha-agent && curl -fsS '$u' -o /opt/picha-agent/run.sh && bash /opt/picha-agent/run.sh");
+            out("(crontab -l 2>/dev/null | grep -v picha-agent; echo '7 */" . max(1, (int) round($cfg['every_minutes'] / 60)) . " * * * bash /opt/picha-agent/run.sh >/dev/null 2>&1') | crontab -");
+            out("\nخط اول یک بار تست می‌کند و پست را می‌فرستد؛ خط دوم آن را خودکار می‌کند.");
+            break;
+
+        case 'local':
+            $cfg['source'] = 'local';
+            ssSaveConfig($cfg);
+            out('✅ تست دوباره از همین سرور انجام می‌شود');
             break;
 
         case 'on':

@@ -28,6 +28,9 @@ function ssConfig(): array
         'names' => (object) [],      // {"config name": "name to show"}
         'hide' => [],                // config names not to test / show
         'xray' => '',                // path to the xray binary (default storage/bin/xray, then PATH)
+        'source' => 'local',         // local = test from this server, agent = a server inside Iran runs it (status_agent.php)
+        'agent_key' => '',
+        'agent_label' => '🇮🇷 ایران',
     ], is_array($c) ? $c : []);
 }
 
@@ -269,8 +272,12 @@ function ssMeasure(int $port, array $cfg): array
     return ['ok' => true, 'ping' => $ping, 'speed' => $speed];
 }
 
-/** Tests every item [name, outbound|error] with one Xray process (one socks port per location). */
-function ssRun(array $items, array $cfg, ?callable $progress = null): array
+/**
+ * Checks every item with Xray (one bad link cannot stop the test) and builds one Xray config with a socks port per
+ * location. Returns [results so far (the broken ones), testable items, xray config, ports]. $basePort: fixed ports
+ * (the remote agent) instead of free local ones.
+ */
+function ssPrepare(array $items, array $cfg, ?int $basePort = null): array
 {
     $xray = ssXrayPath($cfg);
     if (!$xray) {
@@ -280,38 +287,53 @@ function ssRun(array $items, array $cfg, ?callable $progress = null): array
     @mkdir($tmp, 0700);
     $results = [];
     $testable = [];
-    foreach ($items as $i => $it) {
-        if (isset($it['error'])) {
-            $results[$i] = ['name' => $it['name'], 'ok' => false, 'error' => $it['error']];
-            continue;
-        }
-        // drop configs Xray rejects one by one, so one bad link cannot stop the whole test
-        $one = ['log' => ['loglevel' => 'none'], 'inbounds' => [['port' => 1, 'listen' => '127.0.0.1', 'protocol' => 'socks', 'settings' => ['udp' => false]]], 'outbounds' => [$it['outbound']]];
-        file_put_contents("$tmp/one.json", json_encode($one, JSON_UNESCAPED_SLASHES));
-        $out = [];
-        exec(escapeshellarg($xray) . ' run -test -c ' . escapeshellarg("$tmp/one.json") . ' 2>&1', $out, $rc);
-        if ($rc !== 0 && stripos(implode("\n", $out), 'allowInsecure') !== false) {
-            $it['outbound'] = ssPinInsecure($it['outbound']);
-            $one['outbounds'] = [$it['outbound']];
+    try {
+        foreach ($items as $i => $it) {
+            if (isset($it['error'])) {
+                $results[$i] = ['name' => $it['name'], 'ok' => false, 'error' => $it['error']];
+                continue;
+            }
+            $one = ['log' => ['loglevel' => 'none'], 'inbounds' => [['port' => 1, 'listen' => '127.0.0.1', 'protocol' => 'socks', 'settings' => ['udp' => false]]], 'outbounds' => [$it['outbound']]];
             file_put_contents("$tmp/one.json", json_encode($one, JSON_UNESCAPED_SLASHES));
             $out = [];
             exec(escapeshellarg($xray) . ' run -test -c ' . escapeshellarg("$tmp/one.json") . ' 2>&1', $out, $rc);
+            if ($rc !== 0 && stripos(implode("\n", $out), 'allowInsecure') !== false) {
+                $it['outbound'] = ssPinInsecure($it['outbound']);
+                $one['outbounds'] = [$it['outbound']];
+                file_put_contents("$tmp/one.json", json_encode($one, JSON_UNESCAPED_SLASHES));
+                $out = [];
+                exec(escapeshellarg($xray) . ' run -test -c ' . escapeshellarg("$tmp/one.json") . ' 2>&1', $out, $rc);
+            }
+            if ($rc !== 0) {
+                $results[$i] = ['name' => $it['name'], 'ok' => false, 'error' => 'کانفیگ برای Xray نامعتبر است'];
+                continue;
+            }
+            $testable[$i] = $it;
         }
-        if ($rc !== 0) {
-            $results[$i] = ['name' => $it['name'], 'ok' => false, 'error' => 'کانفیگ برای Xray نامعتبر است'];
-            continue;
-        }
-        $testable[$i] = $it;
+    } finally {
+        array_map('unlink', glob("$tmp/*") ?: []);
+        @rmdir($tmp);
     }
+    $conf = ['log' => ['loglevel' => 'warning'], 'inbounds' => [], 'outbounds' => [], 'routing' => ['rules' => []]];
+    $ports = [];
+    $n = 0;
+    foreach ($testable as $i => $it) {
+        $ports[$i] = $basePort ? $basePort + $n++ : ssFreePort();
+        $conf['inbounds'][] = ['tag' => "in$i", 'port' => $ports[$i], 'listen' => '127.0.0.1', 'protocol' => 'socks', 'settings' => ['udp' => false]];
+        $conf['outbounds'][] = ['tag' => "out$i"] + $it['outbound'];
+        $conf['routing']['rules'][] = ['type' => 'field', 'inboundTag' => ["in$i"], 'outboundTag' => "out$i"];
+    }
+    return [$results, $testable, $conf, $ports];
+}
+
+/** Tests every item from this server (one Xray process, a socks port per location). */
+function ssRun(array $items, array $cfg, ?callable $progress = null): array
+{
+    [$results, $testable, $conf, $ports] = ssPrepare($items, $cfg);
     if ($testable) {
-        $conf = ['log' => ['loglevel' => 'warning'], 'inbounds' => [], 'outbounds' => [], 'routing' => ['rules' => []]];
-        $ports = [];
-        foreach ($testable as $i => $it) {
-            $ports[$i] = ssFreePort();
-            $conf['inbounds'][] = ['tag' => "in$i", 'port' => $ports[$i], 'listen' => '127.0.0.1', 'protocol' => 'socks', 'settings' => ['udp' => false]];
-            $conf['outbounds'][] = ['tag' => "out$i"] + $it['outbound'];
-            $conf['routing']['rules'][] = ['type' => 'field', 'inboundTag' => ["in$i"], 'outboundTag' => "out$i"];
-        }
+        $xray = ssXrayPath($cfg);
+        $tmp = sys_get_temp_dir() . '/picha-ss-' . bin2hex(random_bytes(4));
+        @mkdir($tmp, 0700);
         file_put_contents("$tmp/all.json", json_encode($conf, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $proc = proc_open([$xray, 'run', '-c', "$tmp/all.json"], [0 => ['pipe', 'r'], 1 => ['file', "$tmp/xray.log", 'a'], 2 => ['file', "$tmp/xray.log", 'a']], $pipes);
         if (!is_resource($proc)) {
@@ -332,12 +354,110 @@ function ssRun(array $items, array $cfg, ?callable $progress = null): array
         } finally {
             proc_terminate($proc);
             proc_close($proc);
+            array_map('unlink', glob("$tmp/*") ?: []);
+            @rmdir($tmp);
         }
     }
-    array_map('unlink', glob("$tmp/*") ?: []);
-    @rmdir($tmp);
     ksort($results);
     return array_values($results);
+}
+
+// ---------- remote agent (a server inside Iran runs the test, this bot posts it) ----------
+
+const SS_AGENT_PORT = 31100;
+
+/** The job for the agent: Xray config, «index<TAB>port» list, and the names, kept until the result comes back. */
+function ssAgentJob(array $cfg): array
+{
+    $items = ssItems($cfg);
+    [$results, $testable, $conf, $ports] = ssPrepare($items, $cfg, SS_AGENT_PORT);
+    $job = ['id' => bin2hex(random_bytes(6)), 'at' => time(), 'names' => array_map(fn($it) => $it['name'], $items), 'broken' => $results, 'ports' => $ports];
+    ssSaveState(['agent_job' => $job] + ssState());
+    return ['job' => $job, 'config' => $conf];
+}
+
+/** The agent's raw lines «index code1 t1 code2 t2 code3 t3 bytes total start» → results like ssMeasure(). */
+function ssAgentResults(string $raw, array $job, array $cfg): array
+{
+    $results = [];
+    foreach ($job['broken'] as $i => $r) {
+        $results[(int) $i] = $r;
+    }
+    $seen = [];
+    foreach (preg_split('/\R/', $raw) as $line) {
+        $f = preg_split('/\s+/', trim($line));
+        if (count($f) < 10 || !ctype_digit($f[0]) || !isset($job['ports'][(int) $f[0]])) {
+            continue;
+        }
+        $i = (int) $f[0];
+        $seen[$i] = true;
+        $pings = [];
+        for ($k = 1; $k <= 5; $k += 2) {
+            $code = (int) $f[$k];
+            if ($code >= 200 && $code < 400) {
+                $pings[] = (int) round((float) $f[$k + 1] * 1000);
+            }
+        }
+        $name = (string) ($job['names'][$i] ?? "#$i");
+        if (!$pings) {
+            $results[$i] = ['name' => $name, 'ok' => false, 'ping' => null, 'speed' => null];
+            continue;
+        }
+        sort($pings);
+        $bytes = (float) $f[7];
+        $secs = max(0.05, (float) $f[8] - (float) $f[9]);
+        $mbps = $bytes * 8 / $secs / 1e6;
+        $results[$i] = ['name' => $name, 'ok' => true, 'ping' => $pings[intdiv(count($pings), 2)], 'speed' => $bytes > 0 ? ($mbps >= 10 ? (int) round($mbps) : round($mbps, 1)) : null];
+    }
+    foreach ($job['ports'] as $i => $p) { // a location the agent did not report is down
+        if (!isset($seen[(int) $i])) {
+            $results[(int) $i] = ['name' => (string) ($job['names'][$i] ?? "#$i"), 'ok' => false, 'ping' => null, 'speed' => null];
+        }
+    }
+    ksort($results);
+    return array_values($results);
+}
+
+/** The bash script the Iranian server runs (needs only bash + curl; Xray is fetched from this bot). */
+function ssAgentScript(string $url, string $key, array $cfg): string
+{
+    $q = fn($s) => "'" . str_replace("'", "'\\''", (string) $s) . "'";
+    $secs = max(2, (int) $cfg['seconds']);
+    return <<<SH
+#!/bin/bash
+# Picha server-status agent: tests every location from THIS server and sends the numbers to the bot.
+# Cron: 0 */3 * * * bash /opt/picha-agent/run.sh >/dev/null 2>&1
+URL={$q($url)}
+KEY={$q($key)}
+PING_URL={$q($cfg['ping_url'])}
+DL_URL={$q($cfg['download_url'])}
+SECS=$secs
+DIR=/opt/picha-agent
+mkdir -p "\$DIR" && cd "\$DIR" || exit 1
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+exec 9>"\$DIR/lock"; flock -n 9 || exit 0
+if [ ! -x ./xray ]; then
+  curl -fsS -m 300 "\$URL?a=xray&key=\$KEY" -o xray.tmp && chmod +x xray.tmp && mv xray.tmp xray || { echo "xray download failed"; exit 1; }
+fi
+curl -fsS -m 60 "\$URL?a=config&key=\$KEY" -o config.json || { echo "job download failed"; exit 1; }
+curl -fsS -m 60 "\$URL?a=list&key=\$KEY" -o list.txt || exit 1
+./xray run -c config.json > xray.log 2>&1 &
+XP=\$!
+sleep 3
+: > result.txt
+while IFS=\$'\t' read -r idx port; do
+  [ -z "\$port" ] && continue
+  line="\$idx"
+  for n in 1 2 3; do
+    r=\$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --noproxy '' --socks5-hostname "127.0.0.1:\$port" -m 6 "\$PING_URL")
+    line="\$line \${r:-000 0}"
+  done
+  r=\$(curl -s -o /dev/null -w '%{size_download} %{time_total} %{time_starttransfer}' --noproxy '' --socks5-hostname "127.0.0.1:\$port" -m \$((SECS+3)) "\$DL_URL")
+  echo "\$line \${r:-0 0 0}" >> result.txt
+done < list.txt
+kill \$XP 2>/dev/null
+curl -fsS -m 60 -X POST --data-binary @result.txt "\$URL?a=result&key=\$KEY" && echo
+SH;
 }
 
 /** The monitor service's locations, with the names / hide list applied. */
@@ -425,7 +545,8 @@ function ssMessage(array $results, array $cfg, ?int $now = null): string
     $every = $cfg['every_minutes'] >= 60 && $cfg['every_minutes'] % 60 === 0 ? ssFa($cfg['every_minutes'] / 60) . ' ساعت' : ssFa($cfg['every_minutes']) . ' دقیقه';
     $L = [];
     $L[] = $rlm . '📡 <b>' . htmlspecialchars($cfg['title'], ENT_QUOTES) . '</b>';
-    $L[] = $rlm . '🕒 ' . $date . '  •  ' . ($up === $total ? '✅' : ($up === 0 ? '🚨' : '⚠️')) . ' <b>' . ssFa($up) . ' از ' . ssFa($total) . '</b> فعال';
+    $from = (string) ($cfg['from_label'] ?? '');
+    $L[] = $rlm . '🕒 ' . $date . ($from !== '' ? '  •  📍 تست از ' . htmlspecialchars($from, ENT_QUOTES) : '') . '  •  ' . ($up === $total ? '✅' : ($up === 0 ? '🚨' : '⚠️')) . ' <b>' . ssFa($up) . ' از ' . ssFa($total) . '</b> فعال';
     foreach (['direct' => '🌐 <b>مستقیم</b>', 'tunnel' => '🛡 <b>تونل</b>'] as $k => $title) {
         if ($groups[$k]) {
             $L[] = '';
