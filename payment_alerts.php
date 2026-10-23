@@ -185,3 +185,11 @@ function paymentGatewayProbe(): void
     }
     paSave($s);
 }
+
+/** One line per failed service creation (storage/order_failures.jsonl) so scripts/failed_orders.php knows exactly what failed. */
+function orderFailLog(string $kind, $userId, string $service, $price, string $paymentId, $reason, string $panel = ''): void
+{
+    $line = json_encode(['at' => time(), 'kind' => $kind, 'user' => (string) $userId, 'service' => $service, 'price' => (int) $price,
+        'payment' => $paymentId, 'panel' => $panel, 'reason' => mb_substr(is_string($reason) ? $reason : json_encode($reason, JSON_UNESCAPED_UNICODE), 0, 300)], JSON_UNESCAPED_UNICODE);
+    @file_put_contents(__DIR__ . '/storage/order_failures.jsonl', $line . "\n", FILE_APPEND | LOCK_EX);
+}

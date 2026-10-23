@@ -1291,6 +1291,9 @@ function DirectPayment($order_id, $image = 'images.jpg')
                 update("invoice", "Status", $invoiceStatusBefore, "id_invoice", $get_invoice['id_invoice']);
             }
             $dataoutput['msg'] = json_encode($dataoutput['msg'] ?? $dataoutput ?? 'unknown error');
+            if (function_exists('orderFailLog')) {
+                orderFailLog('payment', $Balance_id['id'], (string) $username_ac, $Payment_report['price'], (string) $order_id, $dataoutput['msg'], (string) $marzban_list_get['name_panel']);
+            }
             if (paymentRefundOnce($order_id)) { // a retry of the same payment never refunds it again
                 $balance = $Balance_id['Balance'] + $Payment_report['price'];
                 update("user", "Balance", $balance, "id", $Balance_id['id']);

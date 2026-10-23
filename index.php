@@ -4057,6 +4057,12 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $dataoutput['msg'] = $errorMessage;
         addBalance($from_id, $priceproduct);
         sendmessage($from_id, $textbotlang['users']['sell']['errorConfig'], $keyboard, 'HTML');
+        if (function_exists('orderFailLog')) {
+            orderFailLog('wallet', $from_id, (string) $username_ac, $priceproduct, '', $dataoutput['msg'], (string) $marzban_list_get['name_panel']);
+        }
+        if ((int) $priceproduct > 0) { // say where the money went: it is back in the wallet, ready to buy again
+            sendmessage($from_id, sprintf($textbotlang['users']['Balance']['refundCreateFailed'], number_format((int) $priceproduct)), $keyboard, 'HTML');
+        }
         $texterros = sprintf($textbotlang['Admin']['reportgroup']['errorSubscriptionCreate'], $dataoutput['msg'], $from_id, $username, $marzban_list_get['name_panel']);
         if (strlen($setting['Channel_Report']) > 0) {
             telegram('sendmessage', [
