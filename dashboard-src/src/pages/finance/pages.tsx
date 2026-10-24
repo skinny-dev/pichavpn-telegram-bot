@@ -195,6 +195,10 @@ export function MoneyPage({ nav }: { nav: Nav }) {
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
+const MOVE_LABEL: Record<string, string> = { capital_in: '➕ ورود سرمایه (پول خودتان)', capital_out: '➖ برداشت صاحب سرمایه (برای خودتان)', distribution: '🤝 تقسیم سود', transfer: '🔁 انتقال بین حساب‌ها',
+  expense: '🧾 هزینه‌ها', purchase: '🛒 خرید', payment: '💸 پرداخت به تأمین‌کننده', sale: '🛍 فروش', receipt: '📥 دریافت از مشتری', income: '💰 درآمد دیگر',
+  refund_sale: '↩️ برگشت از فروش', loan_in: '🏦 دریافت وام', loan_out: '🏦 پرداخت وام', loan_payment: '🏦 قسط وام', asset_purchase: '🖥 خرید دارایی', reversal: '⛔ ابطال', opening: '📌 مانده‌ی اول' }
+
 export function LedgerDialog({ account, onClose, onOpen }: { account: { id: number; name: string } | null; onClose: () => void; onOpen: (t: { txn?: number; entry?: number }) => void }) {
   const [page, setPage] = useState(1)
   useEffect(() => setPage(1), [account?.id])
@@ -206,6 +210,21 @@ export function LedgerDialog({ account, onClose, onOpen }: { account: { id: numb
         {!q.data ? <Loading rows={3} /> : q.data.report.rows.length === 0 ? <Empty title="این حساب هنوز گردشی ندارد" /> : (
           <div className="grid gap-2">
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">مانده‌ی فعلی</span><Money value={q.data.report.closing} /></div>
+            {(q.data.report.breakdown ?? []).length > 0 && (
+              <div className="grid gap-1.5 rounded-xl border bg-muted/30 p-3 text-sm">
+                <div className="text-xs text-muted-foreground">چقدر به این حساب آمده و از آن رفته</div>
+                {q.data.report.breakdown.map((b: { kind: string; in: number; out: number }) => (
+                  <div key={b.kind} className="flex items-center justify-between gap-2">
+                    <span>{MOVE_LABEL[b.kind] ?? b.kind}</span>
+                    <span className="flex gap-3 tabular">{b.in > 0 && <span className="text-success">+{fmtNum(b.in)}</span>}{b.out > 0 && <span className="text-destructive">−{fmtNum(b.out)}</span>}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t pt-1.5 text-xs text-muted-foreground">
+                  <span>جمع ورودی <span className="text-success tabular">{fmtNum(q.data.report.breakdown.reduce((s: number, b: any) => s + b.in, 0))}</span></span>
+                  <span>جمع خروجی <span className="text-destructive tabular">{fmtNum(q.data.report.breakdown.reduce((s: number, b: any) => s + b.out, 0))}</span></span>
+                </div>
+              </div>
+            )}
             <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
               {q.data.report.rows.map((r: any, i: number) => (
                 <li key={i}><button className="flex w-full items-center justify-between gap-2 rounded-lg border p-2.5 text-start text-sm hover:bg-accent/40" onClick={() => { onClose(); onOpen(r.txn_id ? { txn: Number(r.txn_id) } : { entry: Number(r.entry_id) }) }}>

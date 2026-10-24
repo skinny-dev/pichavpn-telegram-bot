@@ -241,8 +241,19 @@ function finLedger(PDO $pdo, $account, int $from, int $to, int $page = 1, int $p
         $run += $natural ? (int) $r['debit'] - (int) $r['credit'] : (int) $r['credit'] - (int) $r['debit'];
         $rows[] = $r + ['balance' => $run];
     }
+    // money boxes: how much came in / went out of it, by kind (capital added, owner withdrawals, expenses, transfers …)
+    $breakdown = [];
+    if (!empty($a['money_kind'])) {
+        $b = $pdo->prepare("SELECT COALESCE(t.type, j.source_type, 'other') k, COALESCE(SUM(l.debit),0) inn, COALESCE(SUM(l.credit),0) outt
+            FROM fin_journal_lines l JOIN fin_journal j ON j.id = l.entry_id LEFT JOIN fin_txn t ON t.id = j.txn_id
+            WHERE l.account_id = ? AND j.status IN " . FIN_COUNTED . " AND j.entry_date BETWEEN ? AND ?$pw GROUP BY k ORDER BY (SUM(l.debit) + SUM(l.credit)) DESC");
+        $b->execute([$a['id'], $from, $to]);
+        foreach ($b->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $breakdown[] = ['kind' => (string) $r['k'], 'in' => (int) $r['inn'], 'out' => (int) $r['outt']];
+        }
+    }
     return ['account' => ['id' => (int) $a['id'], 'code' => $a['code'], 'name' => $a['name'], 'type' => $a['type']], 'opening' => $opening, 'rows' => $rows, 'total' => $total, 'page' => $page, 'per' => $per,
-        'closing' => finAccountBalance($pdo, $a['id'], $to)];
+        'closing' => finAccountBalance($pdo, $a['id'], $to), 'breakdown' => $breakdown];
 }
 
 // ------------------------------------------------------------------ money accounts
