@@ -56,6 +56,11 @@ function picha_activity(PDO $pdo, int $jy, int $jm): array
             $exp[$i] += $v;
         }
     }
+    if (statsHas($pdo, 'fin_txn')) { // expenses recorded in the finance section (owner withdrawals are not an expense)
+        foreach ($byDay('txn_date', 'fin_txn', "status = 'posted' AND (type = 'expense' OR (type = 'purchase' AND meta LIKE '%\"expense\":true%'))", 'SUM(total)') as $i => $v) {
+            $exp[$i] += $v;
+        }
+    }
     $s['expenses'] = $exp;
     $s['support'] = statsHas($pdo, 'support_message') ? $byDay(statsTs('time'), 'support_message', '1=1') : array_fill(0, $days, 0);
     $s['net'] = array_map(fn($r, $e) => $r - $e, $s['revenue'], $s['expenses']);

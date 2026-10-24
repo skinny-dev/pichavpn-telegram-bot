@@ -279,6 +279,24 @@ function statsCollect(PDO $pdo, $start, $end)
             $by[$k]['s'] += (float) $x['p'];
         }
     }
+    // expenses / owner withdrawals recorded in the finance section (finance/engine.php), by their category account.
+    // (Rows synced from the `expenses` table are journal entries without a fin_txn row, so nothing is counted twice.)
+    if (statsHas($pdo, 'fin_txn')) {
+        $inv = ['cogs' => 'purchase', 'exp_salary' => 'salary', 'exp_advertising' => 'advertising', 'exp_server' => 'server', 'exp_tools' => 'tools', 'exp_fee' => 'fee',
+            'exp_tax' => 'tax', 'dividends' => 'dividend', 'drawings' => 'dividend'];
+        $st = $pdo->prepare("SELECT t.type, a.system_key sk, COUNT(*) c, SUM(t.total) p FROM fin_txn t LEFT JOIN fin_accounts a ON a.id = t.category_account_id
+            WHERE t.status = 'posted' AND t.txn_date BETWEEN :s AND :e AND (t.type IN ('expense', 'capital_out', 'distribution') OR (t.type = 'purchase' AND t.meta LIKE '%\"expense\":true%'))
+            GROUP BY t.type, a.system_key");
+        $st->execute($p);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $x) {
+            $k = in_array($x['type'], ['capital_out', 'distribution'], true) ? 'dividend' : ($inv[(string) $x['sk']] ?? 'general');
+            $by[$k]['c'] += (int) $x['c'];
+            $by[$k]['s'] += (float) $x['p'];
+        }
+        $row = $one("SELECT COUNT(*) c, SUM(total) p FROM fin_txn WHERE status = 'posted' AND type = 'capital_in' AND txn_date BETWEEN :s AND :e", $p);
+        $r['cap'] += (int) $n($row['c']);
+        $r['cap_sum'] += $n($row['p']);
+    }
     $r['by_kind'] = $by;
     foreach (['cogs', 'opex', 'equity'] as $g) {
         $r[$g] = 0;
