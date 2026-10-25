@@ -3,8 +3,9 @@
 #
 #   sudo picha-backup.sh                       # one backup now
 #   sudo picha-backup.sh --install-cron        # daily at 03:30
-#   Options: --app DIR  --out DIR  --keep DAYS  --telegram  --remote user@host:/path  --no-encrypt
-# Settings can also live in /etc/picha-backup.conf (APP_DIR OUT_DIR KEEP_DAYS TELEGRAM REMOTE PASSFILE).
+#   Options: --app DIR  --out DIR  --keep DAYS  --telegram  --telegram-chat ID  --remote user@host:/path  --no-encrypt
+# Settings can also live in /etc/picha-backup.conf (APP_DIR OUT_DIR KEEP_DAYS TELEGRAM TG_CHAT REMOTE PASSFILE).
+#   --telegram        also send the encrypted file to Telegram (the admin's chat, or TG_CHAT: a private channel id -100…)
 set -uo pipefail
 
 CONF="${PICHA_BACKUP_CONF:-/etc/picha-backup.conf}"
@@ -13,6 +14,7 @@ APP_DIR="${APP_DIR:-/var/www/html/mirzaprobotconfig}"
 OUT_DIR="${OUT_DIR:-/root/picha-backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 TELEGRAM="${TELEGRAM:-0}"
+TG_CHAT="${TG_CHAT:-}"
 REMOTE="${REMOTE:-}"
 PASSFILE="${PASSFILE:-/root/.picha-backup-pass}"
 ENCRYPT=1
@@ -25,6 +27,7 @@ while [ $# -gt 0 ]; do
     --out) OUT_DIR="$2"; shift 2;;
     --keep) KEEP_DAYS="$2"; shift 2;;
     --telegram) TELEGRAM=1; shift;;
+    --telegram-chat) TELEGRAM=1; TG_CHAT="$2"; shift 2;;
     --remote) REMOTE="$2"; shift 2;;
     --no-encrypt) ENCRYPT=0; shift;;
     --install-cron)
@@ -44,7 +47,7 @@ die() { say "ERROR: $*"; notify "❌ Picha backup FAILED on $(hostname): $*"; ex
 php_get() { php -r "error_reporting(0); include '$APP_DIR/config.php'; echo \$$1;" 2>/dev/null; }
 notify() {
   [ "$TELEGRAM" = "1" ] || return 0
-  local tok adm; tok="$(php_get APIKEY)"; adm="$(php_get adminnumber)"
+  local tok adm; tok="$(php_get APIKEY)"; adm="${TG_CHAT:-$(php_get adminnumber)}"
   [ -n "$tok" ] && [ -n "$adm" ] && curl -s -m 20 "$TG_API/bot$tok/sendMessage" --data-urlencode "chat_id=$adm" --data-urlencode "text=$1" >/dev/null 2>&1 || true
 }
 
@@ -125,9 +128,9 @@ if [ -n "$REMOTE" ]; then
   if scp -q -o BatchMode=yes -o ConnectTimeout=15 "$FINAL" "$FINAL.sha256" "$REMOTE/" 2>>"$LOG"; then say "copied to $REMOTE"; else say "WARNING: copy to $REMOTE failed (SSH key set up?)"; notify "⚠️ Picha backup made but remote copy FAILED"; fi
 fi
 if [ "$TELEGRAM" = "1" ]; then
-  tok="$(php_get APIKEY)"; adm="$(php_get adminnumber)"
+  tok="$(php_get APIKEY)"; adm="${TG_CHAT:-$(php_get adminnumber)}"
   if [ "$(stat -c %s "$FINAL")" -gt 49000000 ]; then say "WARNING: file larger than Telegram's 50MB limit, not sent"; notify "⚠️ Picha backup $STAMP is too big for Telegram ($SIZE)"
-  elif curl -s -m 120 "$TG_API/bot$tok/sendDocument" -F "chat_id=$adm" -F "document=@$FINAL" -F "caption=📦 Picha backup $STAMP ($SIZE, $TABLES tables, encrypted)" | grep -q '"ok":true'; then say "sent to Telegram admin chat"
+  elif curl -s -m 120 "$TG_API/bot$tok/sendDocument" -F "chat_id=$adm" -F "document=@$FINAL" -F "caption=📦 Picha backup $STAMP ($SIZE, $TABLES tables, encrypted · rows: $(grep -E '^rows_(user|invoice)=' "$WORK/b/MANIFEST" | tr '\n' ' '))" | grep -q '"ok":true'; then say "sent to Telegram ($adm)"
   else say "WARNING: Telegram upload failed"; fi
 fi
 echo "$FINAL"
