@@ -8874,6 +8874,12 @@ if ($datain == "settimecornday" && $adminrulecheck['rule'] == "administrator") {
     } else {
         sendmessage($from_id, $sortDesc, json_encode($sortList, JSON_UNESCAPED_UNICODE), 'HTML');
     }
+} elseif (($text === '🖥 پنل مدیریت (مینی‌اپ)' || $text === '/webpanel') && in_array($adminrulecheck['rule'], ['administrator', 'support'], true)) {
+    // the web panel inside Telegram: the admin is recognised by their Telegram account (dashboard/api.php tg_login)
+    $panelUrl = 'https://' . $domainhosts . '/dashboard/';
+    telegram('setChatMenuButton', ['chat_id' => $from_id, 'menu_button' => json_encode(['type' => 'web_app', 'text' => 'پنل', 'web_app' => ['url' => $panelUrl]])]);
+    sendmessage($from_id, "🖥 <b>پنل مدیریت پیچا</b>\n\nهمه‌ی بخش‌های پنل وب، داخل تلگرام. ورود با همین حساب تلگرام انجام می‌شود (بدون رمز).\n\nاز این به بعد دکمه‌ی «پنل» کنار کادر پیام هم همین را باز می‌کند.",
+        json_encode(['inline_keyboard' => [[['text' => '🖥 باز کردن پنل', 'web_app' => ['url' => $panelUrl]]]]]), 'HTML');
 } elseif (($text == ($textbotlang['keyboard']['categorySaleStatus'] ?? '🚦 وضعیت فروش دسته بندی') || preg_match('/^catstatus_(\d+)$/', $datain, $dataget)) && $adminrulecheck['rule'] == "administrator") {
     if (isset($dataget[1])) {
         $catRow = select("category", "*", "id", $dataget[1], "select");

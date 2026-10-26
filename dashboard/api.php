@@ -5,6 +5,12 @@
 declare(strict_types=1);
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Telegram Mini App: the session travels in a header (inside Telegram Web the page is a frame and cookies are not sent).
+    // Support attachments open as plain links, so only that route also accepts it in the URL.
+    $pichaSid = (string) ($_SERVER['HTTP_X_PICHA_SESSION'] ?? ((($_GET['r'] ?? '') === 'support_file') ? ($_GET['sid'] ?? '') : ''));
+    if ($pichaSid !== '' && preg_match('/^[A-Za-z0-9,-]{22,128}$/', $pichaSid)) {
+        session_id($pichaSid);
+    }
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
@@ -30,6 +36,14 @@ require_once __DIR__ . '/promo_api.php';
 /** @var PDO $pdo */
 
 const PICHA_BRAND = 'پنل مدیریت پیچا';
+
+/** storage/dashboard_access.json {"web_login": false} turns the password login off (the Mini App still works). */
+function picha_web_login_off(): bool
+{
+    $f = __DIR__ . '/../storage/dashboard_access.json';
+    $c = is_file($f) ? json_decode((string) @file_get_contents($f), true) : null;
+    return is_array($c) && array_key_exists('web_login', $c) && $c['web_login'] === false;
+}
 const PICHA_MAX_EXPORT = 200000;
 const PICHA_MAX_IMPORT = 5000;
 
@@ -555,7 +569,55 @@ function picha_throttle(string $ip, bool $record): bool
     return true;
 }
 
+/** Telegram Mini App data (initData) checked with the bot token; the Telegram user or null. https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app */
+function picha_tg_user(string $initData, string $botToken, int $maxAge = 86400): ?array
+{
+    parse_str($initData, $d);
+    $hash = (string) ($d['hash'] ?? '');
+    if ($hash === '' || $botToken === '') {
+        return null;
+    }
+    unset($d['hash']);
+    ksort($d);
+    $check = implode("\n", array_map(fn($k, $v) => $k . '=' . $v, array_keys($d), $d));
+    $secret = hash_hmac('sha256', $botToken, 'WebAppData', true);
+    if (!hash_equals(hash_hmac('sha256', $check, $secret), $hash) || time() - (int) ($d['auth_date'] ?? 0) > $maxAge) {
+        return null;
+    }
+    $u = json_decode((string) ($d['user'] ?? ''), true);
+    return is_array($u) && !empty($u['id']) ? $u : null;
+}
+
+if ($route === 'tg_login') { // the same panel opened as a Telegram Mini App: the admin is recognised by their Telegram account
+    if ($method !== 'POST') {
+        fail('method', 405);
+    }
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    if (!picha_throttle($ip, false)) {
+        fail('تعداد تلاش‌ها زیاد است. ۱۵ دقیقه بعد دوباره امتحان کنید', 429);
+    }
+    $tgUser = picha_tg_user((string) (body()['init_data'] ?? ''), (string) ($APIKEY ?? ''));
+    if (!$tgUser) {
+        picha_throttle($ip, true);
+        fail('اطلاعات ورود تلگرام معتبر نیست؛ مینی‌اپ را ببندید و دوباره باز کنید', 401);
+    }
+    $st = $pdo->prepare("SELECT * FROM admin WHERE id_admin = ?");
+    $st->execute([(string) $tgUser['id']]);
+    $admin = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$admin || !in_array($admin['rule'], ['administrator', 'support'], true)) {
+        fail('این حساب تلگرام ادمین پنل نیست', 403);
+    }
+    session_regenerate_id(true);
+    $_SESSION['admin_user'] = $admin['username'];
+    $_SESSION['login_time'] = time();
+    $_SESSION['via'] = 'telegram';
+    out(['ok' => true, 'user' => $admin['username'], 'csrf' => picha_csrf(), 'brand' => PICHA_BRAND, 'session' => session_id()]);
+}
+
 if ($route === 'login') {
+    if (picha_web_login_off()) {
+        fail('ورود با رمز خاموش است؛ پنل را از مینی‌اپ ربات در تلگرام باز کنید', 403);
+    }
     if ($method !== 'POST') {
         fail('method', 405);
     }
@@ -592,11 +654,13 @@ if (!empty($_SESSION['admin_user'])) {
     $st->execute([$_SESSION['admin_user']]);
     $role = (string) $st->fetchColumn();
     // support staff may use the live-chat inbox only; everything else needs a full administrator
-    $authed = in_array($role, ['administrator', 'support'], true) && (time() - (int) ($_SESSION['login_time'] ?? 0) < 86400);
+    $authed = in_array($role, ['administrator', 'support'], true) && (time() - (int) ($_SESSION['login_time'] ?? 0) < 86400)
+        && (($_SESSION['via'] ?? '') === 'telegram' || !picha_web_login_off()); // web panel switched off: only Mini App sessions
 }
 
 if ($route === 'me') {
-    out(['ok' => true, 'authed' => $authed, 'user' => $authed ? $_SESSION['admin_user'] : null, 'role' => $authed ? $role : null, 'csrf' => $authed ? picha_csrf() : null, 'brand' => PICHA_BRAND]);
+    out(['ok' => true, 'authed' => $authed, 'user' => $authed ? $_SESSION['admin_user'] : null, 'role' => $authed ? $role : null, 'csrf' => $authed ? picha_csrf() : null, 'brand' => PICHA_BRAND,
+        'web_login' => !picha_web_login_off()]);
 }
 if (!$authed) {
     fail('ورود لازم است', 401);

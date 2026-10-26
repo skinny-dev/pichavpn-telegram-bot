@@ -7,6 +7,9 @@ import App from './App'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { DirectionProvider } from '@radix-ui/react-direction'
 import './index.css'
+import { captureTelegramLaunch } from '@/lib/telegram'
+
+captureTelegramLaunch() // opened as a Telegram Mini App: keep the launch data, give the router a clean hash
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false } } })
 

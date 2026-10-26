@@ -29,7 +29,11 @@ export class ApiError extends Error {
   }
 }
 
+import { telegramSession } from './telegram'
+
 const ENDPOINT = import.meta.env.DEV ? '/dashboard/api.php' : 'api.php'
+/** inside the Telegram Mini App the session goes in a header (cookies may be unavailable there) */
+const sessionHeader = (): Record<string, string> => { const s = telegramSession(); return s ? { 'X-Picha-Session': s } : {} }
 let csrf = ''
 export const setCsrf = (t: string) => (csrf = t)
 let onUnauthorized: (() => void) | null = null
@@ -48,7 +52,7 @@ export async function api<T = any>(route: string, opts: { body?: unknown; query?
     res = await fetch(`${ENDPOINT}?${params}`, {
       method: hasBody ? 'POST' : 'GET',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', ...(hasBody ? { 'X-CSRF-Token': csrf } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(hasBody ? { 'X-CSRF-Token': csrf } : {}), ...sessionHeader() },
       body: hasBody ? JSON.stringify(opts.body) : undefined,
     })
   } catch {
@@ -67,7 +71,7 @@ export async function api<T = any>(route: string, opts: { body?: unknown; query?
 export async function apiForm<T = any>(route: string, form: FormData): Promise<T> {
   let res: Response
   try {
-    res = await fetch(`${ENDPOINT}?${new URLSearchParams({ r: route })}`, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf }, body: form })
+    res = await fetch(`${ENDPOINT}?${new URLSearchParams({ r: route })}`, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf, ...sessionHeader() }, body: form })
   } catch {
     throw new ApiError('اتصال به سرور برقرار نشد', 0)
   }
@@ -79,4 +83,4 @@ export async function apiForm<T = any>(route: string, form: FormData): Promise<T
 }
 
 /** URL of a support attachment (streamed by the server from Telegram) */
-export const supportFileUrl = (row: number, side: 'c' | 's') => `${ENDPOINT}?r=support_file&row=${row}&side=${side}`
+export const supportFileUrl = (row: number, side: 'c' | 's') => `${ENDPOINT}?r=support_file&row=${row}&side=${side}${telegramSession() ? `&sid=${encodeURIComponent(telegramSession())}` : ''}`

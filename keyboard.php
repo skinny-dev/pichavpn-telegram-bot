@@ -159,6 +159,7 @@ if ($adminrulecheck['rule'] == "administrator") {
             [['text' => $textbotlang['keyboard']['botReport']]],
             [['text' => $textbotlang['keyboard']['generalSettings']], ['text' => $textbotlang['keyboard']['pendingReceipts']]],
             [['text' => $textbotlang['bottext']['open_button']]],
+            [['text' => '🖥 پنل مدیریت (مینی‌اپ)']],
             [['text' => $textbotlang['users']['backbtn']]]
         ],
         'resize_keyboard' => true
@@ -178,6 +179,7 @@ if ($adminrulecheck['rule'] == "support") {
     $keyboardadmin = json_encode([
         'keyboard' => [
             [['text' => $textbotlang['keyboard']['manageUser']]],
+            [['text' => '🖥 پنل مدیریت (مینی‌اپ)']],
             [['text' => $textbotlang['users']['backbtn']]]
         ],
         'resize_keyboard' => true

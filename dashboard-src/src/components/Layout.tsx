@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useState } from 'react'
+import { inTelegram, setTelegramSession } from '@/lib/telegram'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
@@ -47,7 +48,11 @@ export function Layout() {
   const current = ITEMS.find((i) => (i.to === '/' ? pathname === '/' : pathname.startsWith(i.to)))
 
   async function logout() {
-    try { await api('logout', { body: {} }) } finally { qc.clear(); location.reload() }
+    try { await api('logout', { body: {} }) } finally {
+      qc.clear()
+      if (inTelegram()) { setTelegramSession(null); window.Telegram?.WebApp && (window.Telegram.WebApp as any).close?.(); return } // Mini App: just close it
+      location.reload()
+    }
   }
 
   const link = (i: Item, mobile = false) => (
