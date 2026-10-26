@@ -1,0 +1,4 @@
+// Picha dev bot on Telegram Serverless. No static site: the admin panel button opens the existing panel on the bot server.
+{
+  "$schema": "./node_modules/@tgcloud/cli/schema/tgcloud.json"
+}

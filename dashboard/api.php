@@ -596,7 +596,12 @@ if ($route === 'tg_login') { // the same panel opened as a Telegram Mini App: th
     if (!picha_throttle($ip, false)) {
         fail('تعداد تلاش‌ها زیاد است. ۱۵ دقیقه بعد دوباره امتحان کنید', 429);
     }
-    $tgUser = picha_tg_user((string) (body()['init_data'] ?? ''), (string) ($APIKEY ?? ''));
+    $initData = (string) (body()['init_data'] ?? '');
+    $tgUser = picha_tg_user($initData, (string) ($APIKEY ?? ''));
+    if (!$tgUser) { // opened from the dev bot on Telegram Serverless (scripts/serverless_setup.php token)
+        $sl = json_decode((string) @file_get_contents(dirname(__DIR__) . '/storage/serverless.json'), true);
+        $tgUser = !empty($sl['bot_token']) ? picha_tg_user($initData, (string) $sl['bot_token']) : null;
+    }
     if (!$tgUser) {
         picha_throttle($ip, true);
         fail('اطلاعات ورود تلگرام معتبر نیست؛ مینی‌اپ را ببندید و دوباره باز کنید', 401);
