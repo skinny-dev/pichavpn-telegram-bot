@@ -11,6 +11,7 @@ import { bulkRoutes } from './routes/bulk.js'
 import { payRoutes } from './routes/pay.js'
 import { adminPayRoutes } from './admin/payments.js'
 import { adminRelayRoutes } from './admin/relay.js'
+import { adminMenuRoutes } from './admin/menu.js'
 import { starsRoutes } from './routes/stars.js'
 import { miscRoutes } from './routes/misc.js'
 import { lateRoutes } from './routes/late.js'
@@ -35,4 +36,5 @@ export const routes = [
 export const adminRoutes = [
   ...adminRelayRoutes,
   ...adminPayRoutes,
+  ...adminMenuRoutes,
 ]

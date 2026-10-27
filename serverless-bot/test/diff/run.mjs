@@ -78,7 +78,7 @@ for (let i = 0; i < n; i++) {
   const a = phpCalls[i] ? norm(phpCalls[i]) : '(none)', b = jsCalls[i] ? norm(jsCalls[i]) : '(none)'
   if (a !== b) {
     bad++
-    console.log(`\n✗ call ${i + 1}\n  PHP: ${a.slice(0, 1500)}\n  JS : ${b.slice(0, 1500)}`)
+    console.log(`\n✗ call ${i + 1}\n  PHP: ${a.slice(0, +(process.env.FULL || 1500))}\n  JS : ${b.slice(0, +(process.env.FULL || 1500))}`)
   } else if (show) console.log(`✓ ${a.slice(0, 300)}`)
 }
 console.log(`\n${scenarioFile}: ${n - bad}/${n} calls identical` + (bad ? ` — ${bad} different` : ' ✅'))
@@ -103,6 +103,7 @@ function normalize(v) {
       if (x === false) x = '' // PHP posts false as an empty field
       if (x === null || x === undefined || x === '') continue
       if (k === 'parse_mode') x = String(x).toLowerCase()
+      if (k === 'reply_markup' && x && typeof x === 'object' && x.inline_keyboard) x = { inline_keyboard: x.inline_keyboard } // the PHP bot sometimes sends stray rows next to it; Telegram ignores them
       o[k] = normalize(x)
     }
     return o
