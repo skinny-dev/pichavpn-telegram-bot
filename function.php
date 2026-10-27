@@ -2991,6 +2991,25 @@ function createPayZarinpal($price, $order_id)
 }
 function createPayVariza($price, $order_id)
 {
+    // variza.ir sometimes fails for a moment (timeout, 5xx, 429): try up to 3 times before giving up
+    $res = [];
+    for ($try = 1; $try <= 3; $try++) {
+        $res = createPayVarizaOnce($price, $order_id);
+        if (!empty($res['pay_url'])) {
+            return $res;
+        }
+        $code = (int) ($res['http_code'] ?? 0);
+        $permanent = in_array($code, [400, 401, 403, 422], true) || (($res['error'] ?? '') === 'variza_api_token not set');
+        if ($permanent || $try === 3) {
+            break;
+        }
+        error_log("createPayVariza try $try failed: " . ($res['error'] ?? '?'));
+        sleep($try);
+    }
+    return $res;
+}
+function createPayVarizaOnce($price, $order_id)
+{
     global $domainhosts;
     $api_token = trim((string) getPaySettingValue('variza_api_token', ''));
     if ($api_token === '' || $api_token === '0') {
