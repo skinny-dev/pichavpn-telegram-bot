@@ -133,7 +133,7 @@ export const extendRoutes = [
         return true
       }
     } else if (c.datain === 'exntedagei') {
-      const so = await one(sql`SELECT value FROM service_other WHERE username = ${inv.username ?? null} AND type = 'extend_user' AND status = 'paid' ORDER BY time DESC`)
+      const so = await one(sql`SELECT value FROM service_other WHERE username = ${inv.username ?? null} AND type = 'extend_user' AND status = 'paid' ORDER BY time DESC, id DESC`)
       let prod
       if (!so) prod = await one(sql`SELECT * FROM product WHERE name_product = ${inv.name_product ?? null}`)
       else {
