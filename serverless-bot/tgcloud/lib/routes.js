@@ -4,6 +4,8 @@ import { services } from './routes/services.js'
 import { config } from './routes/config.js'
 import { extendRoutes } from './routes/extend.js'
 import { manageRoutes } from './routes/manage.js'
+import { usertestRoutes } from './routes/usertest.js'
+import { supportRoutes } from './routes/support.js'
 
 export const routes = [
   ...start,
@@ -11,4 +13,6 @@ export const routes = [
   ...config,
   ...extendRoutes,
   ...manageRoutes,
+  ...usertestRoutes,
+  ...supportRoutes,
 ]

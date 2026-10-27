@@ -2,6 +2,7 @@ import { msg, cb } from './lib.mjs'
 // renewal of a custom («سرویس دلخواه») service: volume, days, price from the ready plans, invoice, confirm; the flat price too
 export default {
   sql: [
+    `DELETE FROM Giftcodeconsumed`, `DELETE FROM DiscountSell`, `DELETE FROM service_other`,
     `INSERT INTO product (code_product,name_product,price_product,Volume_constraint,Service_time,Location,agent,note,data_limit_reset,one_buy_status,category,hide_panel,sort_order) VALUES
       ('e1','۲۰ گیگ یک ماهه','30000','20','30','Picha-1','f','','no_reset','0','اقتصادی','[]',1),
       ('e2','۵۰ گیگ یک ماهه','60000','50','30','Picha-1','f','','no_reset','0','اقتصادی','[]',2),
@@ -10,7 +11,6 @@ export default {
      VALUES ('cus1','1001','u5','Picha-1',UNIX_TIMESTAMP()-100,'⚙️ سرویس دلخواه','40000','25','30','active','','{}')`,
     `UPDATE marzban_panel SET status_extend='on_extend', pricecustomvolume='{"f":"1500","n":"1000","n2":"1000"}', pricecustomtime='{"f":"300","n":"200","n2":"200"}'`,
     `UPDATE user SET Balance='500000', pricediscount='0' WHERE id='1001'`,
-    `DELETE FROM Giftcodeconsumed`,
   ],
   updates: [
     cb(1001, 'extend_cus1'),
