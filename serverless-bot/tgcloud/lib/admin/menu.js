@@ -10,6 +10,7 @@ import { dataUser, removeUser } from '../panel.js'
 import { statsReport, statsTs, accParseDateTime } from '../panelapi/stats.js'
 import { qOne } from '../panelapi/qb.js'
 import { backuserKb } from '../keyboards.js'
+import { broadcastStart, broadcastTick, broadcastCancel, broadcastButtons } from '../broadcast.js'
 
 const isAdmin = (c) => !!c.adminRow && ['administrator', 'support', 'Seller'].includes(c.adminRow.rule)
 const isBoss = (c) => c.adminRow?.rule === 'administrator'
@@ -368,6 +369,40 @@ export const adminMenuRoutes = [
       await sendmessage(c.from_id, sprintf(T.Admin.Balance.addedToUserNotice, left), null, 'HTML')
       await sendmessage(inv.id_user, sprintf(T.users.status.deleteRequestApproved, inv.username), null, 'HTML')
       await report(c, 'otherreport', sprintf(T.Admin.reportgroup.deleteRequestApproved, c.from_id, left, req.username, inv.id_user))
+      return true
+    }
+    return false
+  },
+  // ---- a message to everyone (/sendall)
+  async (c) => {
+    if (!isBoss(c)) return false
+    const T = c.T
+    if (c.text === '/sendall') {
+      await sendmessage(c.from_id, T.Admin.messageBulk.askTextOrImage, backAdmin(c), 'HTML')
+      await step(c, 'sendall_text')
+      return true
+    }
+    if (c.user.step === 'sendall_text') {
+      const d = c.photoid ? { type: 'photo', photoid: c.photoid, text: c.caption } : c.video ? { type: 'video', videoid: c.videoid, text: c.caption } : { type: 'text', text: c.text }
+      await run(sql`UPDATE user SET Processing_value = ${JSON.stringify(d)} WHERE id = ${c.from_id}`)
+      await sendmessage(c.from_id, '🔘 دکمه‌ی زیر پیام؟ یک عدد بفرستید (۰ = بدون دکمه):\n' + broadcastButtons(T), backAdmin(c), 'HTML')
+      await step(c, 'sendall_button')
+      return true
+    }
+    if (c.user.step === 'sendall_button') {
+      if (!/^[0-6]$/.test(c.text)) { await sendmessage(c.from_id, T.common.invalidInput, backAdmin(c), 'HTML'); return true }
+      const draft = JSON.parse(c.user.Processing_value || '{}')
+      await step(c, 'home')
+      await sendmessage(c.from_id, keyboardAdmin(c) ? T.users.selectoption : '', keyboardAdmin(c), 'HTML')
+      await broadcastStart(c, draft, Number(c.text))
+      await broadcastTick(c)
+      return true
+    }
+    if (c.datain === 'continue_sendmessage') { await broadcastTick(c); await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id }); return true }
+    if (c.datain === 'cancel_sendmessage') {
+      await broadcastCancel()
+      await deletemessage(c.from_id, c.message_id)
+      await sendmessage(c.from_id, T.Admin.messageBulk.cancelled ?? '❌ ارسال همگانی لغو شد', null, 'HTML')
       return true
     }
     return false
