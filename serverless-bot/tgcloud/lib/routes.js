@@ -2,9 +2,11 @@
 import { start } from './routes/start.js'
 import { services } from './routes/services.js'
 import { config } from './routes/config.js'
+import { extendRoutes } from './routes/extend.js'
 
 export const routes = [
   ...start,
   ...services,
   ...config,
+  ...extendRoutes,
 ]

@@ -1,4 +1,5 @@
 // Small PHP functions the ported code needs, with the same results.
+import { phpFloat } from './fmt.js'
 
 /** sprintf with %s %d %f %u %%, %1$s positions */
 export function sprintf(fmt, ...args) {
@@ -8,7 +9,7 @@ export function sprintf(fmt, ...args) {
     const v = pos ? args[pos - 1] : args[i++]
     if (t === 'd' || t === 'u') return String(Math.trunc(Number(v) || 0))
     if (t === 'f' || t === 'F') return (Number(v) || 0).toFixed(prec === undefined ? 6 : Number(prec))
-    return v === null || v === undefined ? '' : v === true ? '1' : v === false ? '' : String(v)
+    return v === null || v === undefined ? '' : v === true ? '1' : v === false ? '' : typeof v === 'number' ? phpFloat(v) : String(v)
   })
 }
 /** number_format($n, $dec) with , and . */
@@ -64,4 +65,8 @@ export const utf8 = (bytes) => new TextDecoder().decode(bytes)
 export function urldecode(s) {
   s = String(s ?? '').replace(/\+/g, ' ')
   return s.replace(/(?:%[0-9a-fA-F]{2})+/g, (m) => { try { return decodeURIComponent(m) } catch { return m } })
+}
+/** json_encode() with PHP's default escaping (\/ and \uXXXX), for text that is shown or compared */
+export function phpJson(v) {
+  return JSON.stringify(v ?? null).replace(/\//g, '\\/').replace(/[\u0080-\uffff]/g, (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'))
 }
