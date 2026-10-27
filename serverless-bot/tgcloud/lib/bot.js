@@ -6,7 +6,7 @@ import { telegram, sendmessage, deletemessage, Editmessagetext } from './tg.js'
 import { entitiesToTags, restoreLabel } from './emoji.js'
 import { sprintf, strtr, numberFormat, convertPersianNumbers, crc32, dechex, time, intval, randomHex, J } from './php.js'
 import { kvGet } from './db.js'
-import { routes } from './routes.js'
+import { routes, adminRoutes } from './routes.js'
 
 /** one update, like one webhook request to index.php */
 export async function handleUpdate(update) {
@@ -85,7 +85,9 @@ async function main(c) {
   if (intval(c.from_id) === 0) return
 
   const topics = Object.fromEntries((await all(sql`SELECT report, idreport FROM topicid`)).map((r) => [r.report, r.idreport]))
-  c.topics = topics
+  c.topicsAll = topics
+  // index.php never sets $otherreport, so its «other» reports go to the group's main thread
+  c.topics = Object.fromEntries(Object.entries(topics).filter(([k]) => k !== 'otherreport'))
   const S = c.setting
   if (S.statusnewuser === 'onnewuser' && !usersBefore) {
     const kb = J({ inline_keyboard: [[{ text: T.Admin.manageUser.manageUserBtn, callback_data: 'manageuser_' + c.from_id }]] })
@@ -229,10 +231,15 @@ async function main(c) {
     }
   }
 
+  let handled = false
   for (const r of routes) {
-    if (await r(c)) return
+    if (await r(c)) { handled = true; break }
   }
-  if (c.text !== '' && c.Chat_type === 'private' && !c.isAdmin) await sendmessage(c.from_id, T.users.invalidCommand, c.keyboard, 'HTML')
+  if (!handled && c.text !== '' && c.Chat_type === 'private' && !c.isAdmin) await sendmessage(c.from_id, T.users.invalidCommand, c.keyboard, 'HTML')
+  // admin.php runs after the customer chain for admins
+  if (c.isAdmin && !handled) {
+    for (const r of adminRoutes) if (await r(c)) return
+  }
 }
 
 // ---------------------------------------------------------------- helpers shared by the routes
