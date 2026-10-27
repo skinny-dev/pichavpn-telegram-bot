@@ -95,27 +95,28 @@ export async function smsUniqueAmount(base) {
 /** smsProcess(): store one SMS and approve the single open order it matches */
 export async function smsProcess(c, text, bank, now = Math.floor(Date.now() / 1000), maxAge = 21600) {
   const p = smsParse(text)
+  const out = (o) => ({ ...o, amount_rial: p?.amount_rial ?? 0 })
   const fp = p ? await fingerprint(p, bank) : await sha1(smsNormalizeDigits(String(text).trim()) + '|' + String(bank).toLowerCase())
   const kind = p?.kind ?? 'unknown'
   const status = p === null ? 'ignored' : kind === 'deposit' ? 'unmatched' : 'ignored'
   const ins = await run(sql`INSERT OR IGNORE INTO sms_inbox (fingerprint, received_at, bank, kind, amount_rial, balance_rial, sms_time, status, note)
     VALUES (${fp}, ${now}, ${bank}, ${kind}, ${p?.amount_rial ?? 0}, ${p?.balance_rial ?? null}, ${p?.sms_time ?? null}, ${status}, NULL)`)
-  if (Number(ins?.rowsAffected ?? 0) === 0) return { status: 'duplicate', order: null }
+  if (Number(ins?.rowsAffected ?? 0) === 0) return out({ status: 'duplicate', order: null })
   const id = (await one(sql`SELECT id FROM sms_inbox WHERE fingerprint = ${fp}`))?.id
   const set = (st, order = null, note = null) => run(sql`UPDATE sms_inbox SET status = ${st}, id_order = ${order}, note = ${note} WHERE id = ${id}`)
-  if (p === null || kind !== 'deposit') return { status: 'ignored', order: null }
+  if (p === null || kind !== 'deposit') return out({ status: 'ignored', order: null })
   const sentAt = smsTimeToUnix(p.sms_time)
-  if (maxAge > 0 && sentAt !== null && now - sentAt > maxAge) { await set('stale', null, `bank timestamp older than ${Math.floor(maxAge / 3600)}h`); return { status: 'stale', order: null } }
-  if (p.amount_rial % 10 !== 0) { await set('review', null, 'amount not a whole toman'); return { status: 'review', order: null } }
+  if (maxAge > 0 && sentAt !== null && now - sentAt > maxAge) { await set('stale', null, `bank timestamp older than ${Math.floor(maxAge / 3600)}h`); return out({ status: 'stale', order: null }) }
+  if (p.amount_rial % 10 !== 0) { await set('review', null, 'amount not a whole toman'); return out({ status: 'review', order: null }) }
   const cands = await smsOpenReports(Math.floor(p.amount_rial / 10), now)
-  if (cands.length === 0) { await set('unmatched'); return { status: 'unmatched', order: null } }
-  if (cands.length > 1) { await set('ambiguous', null, `${cands.length} open orders with this amount`); return { status: 'ambiguous', order: null } }
+  if (cands.length === 0) { await set('unmatched'); return out({ status: 'unmatched', order: null }) }
+  if (cands.length > 1) { await set('ambiguous', null, `${cands.length} open orders with this amount`); return out({ status: 'ambiguous', order: null }) }
   const order = cands[0]
   const claim = await run(sql`UPDATE Payment_report SET payment_Status = 'paid', dec_not_confirmed = 'تأیید خودکار با پیامک بانک' WHERE id_order = ${order.id_order} AND payment_Status IN ('Unpaid','waiting')`)
-  if (Number(claim?.rowsAffected ?? 0) === 0) { await set('review', order.id_order, 'order changed concurrently'); return { status: 'review', order } }
+  if (Number(claim?.rowsAffected ?? 0) === 0) { await set('review', order.id_order, 'order changed concurrently'); return out({ status: 'review', order }) }
   await set('matched', order.id_order)
   await smsApproveOrder(c, order)
-  return { status: 'matched', order }
+  return out({ status: 'matched', order })
 }
 export async function smsProcessText(c, text, bank, now, maxAge) {
   const res = []

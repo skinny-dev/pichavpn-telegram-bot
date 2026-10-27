@@ -7,6 +7,7 @@ import { entitiesToTags, restoreLabel } from './emoji.js'
 import { sprintf, strtr, numberFormat, convertPersianNumbers, crc32, dechex, time, intval, randomHex, J } from './php.js'
 import { kvGet } from './db.js'
 import { routes, adminRoutes } from './routes.js'
+import { pullRelay } from './relay.js'
 
 /** one update, like one webhook request to index.php */
 export async function handleUpdate(update) {
@@ -16,6 +17,10 @@ export async function handleUpdate(update) {
     await main(c)
   } catch (e) {
     if (e !== STOP) throw e
+  }
+  // payments pushed to the relay (Variza, bank SMS): pulled now and then, on any update
+  if (c.T && c.setting) {
+    try { await pullRelay(c) } catch (e) { console.error('relay', e) }
   }
 }
 export const STOP = Symbol('stop') // `return;` from deep inside a branch

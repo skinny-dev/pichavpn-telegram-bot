@@ -7,6 +7,7 @@ import { step, tehranDate } from '../bot.js'
 import { backuserKb } from '../keyboards.js'
 import { stepPaymentKb, customPlanPrice, addBalance } from '../catalog.js'
 import { smsUniqueAmount, smsReconcileOrder, reportTs } from '../sms.js'
+import { pullRelay } from '../relay.js'
 import { sprintf, strtr, numberFormat, intval, time, randomHex, J } from '../php.js'
 
 const isNumeric = (v) => (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(v))
@@ -200,6 +201,7 @@ export const payRoutes = [
   async (c) => {
     const m = /^sendresidvariza-([A-Za-z0-9]+)$/.exec(c.datain)
     if (!m) return false
+    await pullRelay(c, true) // Variza may have confirmed it already
     const o = await orderBy(m[1])
     if (!o || String(o.id_user) !== c.from_id || o.Payment_Method !== 'variza') return true
     if (!(await receiptAllowed(c, o))) return true
@@ -213,6 +215,7 @@ export const payRoutes = [
   async (c) => {
     const m = /^sendresidcart-(.*)/.exec(c.datain)
     if (!m) return false
+    await pullRelay(c, true) // the bank SMS may be waiting in the relay
     const o = await orderBy(m[1])
     if (!o || String(o.id_user) !== c.from_id) return true
     if (!(await receiptAllowed(c, o))) return true

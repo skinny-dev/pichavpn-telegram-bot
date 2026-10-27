@@ -10,6 +10,7 @@ import { buyRoutes } from './routes/buy.js'
 import { bulkRoutes } from './routes/bulk.js'
 import { payRoutes } from './routes/pay.js'
 import { adminPayRoutes } from './admin/payments.js'
+import { adminRelayRoutes } from './admin/relay.js'
 import { starsRoutes } from './routes/stars.js'
 import { miscRoutes } from './routes/misc.js'
 import { lateRoutes } from './routes/late.js'
@@ -32,5 +33,6 @@ export const routes = [
 
 // admin.php, for admins, after the customer routes
 export const adminRoutes = [
+  ...adminRelayRoutes,
   ...adminPayRoutes,
 ]
