@@ -3,6 +3,8 @@
 #
 #   sudo picha-backup.sh                       # one backup now
 #   sudo picha-backup.sh --install-cron        # daily at 03:30
+#   sudo picha-backup.sh --install-cron hourly # every hour (on disk only the last 3 days; Telegram keeps all of them)
+#   sudo picha-backup.sh --remove-cron
 #   Options: --app DIR  --out DIR  --keep DAYS  --telegram  --telegram-chat ID  --remote user@host:/path  --no-encrypt
 # Settings can also live in /etc/picha-backup.conf (APP_DIR OUT_DIR KEEP_DAYS TELEGRAM TG_CHAT REMOTE PASSFILE).
 #   --telegram        also send the encrypted file to Telegram (the admin's chat, or TG_CHAT: a private channel id -100…)
@@ -32,9 +34,16 @@ while [ $# -gt 0 ]; do
     --no-encrypt) ENCRYPT=0; shift;;
     --install-cron)
       f=/etc/cron.d/picha-backup
-      printf '30 3 * * * root %s >> %s 2>&1\n' "$(readlink -f "$0")" "$LOG" > "$f"; chmod 644 "$f"
-      echo "daily backup scheduled (03:30) in $f"; exit 0;;
-    -h|--help) sed -n '2,8p' "$0"; exit 0;;
+      if [ "${2:-}" = "hourly" ]; then
+        printf '7 * * * * root %s --keep 3 >> %s 2>&1\n' "$(readlink -f "$0")" "$LOG" > "$f"; chmod 644 "$f"
+        echo "hourly backup scheduled (minute 07, last 3 days kept on disk) in $f"
+      else
+        printf '30 3 * * * root %s >> %s 2>&1\n' "$(readlink -f "$0")" "$LOG" > "$f"; chmod 644 "$f"
+        echo "daily backup scheduled (03:30) in $f"
+      fi
+      exit 0;;
+    --remove-cron) rm -f /etc/cron.d/picha-backup; echo "scheduled backup removed"; exit 0;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0;;
     *) echo "unknown option $1" >&2; exit 64;;
   esac
 done
