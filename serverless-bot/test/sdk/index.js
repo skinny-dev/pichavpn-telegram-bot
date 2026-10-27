@@ -5,13 +5,17 @@ export class EndpointError extends Error { constructor(d, p) { super(d); this.pa
 export class InputFile { constructor(bytes, name, o) { this.bytes = bytes; this.name = name; this.type = o?.type } }
 export const calls = []
 export const replies = {} // method -> function(params) returning result or throwing
-let mid = 1000
+// every call counts (like the PHP side's fake Telegram), so message ids line up between the two bots
+let n = 0, base = 5000
+export const setNextMessageId = (b) => { base = b; n = 0 }
 export const api = new Proxy({}, { get: (_, m) => async (p = {}) => {
   calls.push([m, p])
+  n++
   if (replies[m]) return replies[m](p)
-  if (/^(send|copy|forward)/.test(m)) return { message_id: ++mid, chat: { id: p.chat_id } }
-  if (m === 'getChatMember') return { status: 'member' }
-  return true
+  const lm = m.toLowerCase()
+  if (lm === 'getchatmember') return { status: 'member', user: { id: Number(p.user_id) } }
+  if (lm === 'getme') return { id: 1, is_bot: true, username: 'pichanet_bot', first_name: 'Picha' }
+  return { message_id: base + n, chat: { id: Number(p.chat_id) }, date: Math.floor(Date.now() / 1000) }
 } })
 const realFetch = globalThis.fetch
 export async function fetch(url, opts = {}) { return realFetch(url, opts) }

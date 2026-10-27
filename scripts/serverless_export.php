@@ -92,4 +92,17 @@ if (!$only || in_array('texts', $only, true)) {
     fclose($fh);
     $report[] = "✅ texts: " . count($flat);
 }
+// the bot's settings files (storage/*.json) → kv rows 'storage:<name>' (no secrets: serverless.json etc. are not taken)
+if (!$only || in_array('kv', $only, true)) {
+    $fh = fopen("$out/kv.ndjson", 'w');
+    $n = 0;
+    foreach (['custom_price.json', 'premium_emoji.json', 'premium_reply_labels.json', 'promo.json', 'start_menu.json', 'dashboard_access.json', 'cron_status.json'] as $f) {
+        if (is_file("$root/storage/$f")) {
+            fwrite($fh, json_encode(['key' => "storage:$f", 'value' => (string) file_get_contents("$root/storage/$f"), 'updated_at' => time()], JSON_UNESCAPED_UNICODE) . "\n");
+            $n++;
+        }
+    }
+    fclose($fh);
+    $report[] = "✅ settings files: $n";
+}
 echo implode("\n", $report) . "\n\nجمع: $total ردیف در $out\n⚠️ این پوشه اطلاعات مشتری‌ها و رمز پنل‌ها را دارد؛ بعد از import پاکش کنید.\n";
