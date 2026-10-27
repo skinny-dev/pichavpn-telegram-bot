@@ -6,10 +6,11 @@ require $root . '/config.php';
 date_default_timezone_set('Asia/Tehran');
 mt_srand(7);
 $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
-foreach (['invoice', 'Payment_report', 'service_other', 'expenses', 'capital_entries', 'user', 'fin_txn'] as $t) {
+foreach (['referral_payouts', 'referral_signups', 'referral_links', 'support_message', 'invoice', 'Payment_report', 'service_other', 'expenses', 'capital_entries', 'user', 'fin_txn'] as $t) {
     $pdo->exec("DELETE FROM `$t`");
 }
 $now = time();
+$pdo->exec("DELETE FROM admin WHERE id_admin = '{admin_number}'");
 $agents = ['f', 'f', 'f', 'n', 'n2'];
 $ins = fn($t, $r) => $pdo->prepare("INSERT INTO `$t` (`" . implode('`,`', array_keys($r)) . "`) VALUES (" . implode(',', array_fill(0, count($r), '?')) . ")")->execute(array_values($r));
 $userCols = $pdo->query('SHOW COLUMNS FROM user')->fetchAll(PDO::FETCH_ASSOC);
@@ -68,5 +69,31 @@ foreach ($types as $n => [$type, $key]) {
     $cat = $key ? (int) array_search($key, $acc) : null;
     $ins('fin_txn', ['ref' => "T$n", 'type' => $type, 'txn_date' => $now - $n * 86400 * 4, 'category_account_id' => $cat ?: null, 'subtotal' => 100000 * ($n + 1), 'total' => 100000 * ($n + 1), 'status' => 'posted', 'created_at' => $now,
         'meta' => $type === 'purchase' ? '{"expense":true}' : null]);
+}
+$pp = [['pend1', 'waiting', 'variza', 'getconfigafterpay|newsvc1'], ['pend2', 'Unpaid', 'cart to cart', 'none'], ['pend3', 'expire', 'variza', 'getextenduser|svc2%30'], ['pend4', 'reject', 'cart to cart', 'getextenduser|svc3%30'],
+    ['pend5', 'paid', 'variza', 'getconfigafterpay|svc7'], ['pend6', 'paid', 'variza', 'getconfigafterpay|ghost'], ['pend7', 'paid', 'cart to cart', 'getextenduser|svc4%30'], ['pend8', 'waiting', 'cart to cart', 'none'], ['pend9', 'paid', 'cart to cart', 'refunded|svc4%30']];
+foreach ($pp as $i => [$oid, $stt, $m, $inv]) {
+    $ins('Payment_report', ['id_user' => '7002', 'id_order' => $oid, 'time' => date('Y/m/d H:i:s', $now - 600 * ($i + 1)), 'price' => '120000', 'payment_Status' => $stt, 'Payment_Method' => $m, 'id_invoice' => $inv, 'dec_not_confirmed' => 'slug' . $i]);
+}
+$ins('service_other', ['id_user' => '7002', 'username' => 'svc4', 'value' => '30', 'time' => (string) $now, 'price' => '1', 'type' => 'extend_user', 'status' => 'paid', 'output' => '']);
+@unlink($root . '/storage/promo.json');
+$pdo->exec("UPDATE setting SET affiliatespercentage = '10'");
+$ins('expenses', ['amount' => 300000, 'description' => 'تبلیغات: کمپین اینستا', 'created_at' => $now - 5 * 86400, 'admin_id' => 'x', 'kind' => 'advertising', 'payer' => '', 'payee' => '']);
+$eid = (int) $pdo->lastInsertId();
+$ins('referral_links', ['name' => 'کمپین اینستا', 'platform' => 'instagram', 'code' => 'ad_insta', 'tg_user_id' => null, 'contact' => '@x', 'price' => 300000, 'pays_commission' => 1, 'commission_percent' => null, 'active' => 1, 'notes' => '', 'expense_id' => $eid, 'created_at' => $now - 9 * 86400, 'ad_date' => $now - 8 * 86400]);
+$ins('referral_links', ['name' => 'یوتیوبر', 'platform' => 'youtube', 'code' => 'yt_one', 'tg_user_id' => '123456', 'contact' => '', 'price' => 0, 'pays_commission' => 1, 'commission_percent' => 20, 'active' => 1, 'notes' => 'n', 'expense_id' => null, 'created_at' => $now - 3 * 86400, 'ad_date' => null]);
+$ins('referral_links', ['name' => 'قدیمی', 'platform' => 'other', 'code' => 'old_one', 'tg_user_id' => null, 'contact' => '', 'price' => 50000, 'pays_commission' => 0, 'commission_percent' => null, 'active' => 0, 'notes' => '', 'expense_id' => null, 'created_at' => $now - 30 * 86400, 'ad_date' => null]);
+$lids = $pdo->query('SELECT id FROM referral_links ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
+foreach ([[0, 7001], [0, 7002], [0, 7003], [0, 7004], [1, 7005], [1, 7006]] as [$li, $uu]) {
+    $ins('referral_signups', ['link_id' => $lids[$li], 'user_id' => (string) $uu, 'created_at' => $now - 86400]);
+}
+$ins('referral_payouts', ['link_id' => $lids[0], 'amount' => 10000, 'note' => 'a', 'created_at' => $now - 3600]);
+$st = ['Unseen', 'Answered', 'Customerresponse', 'close', 'Pending', 'Answered'];
+for ($i = 1; $i <= 14; $i++) {
+    $u = 7000 + 1 + ($i % 6);
+    $t = date('Y/m/d H:i:s', $now - $i * 3600);
+    $ins('support_message', ['Tracking' => "trk$i", 'idsupport' => '5550001', 'iduser' => (string) $u, 'name_departman' => $i % 2 ? 'پشتیبانی' : 'فروش', 'text' => "سوال $i", 'result' => $i % 3 ? "پاسخ $i" : '',
+        'time' => $t, 'status' => $st[$i % 6], 'result_time' => $i % 3 ? $t : '', 'result_by' => $i % 3 ? '5550001' : '', 'file_id' => $i % 5 === 0 ? 'FILEID' : '', 'file_type' => $i % 5 === 0 ? 'photo' : '', 'file_name' => '',
+        'result_file_id' => $i % 7 === 0 ? 'RF' : '', 'result_file_type' => $i % 7 === 0 ? 'document' : '', 'result_file_name' => $i % 7 === 0 ? 'a.pdf' : '']);
 }
 echo "seeded\n";

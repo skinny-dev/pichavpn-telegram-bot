@@ -9,11 +9,13 @@ import { kvGet } from './db.js'
 import { routes, adminRoutes } from './routes.js'
 import { pullRelay } from './relay.js'
 import { cronTick } from './cron.js'
+import { promoAutoEnd } from './panelapi/promo.js'
 
 /** one update, like one webhook request to index.php */
 export async function handleUpdate(update) {
   const c = await context(update)
   if (!c) return
+  try { await promoAutoEnd() } catch (e) { console.error('promo', e) }
   try {
     await main(c)
   } catch (e) {
@@ -56,6 +58,20 @@ async function context(update) {
   c.callback_query_id = cq.id ?? 0
   c.inline_query_id = update.inline_query?.id ?? 0
   c.query = update.inline_query?.query ?? 0
+  return c
+}
+
+/** a context for work done outside a Telegram update (the panel, the relay): no sender, the customer keyboard, the same settings and report topics */
+export async function systemContext() {
+  const { T } = await loadTexts()
+  const c = { update: {}, T, from_id: '', message_id: 0, text: '', datain: '', username: '', first_name: '' }
+  c.setting = (await one(sql`SELECT * FROM setting LIMIT 1`)) || {}
+  c.domain = (await kvGet('config:domainhosts')) || ''
+  Object.assign(c, buildKeyboards({ T, setting: c.setting, users: null, adminRow: null }))
+  const topics = Object.fromEntries((await all(sql`SELECT report, idreport FROM topicid`)).map((r) => [r.report, r.idreport]))
+  c.topicsAll = topics
+  c.topics = Object.fromEntries(Object.entries(topics).filter(([k]) => k !== 'otherreport'))
+  c.admin_ids = (await all(sql`SELECT id_admin FROM admin`)).map((r) => String(r.id_admin))
   return c
 }
 

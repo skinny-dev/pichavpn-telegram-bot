@@ -30,7 +30,7 @@ async function recipients(primary) {
   for (const r of await all(sql`SELECT id_admin FROM admin WHERE rule IN ('administrator','support')`)) if (String(r.id_admin ?? '').trim() !== '') ids.push(String(r.id_admin).trim())
   return [...new Set(ids)]
 }
-function sendMedia(chatId, type, fileId, caption = '', markup = null) {
+export function sendMedia(chatId, type, fileId, caption = '', markup = null) {
   const map = { photo: ['sendPhoto', 'photo'], video: ['sendVideo', 'video'], voice: ['sendVoice', 'voice'], audio: ['sendAudio', 'audio'], animation: ['sendAnimation', 'animation'], video_note: ['sendVideoNote', 'video_note'] }
   const [method, field] = map[type] ?? ['sendDocument', 'document']
   const data = { chat_id: chatId, [field]: fileId }

@@ -62,3 +62,6 @@ export async function kvSet(key, value) {
   await run(sql`INSERT INTO kv (key, value, updated_at) VALUES (${key}, ${value}, ${Math.floor(Date.now() / 1000)})
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
 }
+export async function kvDel(key) {
+  await run(sql`DELETE FROM kv WHERE key = ${key}`)
+}

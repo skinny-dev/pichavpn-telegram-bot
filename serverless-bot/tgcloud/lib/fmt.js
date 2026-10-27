@@ -14,6 +14,7 @@ export function gregorianToJalali(gy, gm, gd) {
   return [jy, jm, jd]
 }
 const FA = '۰۱۲۳۴۵۶۷۸۹'
+const JMONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
 export const trNumFa = (s) => String(s).replace(/\d/g, (d) => FA[d]).replace(/\./g, '٫')
 
 /** Tehran wall-clock parts of a unix time (Iran has no DST since 2022) */
@@ -34,6 +35,8 @@ export function jdate(format, ts = Math.floor(Date.now() / 1000), latin = false)
       case 'm': out += p2(jm); break
       case 'n': out += jm; break
       case 'd': out += p2(jd); break
+      case 'F': out += JMONTHS[jm - 1]; break
+      case 'w': out += (new Date((Number(ts) + 12600) * 1000).getUTCDay() + 1) % 7; break
       case 'j': out += jd; break
       case 'H': out += p2(t.H); break
       case 'G': out += t.H; break
