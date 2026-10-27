@@ -231,6 +231,54 @@ function relayMoveFile(string $method, array $datas, string $fromToken, string $
     return null;
 }
 
+/** The dev bot's token when the relay is on (in a relayed update or e.g. a payment callback), else null. */
+function relayDevToken(): ?string
+{
+    static $tok = false;
+    if (defined('PICHA_RELAY_DEV_KEY')) {
+        return PICHA_RELAY_DEV_KEY;
+    }
+    if ($tok === false) {
+        $c = json_decode((string) @file_get_contents(__DIR__ . '/storage/serverless.json'), true);
+        $tok = is_array($c) && !empty($c['relay']) && ($c['enabled'] ?? true) !== false && !empty($c['bot_token']) ? (string) $c['bot_token'] : null;
+    }
+    return $tok;
+}
+
+/** Customers whose last message went to the dev bot (id => time): what the bot sends them later goes there too. */
+function relayUsers(?array $set = null): array
+{
+    static $users = null;
+    $file = __DIR__ . '/storage/cache/relay_users.json';
+    if ($set !== null) {
+        @mkdir(dirname($file), 0775, true);
+        file_put_contents($file, json_encode($set), LOCK_EX);
+        return $users = $set;
+    }
+    if ($users === null) {
+        $d = is_file($file) ? json_decode((string) file_get_contents($file), true) : [];
+        $users = is_array($d) ? $d : [];
+    }
+    return $users;
+}
+
+function relayMarkUser($id, bool $dev): void
+{
+    $id = (string) $id;
+    if (!ctype_digit($id) || ($dev ? relayDevToken() === null : !is_file(__DIR__ . '/storage/cache/relay_users.json'))) {
+        return;
+    }
+    $u = relayUsers();
+    if ($dev && (int) ($u[$id] ?? 0) < time() - 3600) {
+        $u[$id] = time();
+        $u = array_filter($u, fn($t) => $t > time() - 30 * 86400);
+        relayUsers($u);
+    } elseif (!$dev && isset($u[$id])) {
+        unset($u[$id]);
+        relayUsers($u);
+    }
+}
+
 function telegram($method, $datas = [], $token = null, $allowEmojiFallback = true)
 {
     global $APIKEY;
@@ -252,6 +300,18 @@ function telegram($method, $datas = [], $token = null, $allowEmojiFallback = tru
             if (relayFileError($r)) { // e.g. a receipt photo the customer sent to the dev bot
                 $r = relayMoveFile($method, $datas, PICHA_RELAY_DEV_KEY, PICHA_RELAY_MAIN_KEY, false) ?? $r;
             }
+        }
+        return $r;
+    }
+    if ($token === null && ctype_digit((string) ($datas['chat_id'] ?? '')) && ($devToken = relayDevToken()) !== null
+        && isset(relayUsers()[(string) $datas['chat_id']])) {
+        // not a relayed update (payment callback, cron …) to a customer who uses the dev bot: send it there
+        $r = telegram($method, relayFileCached($datas), $devToken, $allowEmojiFallback);
+        if (relayFileError($r)) {
+            $r = relayMoveFile($method, $datas, $APIKEY, $devToken, true) ?? $r;
+        }
+        if (empty($r['ok']) && !str_contains((string) ($r['description'] ?? ''), 'not modified')) {
+            return telegram($method, $datas, $APIKEY, $allowEmojiFallback); // blocked the dev bot, an old message of the main bot …
         }
         return $r;
     }
