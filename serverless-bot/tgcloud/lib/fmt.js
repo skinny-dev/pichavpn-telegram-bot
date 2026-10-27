@@ -23,7 +23,7 @@ function tehran(ts) {
 }
 const p2 = (n) => String(n).padStart(2, '0')
 /** jdate($format, $timestamp) with Persian digits, for the formats the bot uses */
-export function jdate(format, ts = Math.floor(Date.now() / 1000)) {
+export function jdate(format, ts = Math.floor(Date.now() / 1000), latin = false) {
   const t = tehran(ts)
   const [jy, jm, jd] = gregorianToJalali(t.Y, t.n, t.j)
   let out = ''
@@ -42,7 +42,7 @@ export function jdate(format, ts = Math.floor(Date.now() / 1000)) {
       default: out += ch
     }
   }
-  return trNumFa(out)
+  return latin ? out : trNumFa(out)
 }
 
 /** PHP float to string (precision 14, like echo) */

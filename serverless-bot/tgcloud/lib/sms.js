@@ -32,7 +32,7 @@ export function smsParse(text) {
   }
   return { kind, amount_rial: amount, balance_rial: balance, sms_time: time }
 }
-function jalaliToGregorian(jy, jm, jd) {
+export function jalaliToGregorian(jy, jm, jd) {
   jy += 1595
   let days = -355668 + 365 * jy + Math.trunc(jy / 33) * 8 + Math.trunc(((jy % 33) + 3) / 4) + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186)
   let gy = 400 * Math.trunc(days / 146097)
