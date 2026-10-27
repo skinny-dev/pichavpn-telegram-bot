@@ -33,7 +33,7 @@ const server = http.createServer(async (req, res) => {
 }).listen(0)
 const port = server.address().port
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 390, height: 800 } })
+const page = await browser.newPage({ viewport: { width: +(process.env.VW || 390), height: 800 } })
 const errors = []
 page.on('console', (m) => { if (m.type() === 'error' && !/ERR_CERT|ERR_NAME|ERR_INTERNET|ERR_CONNECTION/.test(m.text())) errors.push(m.text()) })
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))

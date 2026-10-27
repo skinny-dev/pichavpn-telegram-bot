@@ -14,6 +14,13 @@ const DropdownMenuItem = React.forwardRef<React.ElementRef<typeof M.Item>, React
   <M.Item ref={ref} className={cn('relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-sm outline-none data-[highlighted]:bg-accent [&_svg]:size-4', className)} {...p} />
 ))
 DropdownMenuItem.displayName = 'DropdownMenuItem'
+const DropdownMenuCheckboxItem = React.forwardRef<React.ElementRef<typeof M.CheckboxItem>, React.ComponentPropsWithoutRef<typeof M.CheckboxItem>>(({ className, children, ...p }, ref) => (
+  <M.CheckboxItem ref={ref} className={cn('relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 ps-8 text-sm outline-none data-[highlighted]:bg-accent', className)} {...p}>
+    <span className="absolute start-2 flex size-4 items-center justify-center"><M.ItemIndicator>✓</M.ItemIndicator></span>
+    {children}
+  </M.CheckboxItem>
+))
+DropdownMenuCheckboxItem.displayName = 'DropdownMenuCheckboxItem'
 const DropdownMenuLabel = ({ className, ...p }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('px-2 py-1.5 text-xs font-semibold text-muted-foreground', className)} {...p} />
 const DropdownMenuSeparator = (p: React.ComponentPropsWithoutRef<typeof M.Separator>) => <M.Separator className="-mx-1 my-1 h-px bg-border" {...p} />
-export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator }
+export { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator }

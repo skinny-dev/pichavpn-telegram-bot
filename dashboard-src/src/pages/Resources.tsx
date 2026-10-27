@@ -14,6 +14,17 @@ import type { Row } from '@/lib/api'
 import { fmtTs } from '@/lib/format'
 
 const AGENT: Record<string, string> = { f: 'کاربر', n: 'نماینده', n2: 'نماینده پیشرفته' }
+/** a round monogram: the same colour for the same name */
+const HUES = [215, 150, 30, 340, 265, 190, 95, 15]
+function Avatar({ name, size = 'size-7' }: { name: string; size?: string }) {
+  const h = HUES[[...name].reduce((a, ch) => a + ch.charCodeAt(0), 0) % HUES.length]
+  return <span className={cn('grid shrink-0 place-items-center rounded-full text-xs font-semibold text-white', size)} style={{ background: `hsl(${h} 45% 48%)` }}>{name.replace('@', '').slice(0, 1).toUpperCase() || '?'}</span>
+}
+/** dots filled in proportion, like the segment cards of a CRM table */
+function DotMeter({ part, whole, tone }: { part: number; whole: number; tone: string }) {
+  const n = 18, on = whole > 0 ? Math.round((part / whole) * n) : 0
+  return <span className="flex flex-1 items-center gap-[3px]" aria-hidden>{Array.from({ length: n }, (_, i) => <span key={i} className={cn('size-1.5 rounded-full', i < on ? tone : 'bg-muted')} />)}</span>
+}
 const clean = (v: unknown) => (v === null || v === undefined || v === '' || v === 'none' || v === 'NOT_USERNAME' ? '' : String(v))
 
 export function Users() {
@@ -32,9 +43,19 @@ export function Users() {
       </div>
     )
   }
-  return <DataGrid resName="users" res={schema.users} filterCols={['agent', 'User_Status']} onOpen={(r) => openUser(String(r.id))} card={card} />
+  const renderers = {
+    id: (r: Row) => { const name = clean(r.namecustom) || (clean(r.username) ? '@' + r.username : String(r.id)); return <span className="flex items-center gap-2.5"><Avatar name={name} /><span className="grid leading-tight"><span className="truncate font-medium">{name}</span><span className="text-xs text-muted-foreground" dir="ltr">{r.id}</span></span></span> },
+    Balance: (r: Row) => <span className="tabular font-medium" dir="ltr">{fmtNum(r.Balance)}</span>,
+  }
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm text-muted-foreground">همه‌ی کسانی که ربات را استارت کرده‌اند</p></div></div>
+      <DataGrid rich resName="users" res={schema.users} filterCols={['agent', 'User_Status']} onOpen={(r) => openUser(String(r.id))} card={card} renderers={renderers} />
+    </div>
+  )
 }
 
+const SEGMENTS: [string, string, 'success' | 'warning' | 'destructive', string][] = [['active', 'فعال', 'success', 'bg-success'], ['onhold', 'در انتظار اتصال', 'warning', 'bg-warning'], ['expired', 'منقضی‌شده', 'destructive', 'bg-destructive']]
 const RANGES: [string, string][] = [['', 'همه‌ی زمان‌ها'], ['today', 'امروز'], ['yesterday', 'دیروز'], ['7d', '۷ روز اخیر'], ['30d', '۳۰ روز اخیر'], ['month', 'ماه فعلی'], ['lastmonth', 'ماه قبل']]
 interface OrdersSummary { sum: number; groups: Record<string, { count: number; sum: number }> }
 const CHIP_TONE: Record<string, string> = { active: 'data-[on=true]:bg-success/15 data-[on=true]:text-success', onhold: 'data-[on=true]:bg-warning/15 data-[on=true]:text-warning', expired: 'data-[on=true]:bg-destructive/15 data-[on=true]:text-destructive', unpaid: 'data-[on=true]:bg-destructive/15 data-[on=true]:text-destructive' }
@@ -57,6 +78,11 @@ export function Orders() {
       </div>
     </div>
   )
+  const renderers = {
+    id_invoice: (r: Row) => <span className="flex items-center gap-2.5"><Avatar name={String(r.username)} /><span className="grid leading-tight"><span className="font-medium tabular" dir="ltr">{r.username}</span><span className="text-xs text-muted-foreground" dir="ltr">{r.id_invoice}</span></span></span>,
+    u_name: (r: Row) => <span className="flex items-center gap-2"><Avatar name={clean(r.u_name) || String(r.id_user)} size="size-6" /><span>{clean(r.u_name) || r.id_user}</span></span>,
+    price_product: (r: Row) => <span className="tabular font-medium" dir="ltr">{fmtNum(r.price_product)}</span>,
+  }
   const [group, setGroup] = useState('')
   const [range, setRange] = useState('')
   const [sum, setSum] = useState<OrdersSummary | null>(null)
@@ -74,11 +100,21 @@ export function Orders() {
   )
   return (
     <div className="grid gap-3">
-      <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4 [&>div]:p-2.5 md:[&>div]:p-3 [&_.text-xl]:text-base md:[&_.text-xl]:text-xl">
-        <div className="rounded-xl border bg-card p-3"><div className="text-xs text-muted-foreground">سفارش‌های این انتخاب</div><div className="mt-1 text-xl font-bold tabular">{sum ? fmtNum(group ? sum.groups[group]?.count ?? 0 : totalCount) : '—'}</div></div>
-        <div className="rounded-xl border bg-card p-3"><div className="text-xs text-muted-foreground">جمع مبلغ</div><div className="mt-1 text-xl font-bold tabular">{sum ? fmtToman(sum.sum) : '—'}</div></div>
-        <div className="rounded-xl border bg-card p-3"><div className="text-xs text-muted-foreground">سرویس‌های فعال</div><div className="mt-1 text-xl font-bold tabular text-success">{sum ? fmtNum((sum.groups.active?.count ?? 0) + (sum.groups.onhold?.count ?? 0)) : '—'}</div></div>
-        <div className="rounded-xl border bg-card p-3"><div className="text-xs text-muted-foreground">منقضی‌شده</div><div className="mt-1 text-xl font-bold tabular text-destructive">{sum ? fmtNum(sum.groups.expired?.count ?? 0) : '—'}</div></div>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div><p className="text-sm text-muted-foreground">{sum ? `${fmtNum(totalCount)} سفارش · جمع ${fmtToman(sum.sum)}` : 'در حال بارگذاری…'}</p></div>
+        <ManualOrder />
+      </div>
+      <div className="grid gap-2 md:grid-cols-3 md:gap-3">
+        {SEGMENTS.map(([key, label, variant, tone]) => {
+          const g = sum?.groups[key]
+          const on = group === key
+          return (
+            <button key={key} onClick={() => setGroup(on ? '' : key)} data-on={on} className="grid gap-2 rounded-xl border bg-card p-3 text-start transition-colors hover:bg-accent/40 data-[on=true]:border-primary data-[on=true]:bg-primary/5">
+              <span className="flex items-center justify-between gap-2"><Badge variant={variant} className="gap-1.5"><span className="size-1.5 rounded-full bg-current" />{label}</Badge><span className="text-xs text-muted-foreground tabular">{g ? fmtToman(g.sum) : ''}</span></span>
+              <span className="flex items-center gap-3"><span className="text-2xl font-bold tabular">{sum ? fmtNum(g?.count ?? 0) : '—'}</span><DotMeter part={g?.count ?? 0} whole={totalCount} tone={tone} /><span className="text-xs text-muted-foreground tabular">{totalCount && g ? Math.round((g.count / totalCount) * 100) : 0}٪</span></span>
+            </button>
+          )
+        })}
       </div>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0" role="group" aria-label="دسته‌بندی وضعیت">
         {chip('', 'همه', sum ? totalCount : undefined)}
@@ -94,8 +130,10 @@ export function Orders() {
         onSummary={setSum}
         onOpen={(r) => openOrder(String(r.id_invoice))}
         card={card}
+        rich
+        defaultHidden={['username', 'cat', 'otype', 'agent', 'note']}
+        renderers={renderers}
         toolbar={<>
-          <ManualOrder />
           <Select value={range || 'all'} onValueChange={(v) => setRange(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-auto min-w-[8rem]" aria-label="بازه زمانی"><SelectValue /></SelectTrigger>
             <SelectContent>{RANGES.map(([k, l]) => <SelectItem key={k || 'all'} value={k || 'all'}>{l}</SelectItem>)}</SelectContent>

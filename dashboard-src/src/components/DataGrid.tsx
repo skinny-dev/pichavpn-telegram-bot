@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowDown, ArrowUp, ChevronRight, ChevronLeft, Download, FileSpreadsheet, FileText, FileJson, Loader2, PanelLeftOpen, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronRight, ChevronLeft, Columns3, Download, FileSpreadsheet, FileText, FileJson, Loader2, PanelLeftOpen, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Upload } from 'lucide-react'
 import { api, ApiError, type Col, type Resource, type Row } from '@/lib/api'
 import { fmtNum, fmtStr, fmtTs, normalizeDigits } from '@/lib/format'
 import { exportRows, type ExportFormat } from '@/lib/io'
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CellEditDialog, FieldInput, InlineEditor } from '@/components/CellEditor'
@@ -36,6 +36,12 @@ interface Props {
   onOpen?: (row: Row) => void
   /** phones: rows as cards instead of the spreadsheet */
   card?: (row: Row) => React.ReactNode
+  /** custom cells (read-only display) by column key */
+  renderers?: Record<string, (row: Row) => React.ReactNode>
+  /** the roomy look: rounded frame, light header, numbered pages, a «columns» menu */
+  rich?: boolean
+  /** columns hidden until the admin turns them on in «ستون‌ها» */
+  defaultHidden?: string[]
 }
 
 const PER_OPTIONS = [25, 50, 100, 200]
@@ -51,19 +57,31 @@ export function displayValue(col: Col, v: unknown): React.ReactNode {
       const label = col.options?.[String(v)] ?? String(v)
       const bad = ['block', 'مسدود'].includes(String(v))
       const tone = col.tones?.[String(v)]
-      return <Badge variant={tone ?? (bad ? 'destructive' : String(v) === 'Active' ? 'success' : 'secondary')}>{label}</Badge>
+      return <Badge variant={tone ?? (bad ? 'destructive' : String(v) === 'Active' ? 'success' : 'secondary')} className="gap-1.5"><span className="size-1.5 rounded-full bg-current" />{label}</Badge>
     }
     default: return <span>{String(v)}</span>
   }
 }
 
+/** page numbers with gaps: 1 … 4 5 6 … 20 (0 = a gap) */
+function pageList(page: number, pages: number): number[] {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1)
+  const set = new Set([1, pages, page - 1, page, page + 1].filter((n) => n >= 1 && n <= pages))
+  const out: number[] = []
+  for (const n of [...set].sort((a, b) => a - b)) { if (out.length && n - out[out.length - 1] > 1) out.push(0); out.push(n) }
+  return out
+}
+
 const rawText = (col: Col, v: unknown) => (v === null || v === undefined ? '' : String(v))
 
-export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], extra, forced, onSummary, onOpen, card }: Props) {
+export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], extra, forced, onSummary, onOpen, card, renderers, rich, defaultHidden = [] }: Props) {
   const [showFilters, setShowFilters] = useState(false)
   const qc = useQueryClient()
   const coarse = useCoarsePointer()
-  const cols = useMemo(() => res.cols.filter((c) => !hide.includes(c.key)), [res, hide])
+  const [hidden, setHidden] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('picha-cols-' + resName) ?? JSON.stringify(defaultHidden)) } catch { return defaultHidden } })
+  const toggleCol = (k: string) => setHidden((h) => { const n = h.includes(k) ? h.filter((x) => x !== k) : [...h, k]; try { localStorage.setItem('picha-cols-' + resName, JSON.stringify(n)) } catch { /* private mode */ } return n })
+  const allCols = useMemo(() => res.cols.filter((c) => !hide.includes(c.key)), [res, hide])
+  const cols = useMemo(() => allCols.filter((c) => !hidden.includes(c.key) || c === allCols[0]), [allCols, hidden])
   const [page, setPage] = useState(1)
   const [per, setPer] = useState(50)
   const [q, setQ] = useState('')
@@ -214,6 +232,14 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
         </div>
         <div className="ms-auto flex flex-wrap items-center gap-2">
           {toolbar}
+          {rich && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="outline"><Columns3 /><span className="hidden sm:inline">ستون‌ها</span></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {allCols.slice(1).map((c) => <DropdownMenuCheckboxItem key={c.key} checked={!hidden.includes(c.key)} onCheckedChange={() => toggleCol(c.key)} onSelect={(e) => e.preventDefault()}>{c.label}</DropdownMenuCheckboxItem>)}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button variant="outline" size="icon" onClick={() => list.refetch()} aria-label="بروزرسانی" disabled={list.isFetching}>
             <RefreshCw className={cn(list.isFetching && 'animate-spin')} />
           </Button>
@@ -254,10 +280,10 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         onCopy={onCopy}
-        className={cn('relative max-h-[calc(100dvh-16rem)] min-h-[12rem] overflow-auto rounded-xl border bg-card', card && 'hidden md:block')}
+        className={cn('relative max-h-[calc(100dvh-16rem)] min-h-[12rem] overflow-auto rounded-xl border bg-card', rich && 'shadow-sm', card && 'hidden md:block')}
       >
         <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-20 bg-muted/95 backdrop-blur">
+          <thead className={cn('sticky top-0 z-20 backdrop-blur', rich ? 'bg-muted/60' : 'bg-muted/95')}>
             <tr role="row">
               {cols.map((c, ci) => {
                 const active = sort?.key === c.key
@@ -305,7 +331,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
                       }}
                       onDoubleClick={() => { if (col.edit && !coarse) setEditing(true) }}
                       className={cn(
-                        'relative max-w-[22rem] truncate whitespace-nowrap border-b px-3 py-2',
+                        rich ? 'relative max-w-[22rem] truncate whitespace-nowrap border-b px-3 py-3' : 'relative max-w-[22rem] truncate whitespace-nowrap border-b px-3 py-2',
                         ci === 0 && 'sticky start-0 z-10 bg-card font-medium group-hover:bg-accent',
                         ci === 0 && onOpen && !col.edit && 'cursor-pointer text-primary underline-offset-4 hover:underline',
                         col.edit && 'cursor-cell',
@@ -313,7 +339,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
                       )}
                     >
                       {/* the display value stays in place (hidden while editing) so the row never changes height or width */}
-                      <span className={isEdit ? 'invisible' : undefined}>{displayValue(col, row[col.key])}</span>
+                      <span className={isEdit ? 'invisible' : undefined}>{renderers?.[col.key] ? renderers[col.key](row) : displayValue(col, row[col.key])}</span>
                       {isEdit && (
                         <span className="absolute inset-x-1 inset-y-0 flex items-center">
                           <InlineEditor
@@ -351,15 +377,20 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>{fmtNum(total)} ردیف{list.isFetching && !list.isLoading ? ' · در حال بروزرسانی…' : ''}</span>
         <div className="flex items-center gap-2">
+          <span>ردیف در صفحه</span>
           <Select value={String(per)} onValueChange={(v) => setPer(Number(v))}>
-            <SelectTrigger className="h-9 w-24" aria-label="تعداد در صفحه"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 w-20" aria-label="تعداد در صفحه"><SelectValue /></SelectTrigger>
             <SelectContent>{PER_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{fmtNum(n)}</SelectItem>)}</SelectContent>
           </Select>
-          <Button variant="outline" size="icon-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="صفحه قبل"><ChevronRight /></Button>
-          <span className="min-w-[4.5rem] text-center tabular">{fmtNum(page)} از {fmtNum(pages)}</span>
-          <Button variant="outline" size="icon-sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)} aria-label="صفحه بعد"><ChevronLeft /></Button>
+        </div>
+        <span className="tabular">{total ? `${fmtNum((page - 1) * per + 1)}–${fmtNum(Math.min(page * per, total))} از ${fmtNum(total)} ردیف` : '۰ ردیف'}{list.isFetching && !list.isLoading ? ' · …' : ''}</span>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="صفحه قبل"><ChevronRight /></Button>
+          {pageList(page, pages).map((n, i) => n === 0
+            ? <span key={'e' + i} className="px-1">…</span>
+            : <Button key={n} variant={n === page ? 'secondary' : 'ghost'} size="icon-sm" className="tabular" onClick={() => setPage(n)} aria-current={n === page ? 'page' : undefined}>{fmtNum(n)}</Button>)}
+          <Button variant="ghost" size="icon-sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)} aria-label="صفحه بعد"><ChevronLeft /></Button>
         </div>
       </div>
       <p className="hidden text-xs text-muted-foreground md:block">{onOpen ? 'برای مدیریت، روی ستون اول (آبی) بزنید · ' : ''}برای ویرایش روی سلول دو بار کلیک کنید یا Enter بزنید · با کلیدهای جهت‌نما حرکت کنید · از Excel/Sheets می‌توانید مستقیم Paste کنید.</p>
