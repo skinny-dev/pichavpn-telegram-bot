@@ -6,6 +6,7 @@ import { shop } from '../bot.js'
 import { keyboardConfig } from '../keyboards.js'
 import { dataUser, removeUser, changeStatus } from '../panel.js'
 import { qrPng } from '../qr.js'
+import { sendWireguardFiles } from '../wg.js'
 import { sprintf, J } from '../php.js'
 
 const own = (inv, c) => inv && String(inv.id_user) === c.from_id
@@ -76,6 +77,7 @@ export const config = [
     const d = await dataUser(inv.Service_location, inv.username, c.domain)
     if (d.status === 'Unsuccessful') { await sendmessage(c.from_id, T.users.status.error, null, 'html'); return true }
     if (!Array.isArray(d.links)) { await sendmessage(c.from_id, T.users.status.configReadError, null, 'html'); return true }
+    await sendWireguardFiles(T, c.from_id, d.wireguard ?? [], inv.username)
     await Editmessagetext(c.from_id, c.message_id, T.users.status.selectConfig, await keyboardConfig(T, d.links, inv.id_invoice))
     return true
   },

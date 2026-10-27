@@ -105,6 +105,20 @@ async function linksOf(subUrl, given) {
   return Array.isArray(links) ? links : String(links ?? '').split('\n')
 }
 
+/** splitWireguardLinks(): wireguard:// links go to `wireguard` (sent as .conf files), out of configs / links */
+function splitWg(panel, res) {
+  if (!res || typeof res !== 'object' || !(panel.type === 'x-ui_single' || (panel.type === 'marzban' && String(panel.version_panel) === '1'))) return res
+  const isWg = (l) => String(l ?? '').trim().toLowerCase().startsWith('wireguard://')
+  res.wireguard = []
+  for (const k of ['configs', 'links']) {
+    if (Array.isArray(res[k])) {
+      for (const l of res[k].filter(isWg)) if (!res.wireguard.includes(l)) res.wireguard.push(l)
+      res[k] = res[k].filter((l) => !isWg(l))
+    }
+  }
+  return res
+}
+
 /** DataUser (read) */
 export async function dataUser(panelName, username, domain = '') {
   const panel = await panelByName(panelName)
@@ -118,7 +132,9 @@ export async function dataUser(panelName, username, domain = '') {
   if (!u || typeof u !== 'object' || u.detail || !u.username) return { status: 'Unsuccessful', msg: u && typeof u === 'object' ? u.detail ?? 'Unsuccessful' : 'Unsuccessful' }
   u.subscription_url = absoluteSubUrl(u.subscription_url ?? '', panel.url_panel)
   if (String(panel.version_panel) === '1') {
-    const t = Date.parse(u.expire ?? '')
+    // strtotime(): a date without a zone is read as Tehran time (the PHP bot's timezone)
+    const ex = String(u.expire ?? '')
+    const t = ex === '' ? NaN : Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(ex) || !/\d[T ]\d/.test(ex) ? ex : ex.replace(' ', 'T') + '+03:30')
     u.expire = Number.isFinite(t) ? Math.floor(t / 1000) : false
     u.links = await linksOf(u.subscription_url, u.links)
     const up = await authed(panel, 'GET', `/api/user/${username}/sub_update?offset=0&limit=1`)
@@ -131,12 +147,12 @@ export async function dataUser(panelName, username, domain = '') {
     u.proxies = u.proxy_settings ?? null
   }
   if (inv) u.subscription_url = subLink(panel, u.subscription_url, inv, domain)
-  return {
+  return splitWg(panel, {
     status: u.status ?? 'Unknown', username: u.username ?? username, data_limit: u.data_limit ?? null, expire: u.expire ?? null,
     online_at: u.online_at ?? null, used_traffic: u.used_traffic ?? null, links: u.links ?? [], subscription_url: u.subscription_url ?? '',
     sub_updated_at: u.sub_updated_at ?? null, sub_last_user_agent: u.sub_last_user_agent ?? null, uuid: u.proxies ?? null,
     data_limit_reset: u.data_limit_reset_strategy ?? null,
-  }
+  })
 }
 
 const protocolsConfigured = (raw) => { const d = parse(String(raw ?? '')); return d && typeof d === 'object' && Object.keys(d).length > 0 }
@@ -172,7 +188,7 @@ export async function createUser(panelName, { dataLimit, username, expire, note 
   out.subscription_url = absoluteSubUrl(out.subscription_url, panel.url_panel)
   if (v1) out.links = await linksOf(out.subscription_url, undefined)
   if (invoice) out.subscription_url = subLink(panel, out.subscription_url ?? '', invoice, domain)
-  return { status: 'successful', username: out.username, subscription_url: out.subscription_url, configs: out.links }
+  return splitWg(panel, { status: 'successful', username: out.username, subscription_url: out.subscription_url, configs: out.links })
 }
 
 /** Modifyuser (driver modify): {status:true,data} | {status:false,msg} */
@@ -218,7 +234,8 @@ export async function revokeSub(panelName, username, domain = '') {
   const b = parse(r.body) || {}
   if (b.detail) return { status: 'Unsuccessful', msg: b.detail }
   const d = await dataUser(panelName, username, domain)
-  return { status: 'successful', configs: d.links, subscription_url: absoluteSubUrl(d.subscription_url, panel.url_panel) }
+  // dataUser already split the wireguard links out (the same result as splitWireguardLinks on the driver's answer)
+  return { status: 'successful', configs: d.links, subscription_url: absoluteSubUrl(d.subscription_url, panel.url_panel), ...(d.wireguard ? { wireguard: d.wireguard } : {}) }
 }
 
 /** Change_status: active <-> disabled */
@@ -318,4 +335,25 @@ export async function extraTime(username, panelCode, days) {
   const data = { expire: newLimit, inbounds }
   if (invoice && invoice.uuid != null && invoice.uuid !== "") data.proxies = parse(invoice.uuid)
   return modifyUser(panel.name_panel, username, data)
+}
+
+/** ManagePanel::createUser($name_panel, $code_product, $usernameC, $Data_Config) — the bot-side wrapper */
+export async function createUserFor(panelName, codeProduct, usernameC, cfg, { domain = '', customLabel = '' } = {}) {
+  if (String(usernameC ?? '').length < 3) return { status: 'Unsuccessful', msg: 'Username must be at least 3 characters long.' }
+  const panel = await panelByName(panelName)
+  if (!panel) return { status: 'Unsuccessful', msg: 'Panel Not Found' }
+  const invoice = panel.subvip === 'onsubvip' ? await one(sql`SELECT * FROM invoice WHERE username = ${usernameC}`) : null
+  let productName, reset
+  if (!['usertest', customLabel, 'customvolume'].includes(codeProduct)) {
+    const p = await one(sql`SELECT * FROM product WHERE (Location = ${panelName} OR Location = '/all') AND code_product = ${codeProduct}`)
+    productName = p ? p.name_product : null
+    reset = p ? p.data_limit_reset : null
+  } else {
+    productName = codeProduct === 'usertest' ? 'usertest' : false
+    reset = 'no_reset'
+  }
+  return createUser(panelName, {
+    dataLimit: cfg.data_limit, username: usernameC, expire: cfg.expire, note: `${cfg.from_id ?? ''} | ${cfg.username ?? ''} | ${cfg.type ?? ''}`,
+    dataLimitReset: reset ?? 'no_reset', productName, invoice, domain,
+  })
 }

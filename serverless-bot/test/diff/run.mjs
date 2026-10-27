@@ -40,6 +40,20 @@ const jsCalls = calls.splice(0).map(([m, p]) => ({ m: m.toLowerCase(), p }))
 
 // 4) compare
 const norm = (c) => JSON.stringify(normalize({ m: c.m, p: c.p }))
+// a message sent to every admin: the admins' order is whatever the database returns, so sort such runs by chat_id
+function sortFanout(list) {
+  const out = [...list]
+  const key = (c) => { const { chat_id, ...rest } = c.p || {}; return c.m + JSON.stringify(normalize(rest)) }
+  for (let i = 0; i < out.length; ) {
+    let j = i + 1
+    while (j < out.length && key(out[j]) === key(out[i])) j++
+    if (j - i > 1) out.splice(i, j - i, ...out.slice(i, j).sort((a, b) => String(a.p.chat_id).localeCompare(String(b.p.chat_id))))
+    i = j
+  }
+  return out
+}
+phpCalls.splice(0, phpCalls.length, ...sortFanout(phpCalls))
+jsCalls.splice(0, jsCalls.length, ...sortFanout(jsCalls))
 let bad = 0
 const n = Math.max(phpCalls.length, jsCalls.length)
 for (let i = 0; i < n; i++) {
