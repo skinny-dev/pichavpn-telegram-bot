@@ -75,3 +75,77 @@ export function checkActiveBtn(keyboardmain, key) {
   for (const row of Array.isArray(k) ? k : Object.values(k || {})) for (const b of Array.isArray(row) ? row : Object.values(row || {})) if (b && b.text === key) return true
   return false
 }
+
+// ---- panel lists (keyboard.php, $allPanelRows) — need the update context
+const hidden = (p, fromId) => {
+  if (p.hide_user == null) return false
+  try { const a = JSON.parse(p.hide_user); return Array.isArray(a) && a.map(String).includes(String(fromId)) } catch { return false }
+}
+export async function panelLists(c) {
+  if (c._panelLists) return c._panelLists
+  const { all, sql } = await import('./db.js')
+  const T = c.T, users = c.usersBefore || { step: '', agent: '', Processing_value_four: '' }
+  const allPanels = await all(sql`SELECT * FROM marzban_panel`)
+  const active = allPanels.filter((p) => p.status === 'active' && [users.agent, 'all'].includes(p.agent))
+  let msCounts = {}
+  if (active.some((p) => p.type === 'Manualsale')) for (const r of await all(sql`SELECT codepanel, COUNT(*) AS c FROM manualsell WHERE status = 'active' GROUP BY codepanel`)) msCounts[r.codepanel] = Number(r.c)
+  const panelcount = allPanels.filter((p) => p.status === 'active').length
+  const cbFor = (p) => (users.step === 'getusernameinfo' ? `locationnotuser_${p.code_panel}` : `location_${p.code_panel}`)
+  const user = { inline_keyboard: [] }
+  if (panelcount > 10) {
+    let row = []
+    for (const p of active) {
+      if (hidden(p, c.from_id)) continue
+      if (p.type === 'Manualsale' && !msCounts[p.code_panel]) continue
+      row.push({ text: p.name_panel, callback_data: cbFor(p) })
+      if (row.length === 2) { user.inline_keyboard.push(row); row = [] }
+    }
+    if (row.length) user.inline_keyboard.push(row)
+  } else {
+    for (const p of active) {
+      if (p.type === 'Manualsale' && !msCounts[p.code_panel]) continue
+      if (hidden(p, c.from_id)) continue
+      user.inline_keyboard.push([{ text: p.name_panel, callback_data: cbFor(p) }])
+    }
+  }
+  let statusnote = c.setting.statusnamecustom === 'onnamecustom'
+  if (String(c.setting.statusnoteforf) === '0' && users.agent === 'f') statusnote = false
+  user.inline_keyboard.push([{ text: T.users.backbtn, callback_data: statusnote ? 'buyback' : 'backuser' }])
+
+  const om = { inline_keyboard: [] }
+  for (const p of active) { if (hidden(p, c.from_id)) continue; om.inline_keyboard.push([{ text: p.name_panel, callback_data: `locationom_${p.code_panel}` }]) }
+  om.inline_keyboard.push([{ text: T.users.backbtn, callback_data: 'backuser' }])
+
+  const ch = { inline_keyboard: [] }
+  if (panelcount > 10) {
+    let row = []
+    for (const p of active) {
+      if (p.name_panel === users.Processing_value_four || hidden(p, c.from_id)) continue
+      row.push({ text: p.name_panel, callback_data: `changelocselectlo-${p.code_panel}` })
+      if (row.length === 2) { ch.inline_keyboard.push(row); row = [] }
+    }
+    if (row.length) ch.inline_keyboard.push(row)
+  } else {
+    for (const p of active) {
+      if (p.name_panel === users.Processing_value_four || hidden(p, c.from_id)) continue
+      ch.inline_keyboard.push([{ text: p.name_panel, callback_data: `changelocselectlo-${p.code_panel}` }])
+    }
+  }
+  ch.inline_keyboard.push([{ text: T.users.backbtn, callback_data: 'backorder' }])
+
+  const test = { inline_keyboard: [] }
+  for (const p of allPanels) {
+    if (p.TestAccount !== 'ONTestAccount' || ![users.agent, 'all'].includes(p.agent)) continue
+    if (hidden(p, c.from_id)) continue
+    test.inline_keyboard.push([{ text: p.name_panel, callback_data: `locationtest_${p.code_panel}` }])
+  }
+  test.inline_keyboard.push([{ text: T.users.backbtn, callback_data: 'backuser' }])
+  c._panelLists = { list_marzban_panel_user: J(user), list_marzban_panel_userom: J(om), list_marzban_panel_userschange: J(ch), list_marzban_usertest: J(test), allPanels }
+  return c._panelLists
+}
+
+export function backuserKb(c) {
+  return c.setting.inlinebtnmain === 'oninline'
+    ? J({ inline_keyboard: [[{ text: c.T.users.backbtn, callback_data: 'backuser' }]] })
+    : J({ keyboard: [[{ text: c.T.users.backbtn }]], resize_keyboard: true })
+}

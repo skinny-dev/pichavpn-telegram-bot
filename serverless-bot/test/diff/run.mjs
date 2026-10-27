@@ -15,6 +15,7 @@ const { default: scenario } = await import(path.resolve(scenarioFile))
 
 // 1) same starting data on both sides
 execSync(`bash ${path.resolve('reset.sh')}`, { stdio: 'inherit' })
+for (const q of scenario.sql ?? []) execSync(`mysql --default-character-set=utf8mb4 mirza`, { input: q })
 const exportDir = path.join(path.dirname(LOG), 'export')
 execSync(`cd ${PHP_ROOT} && php scripts/serverless_export.php --out=${exportDir}`, { stdio: 'ignore' })
 
@@ -66,6 +67,7 @@ function normalize(v) {
     const o = {}
     for (const k of Object.keys(v).sort()) {
       let x = v[k]
+      if (x === false) x = '' // PHP posts false as an empty field
       if (x === null || x === undefined || x === '') continue
       if (k === 'parse_mode') x = String(x).toLowerCase()
       o[k] = normalize(x)
@@ -74,5 +76,6 @@ function normalize(v) {
   }
   if (typeof v === 'number' || typeof v === 'boolean') v = String(v === true ? 1 : v === false ? '' : v)
   if (typeof v === 'string') return v.replace(/\b1[789]\d{8}\b/g, '<TS>').replace(/\b[0-9a-f]{12}\b/g, '<HEX>')
+    .replace(/[۰-۹]{2}:[۰-۹]{2}:[۰-۹]{2}/g, '<TIME>') // clock times the fake panel derives from "now"
   return v
 }

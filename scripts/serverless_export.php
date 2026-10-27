@@ -102,7 +102,12 @@ if (!$only || in_array('kv', $only, true)) {
             $n++;
         }
     }
+    // config.php values the bot shows to customers (never the token or database passwords)
+    foreach (['domainhosts' => $domainhosts ?? '', 'usernamebot' => $usernamebot ?? '', 'adminnumber' => $adminnumber ?? ''] as $k => $v) {
+        fwrite($fh, json_encode(['key' => "config:$k", 'value' => (string) $v, 'updated_at' => time()], JSON_UNESCAPED_UNICODE) . "\n");
+        $n++;
+    }
     fclose($fh);
-    $report[] = "✅ settings files: $n";
+    $report[] = "✅ settings: $n";
 }
 echo implode("\n", $report) . "\n\nجمع: $total ردیف در $out\n⚠️ این پوشه اطلاعات مشتری‌ها و رمز پنل‌ها را دارد؛ بعد از import پاکش کنید.\n";

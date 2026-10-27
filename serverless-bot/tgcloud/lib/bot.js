@@ -70,8 +70,10 @@ async function main(c) {
   if (c.update.chat_member) return
   c.first_name = c.first_name.replace(/'|"|<|>|--|#|;|\\|%|\(|\)/g, '')
   c.setting = await one(sql`SELECT * FROM setting LIMIT 1`) || {}
+  c.domain = (await kvGet('config:domainhosts')) || ''
   c.adminRow = await one(sql`SELECT * FROM admin WHERE id_admin = ${c.from_id}`)
   const usersBefore = await one(sql`SELECT * FROM user WHERE id = ${c.from_id}`)
+  c.usersBefore = usersBefore
   Object.assign(c, buildKeyboards({ T, setting: c.setting, users: usersBefore, adminRow: c.adminRow }))
   // a Persian label in the stored main keyboard means an old format: reset it to the keys
   let kc = null
@@ -321,4 +323,10 @@ async function startGuideButtons() {
   const out = []
   for (let i = 0; i < buttons.length; i += 2) out.push(buttons.slice(i, i + 2))
   return out
+}
+
+/** select("shopSetting", "*", "Namevalue", $name)['value'] */
+export async function shop(name) {
+  const r = await one(sql`SELECT value FROM shopSetting WHERE Namevalue = ${name}`)
+  return r ? r.value : null
 }
