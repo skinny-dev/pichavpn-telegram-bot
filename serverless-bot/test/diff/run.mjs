@@ -37,6 +37,7 @@ const phpCalls = fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean).map((l
 const { seed } = await import('../seed.mjs')
 await seed(exportDir)
 if (scenario.prepareJs) await scenario.prepareJs()
+{ const { db } = await import('sdk'); const { sql } = await import('sdk/db'); await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('cron:off', '1', 0)`) }
 setNextMessageId(5000)
 const { handleUpdate } = await import('../../tgcloud/lib/bot.js')
 const { sqlite } = await import('../sdk/db.js')

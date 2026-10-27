@@ -357,3 +357,12 @@ export async function createUserFor(panelName, codeProduct, usernameC, cfg, { do
     dataLimitReset: reset ?? 'no_reset', productName, invoice, domain,
   })
 }
+
+/** getusers($location, $status): the panel's users with a status (on_hold …) */
+export async function getUsers(panelName, status, limit = 200) {
+  const panel = await panelByName(panelName)
+  if (!panel) return { users: [] }
+  const r = await authed(panel, 'GET', `/api/users?status=${encodeURIComponent(status)}&limit=${limit}`)
+  const d = parse(r.body)
+  return d && Array.isArray(d.users) ? d : { users: [] }
+}
