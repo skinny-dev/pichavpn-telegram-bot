@@ -37,3 +37,11 @@ Object.assign(extra.exact, {
   admin_delete: (r, q, b, admin) => referrals.adminDelete(b, admin),
 })
 extra.prefix.push(['promo_', promo.route])
+import * as manage from './manage.js'
+
+Object.assign(extra.exact, {
+  mg_order: (r, q) => manage.order(q),
+  mg_order_action: (r, q, b, admin) => manage.orderAction(b, admin),
+  mg_user: (r, q) => manage.user(q),
+  mg_user_action: (r, q, b, admin) => manage.userAction(b, admin),
+})

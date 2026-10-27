@@ -6,6 +6,7 @@ require $root . '/config.php';
 date_default_timezone_set('Asia/Tehran');
 mt_srand(7);
 $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+$pdo->exec("UPDATE product SET Location = 'Picha-1', agent = 'f' WHERE id IN (1,2)");
 foreach (['referral_payouts', 'referral_signups', 'referral_links', 'support_message', 'invoice', 'Payment_report', 'service_other', 'expenses', 'capital_entries', 'user', 'fin_txn'] as $t) {
     $pdo->exec("DELETE FROM `$t`");
 }
@@ -43,6 +44,10 @@ for ($i = 1; $i <= 90; $i++) {
     }
     $ins('invoice', ['id_invoice' => "inv$i", 'id_user' => (string) (7000 + 1 + ($i % 30)), 'username' => "svc$i", 'Service_location' => $i % 3 ? 'Picha-1' : 'Picha-2', 'time_sell' => (string) $t, 'name_product' => $p[0],
         'price_product' => (string) $p[1], 'Volume' => (string) $p[2], 'Service_time' => (string) $p[3], 'uuid' => '', 'note' => '', 'user_info' => '', 'bottype' => '', 'refral' => '0', 'time_cron' => '0', 'notifctions' => '{}', 'Status' => $statuses[$i % count($statuses)]]);
+}
+foreach ([['mg1', '7002', 'm101', 'active'], ['mg2', '7003', 'm108', 'disablebyadmin'], ['mg3', '7004', 'm109', 'send_on_hold'], ['mg4', '7002', 'm120', 'active'], ['mg5', '0', 'm121', 'active']] as [$iid, $iu, $un, $stt]) {
+    $ins('invoice', ['id_invoice' => $iid, 'id_user' => $iu, 'username' => $un, 'Service_location' => 'Picha-1', 'time_sell' => (string) ($now - 86400), 'name_product' => '۳۰ گیگ', 'price_product' => '100000', 'Volume' => '30', 'Service_time' => '30',
+        'uuid' => 'u', 'note' => '', 'user_info' => 'x', 'bottype' => '', 'refral' => '0', 'time_cron' => '0', 'notifctions' => '{}', 'Status' => $stt]);
 }
 $methods = ['cart to cart', 'cart to cart', 'variza', 'Star Telegram', 'zarinpal', 'wallet', 'add balance by admin', 'low balance by admin', 'manual invoice', 'add order by admin', 'extend by admin', 'cost', 'capital_injection', 'plisio'];
 for ($i = 1; $i <= 120; $i++) {

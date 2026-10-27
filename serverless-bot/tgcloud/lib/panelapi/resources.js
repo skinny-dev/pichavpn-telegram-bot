@@ -11,6 +11,7 @@ const STATUS_MAP = {
   unpaid: ['unpaid', 'پرداخت‌نشده'], Unpaid: ['unpaid', 'پرداخت‌نشده'], Unsuccessful: ['unpaid', 'ناموفق'], expire: ['unpaid', 'منقضی‌شده (پرداخت‌نشده)'], reject: ['unpaid', 'رد شده'],
 }
 const GROUP_TONES = { active: 'success', onhold: 'warning', expired: 'destructive', disabled: 'secondary', removed: 'secondary', unpaid: 'destructive', other: 'secondary' }
+export const orderStatusKeys = () => Object.keys(STATUS_MAP)
 const statuses = () => Object.fromEntries(Object.entries(STATUS_MAP).map(([k, v]) => [k, v[1]]))
 const statusTones = () => Object.fromEntries(Object.entries(STATUS_MAP).map(([k, v]) => [k, GROUP_TONES[v[0]]]))
 export function orderGroupExpr() {
