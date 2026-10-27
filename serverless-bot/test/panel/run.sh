@@ -6,6 +6,7 @@ set -e
 cd "$(dirname "$0")"
 fail=0
 for c in "${@:-cases/core.mjs}"; do
+  case "$c" in *finance*) export FIN_CLEAN=1;; *) unset FIN_CLEAN;; esac
   php seed.php "$PHP_ROOT" >/dev/null
   (cd "$PHP_ROOT" && php scripts/serverless_export.php --out="$PANEL_EXPORT" >/dev/null 2>&1)
   echo "== $c"

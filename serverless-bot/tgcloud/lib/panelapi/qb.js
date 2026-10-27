@@ -2,6 +2,7 @@
 // A number parameter is sent as `(? + 0)`: the db layer binds numbers as text (the way PHP's PDO did), and SQLite
 // never compares text with a number.
 import { all, one, run, sql } from '../db.js'
+import DEFAULTS from './finance/defaults.js'
 
 export function Q(text, params = []) {
   const parts = String(text).split('?')
@@ -14,7 +15,16 @@ export function Q(text, params = []) {
 }
 export const qAll = (text, params) => all(Q(text, params))
 export const qOne = async (text, params) => (await one(Q(text, params))) || null
-export const qRun = (text, params) => run(Q(text, params))
+/** the Serverless schema has no column defaults: an INSERT into a finance table gets the MySQL defaults of the columns it leaves out */
+function withDefaults(text, params) {
+  const m = /^(\s*INSERT(?:\s+OR\s+\w+)?\s+INTO\s+)(fin_\w+)\s*\(([^)]*)\)\s*VALUES\s*\((.*)\)\s*$/is.exec(text)
+  if (!m || !DEFAULTS[m[2]]) return [text, params]
+  const cols = m[3].split(',').map((c) => c.trim().replace(/[`"]/g, ''))
+  const extra = Object.entries(DEFAULTS[m[2]]).filter(([c]) => !cols.includes(c))
+  if (!extra.length) return [text, params]
+  return [`${m[1]}${m[2]} (${m[3]}, ${extra.map(([c]) => c).join(', ')}) VALUES (${m[4]}, ${extra.map(() => '?').join(', ')})`, [...params, ...extra.map(([, v]) => v)]]
+}
+export const qRun = (text, params = []) => { const [t, p] = withDefaults(text, params); return run(Q(t, p)) }
 export const qVal = async (text, params) => { const r = await qOne(text, params); return r ? Object.values(r)[0] : null }
 /** a text column that is only digits (MySQL: col REGEXP '^[0-9]+$') */
 export const isNum = (col) => `(${col} != '' AND ${col} NOT GLOB '*[^0-9]*')`

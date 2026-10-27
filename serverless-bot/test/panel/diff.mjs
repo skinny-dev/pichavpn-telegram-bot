@@ -12,7 +12,9 @@ let cookie = '', csrf = ''
 async function login() {
   const r = await fetch(URL_ + '?r=login', { method: 'POST', body: JSON.stringify({ username: USER, password: PASS }) })
   cookie = (r.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ')
-  csrf = (await r.json()).csrf
+  const j = await r.json()
+  if (!j.ok) { console.log('❌ cannot log in to the PHP panel:', JSON.stringify(j)); process.exit(2) }
+  csrf = j.csrf
 }
 await login()
 function qs(route, q) {
@@ -44,6 +46,7 @@ let bad = 0, total = 0
 export async function compare(name, route, q, body, opts = {}) {
   total++
   const [a, b] = [await php(route, q, body), await handle(route, q, body, TG)]
+  if (a.status === 401 || b.status === 401) { bad++; console.log(`❌ ${name}: not logged in (php ${a.status} / js ${b.status})`); return }
   let A = norm(a.body), B = norm(b.body)
   if (opts.pick) { A = opts.pick(A); B = opts.pick(B) }
   const sa = JSON.stringify(A), sb = JSON.stringify(B)

@@ -12,6 +12,8 @@ foreach (['referral_payouts', 'referral_signups', 'referral_links', 'support_mes
 }
 $now = time();
 $pdo->exec("DELETE FROM admin WHERE id_admin = '{admin_number}'");
+$pdo->exec("DELETE FROM admin WHERE username = 'ptest'");
+$pdo->prepare("INSERT INTO admin (id_admin, username, password, rule) VALUES ('99001', 'ptest', ?, 'administrator')")->execute([password_hash('pt-test-1', PASSWORD_BCRYPT)]);
 $agents = ['f', 'f', 'f', 'n', 'n2'];
 $ins = fn($t, $r) => $pdo->prepare("INSERT INTO `$t` (`" . implode('`,`', array_keys($r)) . "`) VALUES (" . implode(',', array_fill(0, count($r), '?')) . ")")->execute(array_values($r));
 $userCols = $pdo->query('SHOW COLUMNS FROM user')->fetchAll(PDO::FETCH_ASSOC);
@@ -100,5 +102,10 @@ for ($i = 1; $i <= 14; $i++) {
     $ins('support_message', ['Tracking' => "trk$i", 'idsupport' => '5550001', 'iduser' => (string) $u, 'name_departman' => $i % 2 ? 'پشتیبانی' : 'فروش', 'text' => "سوال $i", 'result' => $i % 3 ? "پاسخ $i" : '',
         'time' => $t, 'status' => $st[$i % 6], 'result_time' => $i % 3 ? $t : '', 'result_by' => $i % 3 ? '5550001' : '', 'file_id' => $i % 5 === 0 ? 'FILEID' : '', 'file_type' => $i % 5 === 0 ? 'photo' : '', 'file_name' => '',
         'result_file_id' => $i % 7 === 0 ? 'RF' : '', 'result_file_type' => $i % 7 === 0 ? 'document' : '', 'result_file_name' => $i % 7 === 0 ? 'a.pdf' : '']);
+}
+if (getenv('FIN_CLEAN')) {
+    foreach (['fin_alloc', 'fin_journal_lines', 'fin_journal', 'fin_txn', 'fin_ownership', 'fin_loans', 'fin_assets', 'fin_parties', 'fin_audit', 'fin_settings', 'fin_docs'] as $t) {
+        try { $pdo->exec("TRUNCATE TABLE `$t`"); } catch (Throwable $e) { echo "truncate $t: " . $e->getMessage() . "\n"; }
+    }
 }
 echo "seeded\n";

@@ -35,7 +35,7 @@ const port = server.address().port
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 390, height: 800 } })
 const errors = []
-page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+page.on('console', (m) => { if (m.type() === 'error' && !/ERR_CERT|ERR_NAME|ERR_INTERNET|ERR_CONNECTION/.test(m.text())) errors.push(m.text()) })
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 await page.addInitScript(() => {
   window.Telegram = { WebApp: { initData: 'x', ready() {}, expand() {}, disableVerticalSwipes() {}, isVersionAtLeast: () => true, BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} }, HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },

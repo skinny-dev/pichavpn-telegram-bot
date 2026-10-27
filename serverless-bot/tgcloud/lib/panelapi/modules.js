@@ -45,3 +45,5 @@ Object.assign(extra.exact, {
   mg_user: (r, q) => manage.user(q),
   mg_user_action: (r, q, b, admin) => manage.userAction(b, admin),
 })
+import { route as finRoute } from './finance/routes.js'
+extra.prefix.push(['fin_', finRoute])
