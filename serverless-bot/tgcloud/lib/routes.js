@@ -7,6 +7,7 @@ import { manageRoutes } from './routes/manage.js'
 import { usertestRoutes } from './routes/usertest.js'
 import { supportRoutes } from './routes/support.js'
 import { buyRoutes } from './routes/buy.js'
+import { bulkRoutes } from './routes/bulk.js'
 
 export const routes = [
   ...start,
@@ -17,4 +18,5 @@ export const routes = [
   ...usertestRoutes,
   ...supportRoutes,
   ...buyRoutes,
+  ...bulkRoutes,
 ]
