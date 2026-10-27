@@ -222,9 +222,23 @@ if ($candidates === []) {
 $lastException = null;
 $userData = null;
 
+$initTokens = [$APIKEY];
+$devBot = json_decode((string) @file_get_contents(__DIR__ . '/../storage/serverless.json'), true); // the Mini App opened from the dev bot
+if (!empty($devBot['bot_token'])) {
+    $initTokens[] = (string) $devBot['bot_token'];
+}
 foreach ($candidates as $candidate) {
     try {
-        $userData = validate_telegram_init_data($candidate, $APIKEY);
+        foreach ($initTokens as $i => $initToken) {
+            try {
+                $userData = validate_telegram_init_data($candidate, $initToken);
+                break;
+            } catch (RuntimeException $e) {
+                if ($i === count($initTokens) - 1) {
+                    throw $e;
+                }
+            }
+        }
         break;
     } catch (InvalidArgumentException $exception) {
         $lastException = $exception;

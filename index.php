@@ -12,16 +12,22 @@ mirzaEnsureInstallerRemoved();
 require_once 'keyboard.php';
 require_once 'vendor/autoload.php';
 require_once 'panels.php';
+if (defined('PICHA_RELAY_DEV_KEY')) { // relayed from the dev bot (serverless_relay.php): answer with the dev bot
+    $APIKEY = PICHA_RELAY_DEV_KEY;
+}
 promoAutoEnd($pdo); // a finished price promotion puts the normal prices back
 $textbotlang = languagechange();
 $text = restoreCustomEmojiLabel($text);
 #-----------telegram_ip_ranges------------#
-if (!checktelegramip())
+// an update relayed from the dev bot was already checked by serverless_relay.php (key)
+if (!defined('PICHA_RELAY_MAIN_KEY') && !checktelegramip())
     die("Unauthorized access");
 #-----------end telegram_ip_ranges------------#
-$webhookSecret = ensureWebhookSecret();
-if (!$webhookSecret['created'] && $webhookSecret['secret'] !== '' && !webhookSecretMatches($webhookSecret['secret']))
-    die("Unauthorized access");
+if (!defined('PICHA_RELAY_MAIN_KEY')) {
+    $webhookSecret = ensureWebhookSecret();
+    if (!$webhookSecret['created'] && $webhookSecret['secret'] !== '' && !webhookSecretMatches($webhookSecret['secret']))
+        die("Unauthorized access");
+}
 if ($is_bot)
     return;
 if (isset($update['chat_member'])) {

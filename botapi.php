@@ -154,9 +154,107 @@ function customEmojiBlocked($token = null, $block = false)
     }
     return $state[$key];
 }
+// ---- dev bot relay (serverless_relay.php): Telegram file ids belong to one bot, so files are moved between the two bots
+const RELAY_MEDIA_KEYS = ['photo', 'video', 'document', 'animation', 'audio', 'voice', 'video_note', 'sticker'];
+
+function relayFileError($r): bool
+{
+    return is_array($r) && empty($r['ok']) && (int) ($r['error_code'] ?? 0) === 400
+        && preg_match('/file identifier|wrong file|remote file|file_id/i', (string) ($r['description'] ?? '')) === 1;
+}
+
+function relayFileCache(?array $set = null): array
+{
+    $file = __DIR__ . '/storage/cache/relay_files.json';
+    if ($set !== null) {
+        @mkdir(dirname($file), 0775, true);
+        file_put_contents($file, json_encode(array_slice($set, -2000, null, true)), LOCK_EX);
+        return $set;
+    }
+    $d = is_file($file) ? json_decode((string) file_get_contents($file), true) : [];
+    return is_array($d) ? $d : [];
+}
+
+/** main bot file ids already uploaded to the dev bot → the dev bot's id */
+function relayFileCached(array $datas): array
+{
+    $cache = null;
+    foreach (RELAY_MEDIA_KEYS as $k) {
+        if (isset($datas[$k]) && is_string($datas[$k])) {
+            $cache ??= relayFileCache();
+            if (isset($cache[$datas[$k]])) {
+                $datas[$k] = $cache[$datas[$k]];
+            }
+        }
+    }
+    return $datas;
+}
+
+/** Downloads the file with one bot and sends it with the other; null when there is nothing to move. */
+function relayMoveFile(string $method, array $datas, string $fromToken, string $toToken, bool $remember): ?array
+{
+    foreach (RELAY_MEDIA_KEYS as $k) {
+        $id = $datas[$k] ?? null;
+        if (!is_string($id) || $id === '' || preg_match('#^https?://#i', $id)) {
+            continue;
+        }
+        $info = telegram('getFile', ['file_id' => $id], $fromToken);
+        $path = (string) ($info['result']['file_path'] ?? '');
+        $bytes = false;
+        if ($path !== '') {
+            $dl = curl_init('https://api.telegram.org/file/bot' . $fromToken . '/' . $path);
+            curl_setopt_array($dl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 5]);
+            $bytes = curl_exec($dl);
+            if ((int) curl_getinfo($dl, CURLINFO_HTTP_CODE) !== 200) {
+                $bytes = false;
+            }
+        }
+        if ($bytes === false || $bytes === '') {
+            return null;
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'relay');
+        file_put_contents($tmp, $bytes);
+        $datas[$k] = new CURLFile($tmp, '', basename($path));
+        $r = telegram($method, $datas, $toToken);
+        @unlink($tmp);
+        if ($remember && !empty($r['ok'])) {
+            $res = $r['result'][$k] ?? null;
+            $newId = is_array($res) ? ($res['file_id'] ?? (is_array(end($res)) ? (end($res)['file_id'] ?? null) : null)) : null;
+            if ($newId) {
+                $cache = relayFileCache();
+                $cache[$id] = $newId;
+                relayFileCache($cache);
+            }
+        }
+        return $r;
+    }
+    return null;
+}
+
 function telegram($method, $datas = [], $token = null, $allowEmojiFallback = true)
 {
     global $APIKEY;
+
+    if ($token === null && defined('PICHA_RELAY_MAIN_KEY')) { // update relayed from the dev bot (serverless_relay.php): answer with the dev bot
+        if (in_array(strtolower($method), ['setwebhook', 'deletewebhook', 'getupdates', 'logout', 'close'], true)) {
+            return ['ok' => false, 'error_code' => 403, 'description' => 'not allowed for the relayed dev bot'];
+        }
+        $r = telegram($method, relayFileCached($datas), PICHA_RELAY_DEV_KEY, $allowEmojiFallback);
+        if (relayFileError($r)) { // a file the main bot stored (tutorial, banner …): upload it again with the dev bot
+            $r = relayMoveFile($method, $datas, PICHA_RELAY_MAIN_KEY, PICHA_RELAY_DEV_KEY, true) ?? $r;
+        }
+        $relayChat = (string) ($datas['chat_id'] ?? '');
+        $code = (int) ($r['error_code'] ?? 0);
+        if ($relayChat !== '' && !ctype_digit($relayChat) && empty($r['ok'])
+            && ($code === 403 || ($code === 400 && preg_match('/chat not found|not a member|inaccessible|rights|ADMIN_REQUIRED|PARTICIPANT/i', (string) ($r['description'] ?? ''))))) {
+            // a group / channel the dev bot is not in (reports, channel-join check): the main bot sends it
+            $r = telegram($method, $datas, PICHA_RELAY_MAIN_KEY, $allowEmojiFallback);
+            if (relayFileError($r)) { // e.g. a receipt photo the customer sent to the dev bot
+                $r = relayMoveFile($method, $datas, PICHA_RELAY_DEV_KEY, PICHA_RELAY_MAIN_KEY, false) ?? $r;
+            }
+        }
+        return $r;
+    }
 
     $token = $token === null ? $APIKEY : $token;
     $url = "https://api.telegram.org/bot" . $token . "/" . $method;
@@ -459,7 +557,7 @@ function isDuplicateUpdate($updateId)
 // #-----------------------------#
 $update = json_decode(file_get_contents("php://input"), true);
 $update_id = $update['update_id'] ?? 0;
-if (isDuplicateUpdate($update_id)) {
+if (isDuplicateUpdate(defined('PICHA_RELAY_MAIN_KEY') && is_numeric($update_id) && $update_id > 0 ? (int) $update_id + 1000000000000 : $update_id)) { // the dev bot counts its own update ids
     http_response_code(200);
     exit;
 }

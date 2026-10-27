@@ -2,11 +2,13 @@
 //   /start, /menu                 main menu
 //   /setup <api_url> <key>        connect to the Picha server (the line `php scripts/serverless_setup.php key` prints).
 //                                 The first one who sets it becomes the owner; after that only the owner can change it.
-//   /stats                        (owner) how many people used the dev bot
-//   /mainbot <username>           (owner) the main bot the buy buttons open (default pichanet_bot)
+//   /devstats                     (owner) how many people used the dev bot
+//   /devmainbot <username>        (owner) the main bot the buy buttons open in read-only mode (default pichanet_bot)
+// Everything else goes to the main bot's code on the server (relay) — all its commands, texts and buttons.
+// When the relay is off on the server, the read-only menus of lib/screens.js answer instead.
 import { api, BotApiError } from 'sdk'
 import { getSetting, setSetting, touchVisitor, visitorStats } from '../lib/store.js'
-import { callWith } from '../lib/picha.js'
+import { callWith, relay, NotConfigured } from '../lib/picha.js'
 import { menu } from '../lib/screens.js'
 import { fa } from '../lib/fmt.js'
 
@@ -21,7 +23,11 @@ async function forget(message) {
 }
 
 export default async function (message, ctx) {
-  if (!message.chat || message.chat.type !== 'private' || !message.from) return
+  if (!message.chat || !message.from) return
+  if (message.chat.type !== 'private') { // groups the dev bot was added to: only the main bot's code
+    try { await relay(ctx.update) } catch (e) { if (!(e instanceof NotConfigured)) console.error(e) }
+    return
+  }
   const chat = message.chat.id
   const me = message.from
   const text = (message.text || '').trim()
@@ -51,19 +57,27 @@ export default async function (message, ctx) {
     return say(chat, m.text, { reply_markup: m.reply_markup })
   }
 
-  if (text === '/stats' && isOwner) {
+  if (text === '/devstats' && isOwner) {
     const s = await visitorStats()
     return say(chat, `📈 کاربران ربات تست: ${fa(s.total)}\n۲۴ ساعت اخیر: ${fa(s.day)}`)
   }
 
-  if (text.startsWith('/mainbot') && isOwner) {
+  if (text.startsWith('/devmainbot') && isOwner) {
     const name = (text.split(/\s+/)[1] || '').replace(/^@/, '')
-    if (!/^[A-Za-z0-9_]{5,32}$/.test(name)) return say(chat, 'مثال: <code>/mainbot pichanet_bot</code>')
+    if (!/^[A-Za-z0-9_]{5,32}$/.test(name)) return say(chat, 'مثال: <code>/devmainbot pichanet_bot</code>')
     await setSetting('main_bot', name)
     return say(chat, `✅ دکمه‌های خرید به @${name} می‌روند.`)
   }
 
   await touchVisitor(me)
+  try {
+    if (await relay(ctx.update)) return
+  } catch (e) {
+    if (!(e instanceof NotConfigured)) {
+      console.error(e)
+      return say(chat, '⚠️ الان به سرور پیچا دسترسی نیست؛ چند دقیقه بعد دوباره امتحان کنید.')
+    }
+  }
   try {
     const m = await menu(me)
     await say(chat, m.text, { reply_markup: m.reply_markup })

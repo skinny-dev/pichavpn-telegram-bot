@@ -1,7 +1,7 @@
-// Inline buttons: the screen is replaced in the same message.
+// Inline buttons: go to the main bot's code (relay); when the relay is off, the read-only screens replace the message.
 import { api, BotApiError } from 'sdk'
 import * as screens from '../lib/screens.js'
-import { NotConfigured } from '../lib/picha.js'
+import { NotConfigured, relay } from '../lib/picha.js'
 import { touchVisitor } from '../lib/store.js'
 
 async function screenFor(data, user) {
@@ -20,6 +20,7 @@ export default async function (q, ctx) {
   let toast = undefined
   try {
     await touchVisitor(user)
+    if (await relay(ctx.update)) return // the main bot's code answers (and answers the callback)
     const s = await screenFor(String(q.data || 'm'), user)
     if (msg) {
       try {

@@ -4,6 +4,8 @@
 //   php scripts/serverless_setup.php key        # makes the API key (printed once: send it to the dev bot with /setup)
 //   php scripts/serverless_setup.php token      # the dev bot's token (hidden input) so the admin panel Mini App opens from it too
 //   php scripts/serverless_setup.php project    # copies serverless/ to /root/picha-serverless (where `npx tgcloud` runs)
+//   php scripts/serverless_setup.php relay on   # the dev bot runs the full bot (all commands, texts, purchases) through serverless_relay.php
+//   php scripts/serverless_setup.php relay off  # back to the read-only view
 //   php scripts/serverless_setup.php status
 //   php scripts/serverless_setup.php off | on   # stop / allow serverless_api.php
 //
@@ -77,6 +79,22 @@ switch ($argv[1] ?? 'status') {
         echo "   cd $dst && npm install && npx tgcloud login\n";
         break;
 
+    case 'relay':
+        $on = ($argv[2] ?? '') === 'on';
+        if (!in_array($argv[2] ?? '', ['on', 'off'], true)) {
+            fwrite(STDERR, "php scripts/serverless_setup.php relay on|off\n");
+            exit(1);
+        }
+        if ($on && (empty($cfg['key']) || empty($cfg['bot_token']))) {
+            fwrite(STDERR, "❌ اول key و token را بسازید (php scripts/serverless_setup.php key / token)\n");
+            exit(1);
+        }
+        $cfg['relay'] = $on;
+        $save();
+        echo $on ? "✅ ربات تست حالا همان ربات کامل است (همه دستورها، متن‌ها، دکمه‌ها و خرید؛ دیتابیس و کاربران مشترک)\n"
+            : "⛔ رله خاموش شد؛ ربات تست فقط نمایش می‌دهد\n";
+        break;
+
     case 'off':
     case 'on':
         $cfg['enabled'] = $argv[1] === 'on';
@@ -88,5 +106,6 @@ switch ($argv[1] ?? 'status') {
         echo "API: $api\n";
         echo "کلید: " . (!empty($cfg['key']) ? '✅ ساخته شده' : '❌ نه (php scripts/serverless_setup.php key)') . "\n";
         echo "وضعیت: " . (($cfg['enabled'] ?? true) ? '✅ روشن' : '⛔ خاموش') . "\n";
-        echo "توکن ربات تست برای پنل: " . (!empty($cfg['bot_token']) ? '✅ ' . ($cfg['bot_username'] ? '@' . $cfg['bot_username'] : '') : '— (اختیاری: php scripts/serverless_setup.php token)') . "\n";
+        echo "ربات کامل (رله): " . (!empty($cfg['relay']) ? '✅ روشن' : '— خاموش (php scripts/serverless_setup.php relay on)') . "\n";
+        echo "توکن ربات تست برای پنل: " . (!empty($cfg['bot_token']) ? '✅ ' . (!empty($cfg['bot_username']) ? '@' . $cfg['bot_username'] : '') : '— (اختیاری: php scripts/serverless_setup.php token)') . "\n";
 }
