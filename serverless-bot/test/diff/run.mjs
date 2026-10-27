@@ -67,6 +67,7 @@ function normalize(v) {
     const o = {}
     for (const k of Object.keys(v).sort()) {
       let x = v[k]
+      if (x && typeof x === 'object' && x.bytes && 'name' in x) continue // an uploaded file: PHP's goes in $_FILES, not in the log
       if (x === false) x = '' // PHP posts false as an empty field
       if (x === null || x === undefined || x === '') continue
       if (k === 'parse_mode') x = String(x).toLowerCase()

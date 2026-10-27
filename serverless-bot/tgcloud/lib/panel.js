@@ -109,7 +109,8 @@ async function linksOf(subUrl, given) {
 export async function dataUser(panelName, username, domain = '') {
   const panel = await panelByName(panelName)
   if (!panel) return { status: 'Unsuccessful', msg: 'Panel Not Found' }
-  const inv = await one(sql`SELECT * FROM invoice WHERE username = ${username} AND Service_location = ${panelName}`)
+  // the bot-domain link only with the panel's «subvip» setting (panels.php DataUser)
+  const inv = panel.subvip === 'onsubvip' ? await one(sql`SELECT * FROM invoice WHERE username = ${username}`) : null
   const r = await authed(panel, 'GET', '/api/user/' + username)
   if (r.error) return { status: 'Unsuccessful', msg: r.error }
   if (r.status === 500) return { status: 'Unsuccessful', msg: 500 }

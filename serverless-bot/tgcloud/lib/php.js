@@ -46,3 +46,22 @@ export const intval = (v) => { const n = parseInt(String(v ?? '').trim(), 10); r
 export function randomHex(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return [...a].map((b) => b.toString(16).padStart(2, '0')).join('') }
 /** PHP json_encode of a keyboard (the Bot API side does not care about escaping) */
 export const J = (o) => JSON.stringify(o)
+
+/** base64_decode($s, true) as bytes, or false */
+export function b64decodeStrict(s) {
+  if (typeof s !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(s)) return false
+  try { return Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0)) } catch { return false }
+}
+export function b64encode(bytes) { let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin) }
+/** isBase64() of function.php: decodes strictly and encodes back to the same string */
+export function isBase64(s) {
+  if (typeof s !== 'string') return false
+  const d = b64decodeStrict(s)
+  return b64encode(d === false ? new Uint8Array(0) : d) === s
+}
+export const utf8 = (bytes) => new TextDecoder().decode(bytes)
+/** urldecode(): + is a space, bad % sequences stay as they are */
+export function urldecode(s) {
+  s = String(s ?? '').replace(/\+/g, ' ')
+  return s.replace(/(?:%[0-9a-fA-F]{2})+/g, (m) => { try { return decodeURIComponent(m) } catch { return m } })
+}

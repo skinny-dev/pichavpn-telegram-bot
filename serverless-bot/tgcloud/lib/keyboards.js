@@ -149,3 +149,22 @@ export function backuserKb(c) {
     ? J({ inline_keyboard: [[{ text: c.T.users.backbtn, callback_data: 'backuser' }]] })
     : J({ keyboard: [[{ text: c.T.users.backbtn }]], resize_keyboard: true })
 }
+
+/** keyboard_config(): one button per config (name from the link), all, back */
+export async function keyboardConfig(T, links, idInvoice, backActive = true) {
+  const { isBase64, b64decodeStrict, utf8, urldecode } = await import('./php.js')
+  const kb = { inline_keyboard: [[{ text: T.keyboard.config, callback_data: 'none' }, { text: T.keyboard.configName, callback_data: 'none' }]] }
+  links.forEach((config, i) => {
+    const sp = String(config).split('://')
+    const type = sp[0]
+    let rest = sp.length > 1 ? sp.slice(1).join('://') : ''
+    rest = sp[1] ?? ''
+    if (isBase64(rest)) rest = utf8(b64decodeStrict(rest))
+    if (type === 'vmess') { let j = null; try { j = JSON.parse(rest) } catch { j = null } rest = (j && j.ps) ?? '' }
+    else { const parts = rest.split('#'); rest = parts[1] ?? parts[0] }
+    kb.inline_keyboard.push([{ text: T.keyboard.getConfig, callback_data: `configget_${idInvoice}_${i}` }, { text: urldecode(rest), callback_data: 'none' }])
+  })
+  kb.inline_keyboard.push([{ text: T.keyboard.getAllConfigs, callback_data: `configget_${idInvoice}_1520` }])
+  if (backActive) kb.inline_keyboard.push([{ text: T.users.status.backinfo, callback_data: `product_${idInvoice}` }])
+  return J(kb)
+}
