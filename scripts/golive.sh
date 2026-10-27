@@ -126,7 +126,8 @@ if [ "$DRY" != 1 ]; then
     warn "COPY THIS FILE OFF THE SERVER NOW (password manager). A backup without it cannot be opened."
   else ok "backup password file exists ($PASSFILE)"; fi
   BS="$APP/scripts/picha-backup.sh"; [ -f "$BS" ] || BS="$here/picha-backup.sh"
-  bash "$BS" --app "$APP" --install-cron >/dev/null 2>&1 && ok "daily backup scheduled (03:30)" || warn "could not schedule the backup: run: bash $BS --install-cron"
+  if [ -s /etc/cron.d/picha-backup ]; then ok "backup already scheduled (kept as is: $(cut -d' ' -f1-5 /etc/cron.d/picha-backup | head -1))" # never turn hourly back into daily
+  else bash "$BS" --app "$APP" --install-cron >/dev/null 2>&1 && ok "daily backup scheduled (03:30)" || warn "could not schedule the backup: run: bash $BS --install-cron"; fi
 else echo "    [dry-run] create backup password file, install the daily backup cron"; fi
 
 # 6 ---------------------------------------------------------------- hardening
