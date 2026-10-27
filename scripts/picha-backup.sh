@@ -93,7 +93,7 @@ grep -q "Dump completed" "$WORK/b/db.sql" || die "database dump looks incomplete
 TABLES="$(grep -c '^CREATE TABLE' "$WORK/b/db.sql")"
 
 # 2) files that are NOT in git: config (token, db password), edited texts, storage, uploads
-for p in config.php lang/override storage version; do
+for p in config.php lang/override storage version vpnbot; do # vpnbot/: the agents' own bots (their config and texts)
   [ -e "$APP_DIR/$p" ] && { mkdir -p "$WORK/b/files/$(dirname "$p")"; cp -a "$APP_DIR/$p" "$WORK/b/files/$p"; }
 done
 rm -rf "$WORK/b/files/storage/cache" 2>/dev/null
