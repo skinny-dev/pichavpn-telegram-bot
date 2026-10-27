@@ -702,3 +702,16 @@ export const wheel_list = table('wheel_list', {
   price: text('price'),
 })
 
+// ---- Serverless-only tables
+// the bot's texts (lang/fa.php + edits), key = dotted path like users.status.active
+export const texts = table('texts', {
+  key: text('key').primaryKey(),
+  value: text('value'),
+})
+
+// small state: panel tokens, last runs of timed jobs, …
+export const kv = table('kv', {
+  key: text('key').primaryKey(),
+  value: text('value'),
+  updated_at: integer('updated_at'),
+})
