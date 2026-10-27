@@ -15,6 +15,8 @@ interface TgWebApp {
   setBackgroundColor?: (c: string) => void
   setBottomBarColor?: (c: string) => void
   onEvent?: (e: string, cb: () => void) => void
+  /** present when the Mini App is hosted on Telegram Serverless: calls the bot's endpoints */
+  Serverless?: { call: (name: string, input: unknown, cb: (err: any, result: any) => void) => void }
   BackButton?: { show: () => void; hide: () => void; onClick: (cb: () => void) => void; offClick: (cb: () => void) => void }
   HapticFeedback?: { impactOccurred: (s: string) => void; notificationOccurred: (s: string) => void }
 }

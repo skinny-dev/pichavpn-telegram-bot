@@ -1,0 +1,14 @@
+{
+  "name": "picha-serverless-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:panel": "cd ../dashboard-src && PANEL_OUT=../serverless-bot/dist npm run build:serverless",
+    "deploy": "npm run build:panel && tgcloud push",
+    "migrate": "tgcloud migrate",
+    "status": "tgcloud status"
+  },
+  "devDependencies": {
+    "@tgcloud/cli": "0.2.0"
+  }
+}

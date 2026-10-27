@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowRight, CheckCheck, FileText, Loader2, Paperclip, Search, Send, X } from 'lucide-react'
-import { api, apiForm, ApiError, supportFileUrl } from '@/lib/api'
+import { api, apiForm, ApiError, isServerless, supportFileUrl } from '@/lib/api'
 import { fmtStr } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,14 @@ interface ThreadData { uid: string; user: { username: string; namecustom: string
 const who = (t: { iduser: string; name?: string | null; tg_username?: string | null }) => t.name && t.name !== 'none' ? t.name : t.tg_username && t.tg_username !== 'none' ? `@${t.tg_username}` : t.iduser
 
 function Attachment({ f }: { f: Attach }) {
+  const [sent, setSent] = useState(false)
+  // on Serverless a page cannot stream a file: the attachment is sent to the admin's own chat with the bot
+  if (isServerless()) {
+    return (
+      <button type="button" disabled={sent} onClick={() => api('support_file', { query: { row: f.row, side: f.side } }).then(() => { setSent(true); toast.success('فایل در چت ربات برای شما ارسال شد') }).catch((e) => toast.error(e instanceof ApiError ? e.message : 'ارسال ناموفق بود'))}
+        className="mb-1 flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2 text-sm"><FileText className="size-4 shrink-0" /><span className="truncate" dir="ltr">{f.name}</span><span className="text-xs opacity-80">{sent ? '✓ ارسال شد' : '(ارسال به چت ربات)'}</span></button>
+    )
+  }
   const url = supportFileUrl(f.row, f.side)
   const [failed, setFailed] = useState(false)
   if (failed) return <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2 text-xs underline"><FileText className="size-4" />{f.name} (دانلود)</a>

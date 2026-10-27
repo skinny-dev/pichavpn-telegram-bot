@@ -1,0 +1,5 @@
+// Picha on Telegram Serverless. The admin panel (dashboard-src) is the Mini App: `npm run deploy` builds it into dist/ and pushes.
+{
+  "$schema": "./node_modules/@tgcloud/cli/schema/tgcloud.json",
+  "static": { "source": "dist", "spa": true }
+}

@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-  build: { outDir: '../dashboard', emptyOutDir: false, assetsDir: 'assets', chunkSizeWarningLimit: 900 },
+  build: { outDir: process.env.PANEL_OUT || '../dashboard', emptyOutDir: !!process.env.PANEL_OUT, assetsDir: 'assets', chunkSizeWarningLimit: 900 },
   server: { proxy: { '/dashboard/api.php': { target: 'http://127.0.0.1:8099', changeOrigin: true } } },
   test: { environment: 'jsdom', globals: true },
 })

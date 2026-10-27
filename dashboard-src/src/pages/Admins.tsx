@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { KeyRound, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, isServerless } from '@/lib/api'
 import { normalizeDigits } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,7 +90,7 @@ export default function Admins() {
                   <SelectContent>{Object.entries(roles).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              {(form.rule === 'administrator' || form.rule === 'support') && (
+              {!isServerless() && (form.rule === 'administrator' || form.rule === 'support') && (
                 <>
                   <div className="grid gap-2">
                     <Label htmlFor="aun">نام کاربری پنل وب</Label>
