@@ -64,17 +64,24 @@ async function createPayVariza(c, price, orderId) {
   if (token === '' || token === '0') return { error: 'variza_api_token not set' }
   const relay = String((await kvGet('config:pay_relay_url')) || '').replace(/\/+$/, '')
   const back = relay ? `${relay}/variza_return.php?order=${orderId}` : `https://${c.domain}/payment/variza.php?order=${orderId}`
+  const payload = { amount: intval(price), return_url: back, title: 'Mirza order ' + orderId, expires_in: '1h' }
   try {
-    const res = await fetch('https://variza.ir/api/v1/pay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ amount: intval(price), return_url: back, title: 'Mirza order ' + orderId, expires_in: '1h' }),
-    })
-    const raw = await res.text()
+    let status, raw
+    const key = String((await kvGet('config:pay_relay_key')) || '')
+    if (relay && key) {
+      // through the relay: it can reach Variza from inside Iran (Variza may refuse foreign servers)
+      const res = await fetch(`${relay}/variza_create`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Relay-Key': key }, body: JSON.stringify({ token, payload }) })
+      const r = JSON.parse(await res.text())
+      if (!r || !r.ok) return { error: 'relay: ' + (r?.error ?? res.status) }
+      status = intval(r.http_code); raw = String(r.body ?? '')
+    } else {
+      const res = await fetch('https://variza.ir/api/v1/pay', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) })
+      status = res.status; raw = await res.text()
+    }
     let d = null
     try { d = JSON.parse(raw) } catch { d = null }
-    if (!d || typeof d !== 'object') return { error: 'invalid json', raw, http_code: res.status }
-    if (res.status < 200 || res.status >= 300) return { error: 'http ' + res.status, raw, decoded: d, http_code: res.status }
+    if (!d || typeof d !== 'object') return { error: 'invalid json', raw, http_code: status }
+    if (status < 200 || status >= 300) return { error: 'http ' + status, raw, decoded: d, http_code: status }
     return d
   } catch (e) {
     return { error: 'fetch: ' + String((e && e.message) || e) }

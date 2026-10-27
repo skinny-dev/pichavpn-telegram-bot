@@ -39,6 +39,7 @@ try {
   await post('/sms', JSON.stringify({ wrongtoken0123456_blu: 'بلو\nواریز پول\n301,230 ریال' }))
   check('relay takes the SMS', (await post('/sms', JSON.stringify({ tok0123456789abcdef_blu: 'بلو\nواریز پول\nمبلغ 301,230 ریال به حساب شما نشست\nموجودی: 5,000,000 ریال' }))).status === 200)
   check('pull without the key is refused', (await fetch('http://127.0.0.1:8140/pull')).status === 401)
+  check('variza_create without the key is refused', (await post('/variza_create', '{}')).status === 401)
 
   const { handleUpdate } = await import('../tgcloud/lib/bot.js')
   await handleUpdate({ update_id: 1, message: { message_id: 1, from: { id: 1001, first_name: 'Ali', username: 'ali', is_bot: false }, chat: { id: 1001, type: 'private' }, date: 1, text: '/start' } })

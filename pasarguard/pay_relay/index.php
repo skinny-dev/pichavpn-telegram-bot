@@ -109,6 +109,33 @@ if (in_array($path, ['/sms', '/sms_webhook.php', '/payment/sms_webhook.php'], tr
     reply(200, ['ok' => true, 'status' => 'queued']);
 }
 
+// the bot asks the relay to create a Variza payment: Variza may refuse foreign servers, and this server can reach it
+// through the SSH tunnel to the Iranian server (VARIZA_PROXY in the settings, made by install.sh with an Iranian IP)
+if ($path === '/variza_create') {
+    if (RELAY_KEY === '' || !hash_equals(RELAY_KEY, headerValue('X-Relay-Key'))) {
+        reply(401, ['ok' => false]);
+    }
+    $in = json_decode($raw, true);
+    if (!is_array($in) || !is_string($in['token'] ?? null) || !is_array($in['payload'] ?? null)) {
+        reply(400, ['ok' => false, 'error' => 'bad request']);
+    }
+    $ch = curl_init('https://variza.ir/api/v1/pay');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_CUSTOMREQUEST => 'POST',
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', 'Authorization: Bearer ' . $in['token']],
+        CURLOPT_POSTFIELDS => json_encode($in['payload'], JSON_UNESCAPED_UNICODE),
+    ]);
+    if (defined('VARIZA_PROXY') && VARIZA_PROXY !== '') {
+        curl_setopt($ch, CURLOPT_PROXY, VARIZA_PROXY);
+        curl_setopt($ch, CURLOPT_NOPROXY, '');
+    }
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    reply(200, ['ok' => $body !== false, 'http_code' => $code, 'body' => $body === false ? null : $body, 'error' => $body === false ? $err : null]);
+}
+
 if ($path === '/pull') {
     if (RELAY_KEY === '' || !hash_equals(RELAY_KEY, headerValue('X-Relay-Key'))) {
         reply(401, ['ok' => false]);
