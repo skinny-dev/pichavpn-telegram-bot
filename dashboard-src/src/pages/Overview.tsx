@@ -9,6 +9,8 @@ import { ActivityHeatmap } from '@/components/ActivityHeatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { useManage } from '@/components/manage'
+import { useSession } from '@/lib/session'
 
 interface Overview {
   today: Record<string, number>; month: Record<string, number>; users: number; balance: number; active_services: number; pending_payments: number
@@ -18,12 +20,14 @@ interface Overview {
 
 export default function Overview() {
   const q = useQuery({ queryKey: ['overview'], queryFn: () => api<Overview>('overview'), refetchInterval: 60_000 })
+  const { openOrder } = useManage()
+  const statusCol = useSession().schema.orders?.cols.find((c) => c.key === 'Status')
   if (q.isLoading || !q.data) return <div className="grid gap-4"><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28" />)}</div><Skeleton className="h-72" /></div>
   if (q.isError) return <p className="text-destructive">بارگذاری ناموفق بود</p>
   const d = q.data
   return (
     <div className="grid gap-4 md:gap-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4">
         <StatCard icon={TrendingUp} label="درآمد امروز" value={fmtCompact(d.today.revenue)} hint={`خالص: ${fmtToman(d.today.net)}`} tone="success" />
         <StatCard icon={Banknote} label="درآمد ماه فعلی" value={fmtCompact(d.month.revenue)} hint={`خالص: ${fmtToman(d.month.net)}`} tone="success" />
         <StatCard icon={ShoppingCart} label="سفارش امروز" value={fmtNum(d.today.orders)} hint={`${fmtNum(d.today.renew)} تمدید · ${fmtNum(d.today.first)} خرید اول`} />
@@ -60,9 +64,11 @@ export default function Overview() {
           {d.recent.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">سفارشی ثبت نشده</p> : (
             <ul className="divide-y">
               {d.recent.map((r) => (
-                <li key={r.id_invoice} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0"><p className="truncate text-sm font-medium">{r.name_product}</p><p className="truncate text-xs text-muted-foreground" dir="ltr">{fmtTs(r.time_sell)}</p></div>
-                  <div className="shrink-0 text-end"><p className="text-sm tabular">{fmtToman(r.price_product)}</p><Badge variant="secondary">{r.Status}</Badge></div>
+                <li key={r.id_invoice}>
+                  <button onClick={() => openOrder(r.id_invoice)} className="flex w-full items-center justify-between gap-3 py-2.5 text-start hover:bg-accent/40">
+                    <div className="min-w-0"><p className="truncate text-sm font-medium">{r.name_product} <span className="text-xs font-normal text-muted-foreground" dir="ltr">{r.username}</span></p><p className="truncate text-xs text-muted-foreground" dir="ltr">{fmtTs(r.time_sell)}</p></div>
+                    <div className="shrink-0 text-end"><p className="text-sm tabular">{fmtToman(r.price_product)}</p><Badge variant={(statusCol?.tones?.[r.Status] ?? 'secondary') as any}>{statusCol?.options?.[r.Status] ?? r.Status}</Badge></div>
+                  </button>
                 </li>
               ))}
             </ul>

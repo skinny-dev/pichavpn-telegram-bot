@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowDown, ArrowUp, ChevronRight, ChevronLeft, Download, FileSpreadsheet, FileText, FileJson, Loader2, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronRight, ChevronLeft, Download, FileSpreadsheet, FileText, FileJson, Loader2, PanelLeftOpen, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Upload } from 'lucide-react'
 import { api, ApiError, type Col, type Resource, type Row } from '@/lib/api'
 import { fmtNum, fmtStr, fmtTs, normalizeDigits } from '@/lib/format'
 import { exportRows, type ExportFormat } from '@/lib/io'
@@ -32,6 +32,10 @@ interface Props {
   forced?: Record<string, string>
   /** receives the `summary` block of the list response */
   onSummary?: (s: any) => void
+  /** opens the full page of a row (order / customer) */
+  onOpen?: (row: Row) => void
+  /** phones: rows as cards instead of the spreadsheet */
+  card?: (row: Row) => React.ReactNode
 }
 
 const PER_OPTIONS = [25, 50, 100, 200]
@@ -55,7 +59,8 @@ export function displayValue(col: Col, v: unknown): React.ReactNode {
 
 const rawText = (col: Col, v: unknown) => (v === null || v === undefined ? '' : String(v))
 
-export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], extra, forced, onSummary }: Props) {
+export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], extra, forced, onSummary, onOpen, card }: Props) {
+  const [showFilters, setShowFilters] = useState(false)
   const qc = useQueryClient()
   const coarse = useCoarsePointer()
   const cols = useMemo(() => res.cols.filter((c) => !hide.includes(c.key)), [res, hide])
@@ -190,9 +195,15 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو…" className="ps-9" aria-label="جستجو" />
         </div>
+        {enumFilters.length > 0 && (
+          <Button variant={showFilters || anyFilter ? 'secondary' : 'outline'} size="icon" className="md:hidden" onClick={() => setShowFilters((v) => !v)} aria-label="فیلترها">
+            <SlidersHorizontal />
+          </Button>
+        )}
+        <div className={cn('w-full flex-wrap gap-2 md:contents', showFilters ? 'flex' : 'hidden')}>
         {enumFilters.map((c) => (
           <Select key={c.key} value={filters[c.key] ?? 'all'} onValueChange={(v) => setFilters((f) => ({ ...f, [c.key]: v === 'all' ? '' : v }))}>
-            <SelectTrigger className="w-auto min-w-[8rem]" aria-label={c.label}><SelectValue placeholder={c.label} /></SelectTrigger>
+            <SelectTrigger className="w-[calc(50%-0.25rem)] min-w-[8rem] md:w-auto" aria-label={c.label}><SelectValue placeholder={c.label} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{c.label}: همه</SelectItem>
               {Object.entries(c.options ?? {}).map(([k, l]) => <SelectItem key={k} value={k}>{l}</SelectItem>)}
@@ -200,6 +211,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
           </Select>
         ))}
         {anyFilter && <Button variant="ghost" size="sm" onClick={() => setFilters({})}>حذف فیلترها</Button>}
+        </div>
         <div className="ms-auto flex flex-wrap items-center gap-2">
           {toolbar}
           <Button variant="outline" size="icon" onClick={() => list.refetch()} aria-label="بروزرسانی" disabled={list.isFetching}>
@@ -216,10 +228,22 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
               <DropdownMenuItem onSelect={() => doExport('json')}><FileJson />JSON</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {res.import && <Button variant="outline" onClick={() => setImportOpen(true)}><Upload /><span className="hidden sm:inline">درون‌ریزی</span></Button>}
+          {res.import && <Button variant="outline" className="hidden md:inline-flex" onClick={() => setImportOpen(true)}><Upload /><span className="hidden sm:inline">درون‌ریزی</span></Button>}
           {res.create && <Button onClick={() => setCreateOpen(true)}><Plus /><span className="hidden sm:inline">افزودن</span></Button>}
         </div>
       </div>
+
+      {card && (
+        <div className="grid gap-2 md:hidden">
+          {list.isLoading && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+          {!list.isLoading && rows.length === 0 && <p className="rounded-xl border bg-card py-12 text-center text-sm text-muted-foreground">{dq || anyFilter ? 'نتیجه‌ای پیدا نشد' : 'هنوز داده‌ای ثبت نشده است'}</p>}
+          {rows.map((row) => (
+            <button key={String(row[res.pk])} onClick={() => onOpen?.(row)} className="w-full rounded-xl border bg-card p-3 text-start transition-colors active:bg-accent">
+              {card(row)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div
         ref={gridRef}
@@ -230,7 +254,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         onCopy={onCopy}
-        className="relative max-h-[calc(100dvh-16rem)] min-h-[12rem] overflow-auto rounded-xl border bg-card"
+        className={cn('relative max-h-[calc(100dvh-16rem)] min-h-[12rem] overflow-auto rounded-xl border bg-card', card && 'hidden md:block')}
       >
         <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-20 bg-muted/95 backdrop-blur">
@@ -252,15 +276,16 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
                   </th>
                 )
               })}
+              {onOpen && <th className="w-10 border-b" />}
               {res.delete && <th className="w-10 border-b" />}
             </tr>
           </thead>
           <tbody>
             {list.isLoading && Array.from({ length: 8 }).map((_, i) => (
-              <tr key={i}>{cols.map((c) => <td key={c.key} className="border-b px-3 py-3"><Skeleton className="h-4 w-full min-w-[4rem]" /></td>)}{res.delete && <td className="border-b" />}</tr>
+              <tr key={i}>{cols.map((c) => <td key={c.key} className="border-b px-3 py-3"><Skeleton className="h-4 w-full min-w-[4rem]" /></td>)}{onOpen && <td className="border-b" />}{res.delete && <td className="border-b" />}</tr>
             ))}
             {!list.isLoading && rows.length === 0 && (
-              <tr><td colSpan={cols.length + 1} className="px-3 py-16 text-center text-muted-foreground">{dq || anyFilter ? 'نتیجه‌ای پیدا نشد' : 'هنوز داده‌ای ثبت نشده است'}</td></tr>
+              <tr><td colSpan={cols.length + 2} className="px-3 py-16 text-center text-muted-foreground">{dq || anyFilter ? 'نتیجه‌ای پیدا نشد' : 'هنوز داده‌ای ثبت نشده است'}</td></tr>
             )}
             {rows.map((row, ri) => (
               <tr key={String(row[res.pk])} role="row" className="group hover:bg-accent/40">
@@ -273,6 +298,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
                       role="gridcell"
                       aria-selected={isSel}
                       onClick={() => {
+                        if (ci === 0 && onOpen && !col.edit) { onOpen(row); return } // the row's id opens its page
                         setSel({ r: ri, c: ci })
                         gridRef.current?.focus({ preventScroll: true })
                         if (coarse && col.edit) setDialogCell({ r: ri, c: ci })
@@ -281,6 +307,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
                       className={cn(
                         'relative max-w-[22rem] truncate whitespace-nowrap border-b px-3 py-2',
                         ci === 0 && 'sticky start-0 z-10 bg-card font-medium group-hover:bg-accent',
+                        ci === 0 && onOpen && !col.edit && 'cursor-pointer text-primary underline-offset-4 hover:underline',
                         col.edit && 'cursor-cell',
                         isSel && 'outline outline-2 -outline-offset-2 outline-primary',
                       )}
@@ -307,6 +334,11 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
                     </td>
                   )
                 })}
+                {onOpen && (
+                  <td className="border-b px-1 text-center">
+                    <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-primary" aria-label="باز کردن و مدیریت" title="باز کردن و مدیریت" onClick={() => onOpen(row)}><PanelLeftOpen /></Button>
+                  </td>
+                )}
                 {res.delete && (
                   <td className="border-b px-1 text-center">
                     <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label="حذف" onClick={() => setDelRow(row)}><Trash2 /></Button>
@@ -330,7 +362,7 @@ export function DataGrid({ resName, res, hide = [], toolbar, filterCols = [], ex
           <Button variant="outline" size="icon-sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)} aria-label="صفحه بعد"><ChevronLeft /></Button>
         </div>
       </div>
-      <p className="hidden text-xs text-muted-foreground md:block">برای ویرایش روی سلول دو بار کلیک کنید یا Enter بزنید · با کلیدهای جهت‌نما حرکت کنید · از Excel/Sheets می‌توانید مستقیم Paste کنید.</p>
+      <p className="hidden text-xs text-muted-foreground md:block">{onOpen ? 'برای مدیریت، روی ستون اول (آبی) بزنید · ' : ''}برای ویرایش روی سلول دو بار کلیک کنید یا Enter بزنید · با کلیدهای جهت‌نما حرکت کنید · از Excel/Sheets می‌توانید مستقیم Paste کنید.</p>
 
       <CellEditDialog
         open={!!dialogCell}

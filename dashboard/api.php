@@ -690,6 +690,10 @@ try {
         require_once __DIR__ . '/finance_api.php';
         picha_finance_route($route, $pdo, $role, (string) $_SESSION['admin_user']);
     }
+    if (strncmp($route, 'mg_', 3) === 0) { // one order / one customer: renew, volume, wallet …
+        require_once __DIR__ . '/manage_api.php';
+        picha_manage_route($route, $pdo, (string) $_SESSION['admin_user']);
+    }
     switch ($route) {
         case 'logout':
             $_SESSION = [];
