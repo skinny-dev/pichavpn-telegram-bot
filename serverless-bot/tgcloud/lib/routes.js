@@ -11,6 +11,8 @@ import { bulkRoutes } from './routes/bulk.js'
 import { payRoutes } from './routes/pay.js'
 import { adminPayRoutes } from './admin/payments.js'
 import { starsRoutes } from './routes/stars.js'
+import { miscRoutes } from './routes/misc.js'
+import { lateRoutes } from './routes/late.js'
 
 export const routes = [
   ...start,
@@ -23,8 +25,9 @@ export const routes = [
   ...buyRoutes,
   ...bulkRoutes,
   ...payRoutes,
-  // (index.php 5918–6652 go here)
+  ...miscRoutes,
   ...starsRoutes,
+  ...lateRoutes,
 ]
 
 // admin.php, for admins, after the customer routes

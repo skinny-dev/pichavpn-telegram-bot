@@ -167,7 +167,7 @@ async function main(c) {
         await sendmessage(c.from_id, sprintf(T.users.affiliates.welcomeInvited, ua.username), c.keyboard, 'html')
         await sendmessage(affiliatesid, sprintf(T.users.affiliates.newReferralJoined, c.username), c.keyboard, 'html')
         await run(sql`UPDATE user SET affiliatescount = ${intval(ua.affiliatescount) + 1} WHERE id = ${affiliatesid}`)
-        await run(sql`INSERT OR IGNORE INTO reagent_report (user_id, get_gift, time, reagent) VALUES (${c.from_id}, ${''}, ${tehranDate()}, ${affiliatesid})`)
+        await run(sql`INSERT OR IGNORE INTO reagent_report (user_id, get_gift, time, reagent) VALUES (${c.from_id}, 0, ${tehranDate()}, ${affiliatesid})`)
       } else {
         await sendStartMessage(c, c.from_id, c.keyboard)
         await resetProcessing(c)
