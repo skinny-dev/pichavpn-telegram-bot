@@ -22,14 +22,15 @@ function sapi_out(array $d, int $code = 200): void
 $cfgFile = __DIR__ . '/storage/serverless.json';
 $cfg = is_file($cfgFile) ? (json_decode((string) file_get_contents($cfgFile), true) ?: []) : [];
 $key = (string) ($cfg['key'] ?? '');
-if ($key === '' || ($cfg['enabled'] ?? true) === false) {
+$mainKey = (string) ($cfg['main_key'] ?? '');
+if (($key === '' && $mainKey === '') || ($cfg['enabled'] ?? true) === false) {
     sapi_out(['ok' => false, 'error' => 'off'], 404);
 }
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     sapi_out(['ok' => false, 'error' => 'method'], 405);
 }
 $given = (string) ($_SERVER['HTTP_X_PICHA_KEY'] ?? '');
-if ($given === '' || !hash_equals($key, $given)) {
+if ($given === '' || !(($key !== '' && hash_equals($key, $given)) || ($mainKey !== '' && hash_equals($mainKey, $given)))) {
     usleep(300000);
     sapi_out(['ok' => false, 'error' => 'key'], 401);
 }

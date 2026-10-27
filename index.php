@@ -28,7 +28,7 @@ if (!defined('PICHA_RELAY_MAIN_KEY')) {
     if (!$webhookSecret['created'] && $webhookSecret['secret'] !== '' && !webhookSecretMatches($webhookSecret['secret']))
         die("Unauthorized access");
 }
-relayMarkUser($from_id, defined('PICHA_RELAY_MAIN_KEY')); // later messages (payments, cron) go to the bot this customer uses
+relayMarkUser($from_id, relayIsDev()); // later messages (payments, cron) go to the bot this customer uses
 if ($is_bot)
     return;
 if (isset($update['chat_member'])) {

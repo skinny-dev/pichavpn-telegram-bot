@@ -8,7 +8,7 @@
 // When the relay is off on the server, the read-only menus of lib/screens.js answer instead.
 import { api, BotApiError } from 'sdk'
 import { getSetting, setSetting, touchVisitor, visitorStats } from '../lib/store.js'
-import { callWith, relay, NotConfigured } from '../lib/picha.js'
+import { callWith, relay, NotConfigured, isMain, BUSY_TEXT } from '../lib/picha.js'
 import { menu } from '../lib/screens.js'
 import { fa } from '../lib/fmt.js'
 
@@ -31,6 +31,15 @@ export default async function (message, ctx) {
   const chat = message.chat.id
   const me = message.from
   const text = (message.text || '').trim()
+
+  if (isMain) { // @pichanet_bot: everything is the server's code; no /setup or dev commands in a public bot
+    try {
+      if (await relay(ctx.update)) return
+    } catch (e) {
+      console.error(e)
+    }
+    return say(chat, BUSY_TEXT)
+  }
   const owner = await getSetting('owner_id')
   const isOwner = owner && String(owner) === String(me.id)
 

@@ -231,11 +231,28 @@ function relayMoveFile(string $method, array $datas, string $fromToken, string $
     return null;
 }
 
+/** @pichanet_bot itself runs on Telegram Serverless (scripts/serverless_setup.php main on). */
+function relayMainOnServerless(): bool
+{
+    static $on = null;
+    if ($on === null) {
+        $c = json_decode((string) @file_get_contents(__DIR__ . '/storage/serverless.json'), true);
+        $on = is_array($c) && !empty($c['main_relay']);
+    }
+    return $on;
+}
+
+/** This update came from the dev bot (not the main bot running on Serverless). */
+function relayIsDev(): bool
+{
+    return defined('PICHA_RELAY_DEV_KEY') && PICHA_RELAY_DEV_KEY !== PICHA_RELAY_MAIN_KEY;
+}
+
 /** The dev bot's token when the relay is on (in a relayed update or e.g. a payment callback), else null. */
 function relayDevToken(): ?string
 {
     static $tok = false;
-    if (defined('PICHA_RELAY_DEV_KEY')) {
+    if (relayIsDev()) {
         return PICHA_RELAY_DEV_KEY;
     }
     if ($tok === false) {
@@ -283,10 +300,14 @@ function telegram($method, $datas = [], $token = null, $allowEmojiFallback = tru
 {
     global $APIKEY;
 
-    if ($token === null && defined('PICHA_RELAY_MAIN_KEY')) { // update relayed from the dev bot (serverless_relay.php): answer with the dev bot
-        if (in_array(strtolower($method), ['setwebhook', 'deletewebhook', 'getupdates', 'logout', 'close'], true)) {
-            return ['ok' => false, 'error_code' => 403, 'description' => 'not allowed for the relayed dev bot'];
-        }
+    if (in_array(strtolower($method), ['setwebhook', 'deletewebhook', 'getupdates', 'logout', 'close'], true)
+        && ($token === null || $token === $APIKEY || (defined('PICHA_RELAY_MAIN_KEY') && $token === PICHA_RELAY_MAIN_KEY))
+        && !defined('PICHA_WEBHOOK_TAKEBACK') && (defined('PICHA_RELAY_MAIN_KEY') || relayMainOnServerless())) {
+        // the webhook belongs to Telegram Serverless (deploy's table.php must not take it back);
+        // only `php scripts/serverless_setup.php rollback` does
+        return ['ok' => false, 'error_code' => 403, 'description' => 'the webhook belongs to Telegram Serverless'];
+    }
+    if ($token === null && relayIsDev()) { // relayed from the dev bot: answer with the dev bot
         $r = telegram($method, relayFileCached($datas), PICHA_RELAY_DEV_KEY, $allowEmojiFallback);
         if (relayFileError($r)) { // a file the main bot stored (tutorial, banner …): upload it again with the dev bot
             $r = relayMoveFile($method, $datas, PICHA_RELAY_MAIN_KEY, PICHA_RELAY_DEV_KEY, true) ?? $r;
@@ -617,7 +638,7 @@ function isDuplicateUpdate($updateId)
 // #-----------------------------#
 $update = json_decode(file_get_contents("php://input"), true);
 $update_id = $update['update_id'] ?? 0;
-if (isDuplicateUpdate(defined('PICHA_RELAY_MAIN_KEY') && is_numeric($update_id) && $update_id > 0 ? (int) $update_id + 1000000000000 : $update_id)) { // the dev bot counts its own update ids
+if (isDuplicateUpdate(relayIsDev() && is_numeric($update_id) && $update_id > 0 ? (int) $update_id + 1000000000000 : $update_id)) { // the dev bot counts its own update ids
     http_response_code(200);
     exit;
 }

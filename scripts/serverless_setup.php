@@ -9,7 +9,11 @@
 //   php scripts/serverless_setup.php status
 //   php scripts/serverless_setup.php off | on   # stop / allow serverless_api.php
 //
-// The main bot (@pichanet_bot) is not touched: Serverless must only ever be turned on for the new dev bot.
+// The main bot (@pichanet_bot) on Serverless:
+//   php scripts/serverless_setup.php main on        # its own key + relay on; the server stops touching the webhook
+//   php scripts/serverless_setup.php project --main # /root/picha-serverless-main with the key built in (no /setup in a public bot)
+//   php scripts/serverless_setup.php rollback       # back to the direct webhook (index.php) in one step
+//   php scripts/serverless_setup.php check          # where the main bot's webhook points now
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -63,8 +67,54 @@ switch ($argv[1] ?? 'status') {
         echo "✅ ذخیره شد" . (!empty($cfg['bot_username']) ? " (@{$cfg['bot_username']})" : '') . ". پنل مدیریت از دکمه «پنل» ربات تست هم باز می‌شود.\n";
         break;
 
+    case 'main':
+        if (($argv[2] ?? '') === 'off') {
+            goto rollback;
+        }
+        if (($argv[2] ?? '') !== 'on') {
+            fwrite(STDERR, "php scripts/serverless_setup.php main on   (برگشت: rollback)\n");
+            exit(1);
+        }
+        if (empty($cfg['main_key'])) {
+            $cfg['main_key'] = bin2hex(random_bytes(24));
+        }
+        $cfg['main_relay'] = true;
+        $cfg['enabled'] = true;
+        $save();
+        echo "✅ سرور آماده‌ی ربات اصلی روی Serverless است (از این به بعد deploy وب‌هوک را عوض نمی‌کند)\n";
+        echo "   بعدی: php scripts/serverless_setup.php project --main\n";
+        break;
+
+    case 'rollback':
+        rollback:
+        $cfg['main_relay'] = false;
+        $save();
+        require_once $root . '/botapi.php';
+        require_once $root . '/function.php';
+        define('PICHA_WEBHOOK_TAKEBACK', true);
+        $secret = ensureWebhookSecret()['secret'];
+        $r = telegram('setWebhook', ['url' => "https://$domainhosts/index.php?secret=$secret"]);
+        echo !empty($r['ok']) ? "✅ وب‌هوک ربات اصلی برگشت روی سرور (index.php). ربات همین الان مثل قبل کار می‌کند.\n" : '❌ ' . ($r['description'] ?? 'setWebhook نشد') . "\n";
+        echo "   در BotFather هم Serverless ربات اصلی را خاموش کنید تا tgcloud دوباره وب‌هوک را نگیرد.\n";
+        break;
+
+    case 'check':
+        require_once $root . '/botapi.php';
+        $w = telegram('getWebhookInfo', [])['result'] ?? [];
+        $url = (string) ($w['url'] ?? '');
+        $where = str_contains($url, 'cloud.telegram.org') ? '☁️ Serverless تلگرام' : (str_contains($url, $domainhosts) ? '🖥 مستقیم روی سرور' : '❓ ' . preg_replace('/secret=\w+/', 'secret=…', $url));
+        echo "وب‌هوک ربات اصلی: $where\n";
+        echo "در صف: " . (int) ($w['pending_update_count'] ?? 0) . (empty($w['last_error_message']) ? '' : " | آخرین خطا: {$w['last_error_message']} (" . date('H:i', (int) ($w['last_error_date'] ?? 0)) . ')') . "\n";
+        echo "رله ربات اصلی روی سرور: " . (!empty($cfg['main_relay']) ? '✅ روشن' : '— خاموش') . "\n";
+        break;
+
     case 'project':
-        $dst = '/root/picha-serverless';
+        $main = in_array('--main', $argv, true);
+        if ($main && (empty($cfg['main_key']) || empty($cfg['main_relay']))) {
+            fwrite(STDERR, "❌ اول: php scripts/serverless_setup.php main on\n");
+            exit(1);
+        }
+        $dst = $main ? '/root/picha-serverless-main' : '/root/picha-serverless';
         @mkdir($dst, 0700, true);
         $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/serverless', FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
         foreach ($it as $f) {
@@ -74,6 +124,11 @@ switch ($argv[1] ?? 'status') {
             }
             $to = "$dst/$rel";
             $f->isDir() ? @mkdir($to, 0700, true) : copy($f->getPathname(), $to);
+        }
+        if ($main) { // the main bot is public: its server address and key are built in, /setup is off
+            file_put_contents("$dst/tgcloud/lib/config.js", "// written by scripts/serverless_setup.php project --main — keep private\nexport default " .
+                json_encode(['api_url' => $api, 'api_key' => $cfg['main_key'], 'mode' => 'main'], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
+            @chmod("$dst/tgcloud/lib/config.js", 0600);
         }
         echo "✅ پروژه در $dst به‌روز شد (ورود قبلی tgcloud دست نخورد)\n";
         echo "   cd $dst && npm install && npx tgcloud login\n";
@@ -107,5 +162,6 @@ switch ($argv[1] ?? 'status') {
         echo "کلید: " . (!empty($cfg['key']) ? '✅ ساخته شده' : '❌ نه (php scripts/serverless_setup.php key)') . "\n";
         echo "وضعیت: " . (($cfg['enabled'] ?? true) ? '✅ روشن' : '⛔ خاموش') . "\n";
         echo "ربات کامل (رله): " . (!empty($cfg['relay']) ? '✅ روشن' : '— خاموش (php scripts/serverless_setup.php relay on)') . "\n";
+        echo "ربات اصلی روی Serverless: " . (!empty($cfg['main_relay']) ? '✅ رله روشن' : '— خاموش') . "  (وضعیت وب‌هوک: php scripts/serverless_setup.php check)\n";
         echo "توکن ربات تست برای پنل: " . (!empty($cfg['bot_token']) ? '✅ ' . (!empty($cfg['bot_username']) ? '@' . $cfg['bot_username'] : '') : '— (اختیاری: php scripts/serverless_setup.php token)') . "\n";
 }

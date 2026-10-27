@@ -35,3 +35,14 @@
 5. حالت کامل: `php scripts/serverless_setup.php relay on`
 
 خاموش کردن: `php scripts/serverless_setup.php off`
+
+
+## ربات اصلی (@pichanet_bot) روی Serverless
+همه‌ی کار همچنان روی سرور انجام می‌شود (همان کد، همان دیتابیس، همان پنل مینی‌اپ)؛ Serverless فقط پیام‌ها را تحویل می‌دهد.
+1. روی سرور: `php scripts/serverless_setup.php main on` و بعد `php scripts/serverless_setup.php project --main`
+   (کلید و آدرس سرور داخل کد گذاشته می‌شود؛ ربات عمومی هیچ‌وقت /setup قبول نمی‌کند). از این به بعد deploy وب‌هوک را عوض نمی‌کند.
+2. BotFather → @pichanet_bot → Serverless → روشن → CLI Access → توکن CLI.
+3. `cd /root/picha-serverless-main && npm install && npx tgcloud login && npx tgcloud push && npx tgcloud migrate && npx tgcloud webhook sync`
+4. `php scripts/serverless_setup.php check` باید «☁️ Serverless تلگرام» نشان دهد.
+
+**برگشت فوری:** `php scripts/serverless_setup.php rollback` (وب‌هوک مستقیم روی سرور) و بعد Serverless را در BotFather خاموش کنید.

@@ -1,7 +1,7 @@
 // Inline buttons: go to the main bot's code (relay); when the relay is off, the read-only screens replace the message.
 import { api, BotApiError } from 'sdk'
 import * as screens from '../lib/screens.js'
-import { NotConfigured, relay } from '../lib/picha.js'
+import { NotConfigured, relay, isMain, BUSY_TEXT } from '../lib/picha.js'
 import { touchVisitor } from '../lib/store.js'
 
 async function screenFor(data, user) {
@@ -21,6 +21,7 @@ export default async function (q, ctx) {
   try {
     await touchVisitor(user)
     if (await relay(ctx.update)) return // the main bot's code answers (and answers the callback)
+    if (isMain) throw new Error('relay off')
     const s = await screenFor(String(q.data || 'm'), user)
     if (msg) {
       try {
@@ -34,7 +35,7 @@ export default async function (q, ctx) {
     if (e instanceof NotConfigured) toast = '⚙️ ربات هنوز به سرور وصل نشده (/setup)'
     else {
       console.error(e)
-      toast = '⚠️ الان به سرور پیچا دسترسی نیست'
+      toast = isMain ? BUSY_TEXT : '⚠️ الان به سرور پیچا دسترسی نیست'
     }
   }
   try {
