@@ -12,6 +12,7 @@
 // The main bot (@pichanet_bot) on Serverless:
 //   php scripts/serverless_setup.php main on        # its own key + relay on; the server stops touching the webhook
 //   php scripts/serverless_setup.php project --main # /root/picha-serverless-main with the key built in (no /setup in a public bot)
+//   php scripts/serverless_setup.php project --main --full  # the whole bot in JavaScript (serverless-bot/): starts in relay mode, /mode native switches
 //   php scripts/serverless_setup.php rollback       # back to the direct webhook (index.php) in one step
 //   php scripts/serverless_setup.php check          # where the main bot's webhook points now
 
@@ -110,24 +111,42 @@ switch ($argv[1] ?? 'status') {
 
     case 'project':
         $main = in_array('--main', $argv, true);
+        $full = in_array('--full', $argv, true); // the whole bot in JavaScript (serverless-bot/) instead of the relay project (serverless/)
         if ($main && (empty($cfg['main_key']) || empty($cfg['main_relay']))) {
             fwrite(STDERR, "❌ اول: php scripts/serverless_setup.php main on\n");
             exit(1);
         }
         $dst = $main ? '/root/picha-serverless-main' : '/root/picha-serverless';
+        $src = $root . ($full ? '/serverless-bot' : '/serverless');
         @mkdir($dst, 0700, true);
-        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/serverless', FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+        if ($full) { // old handlers/lib of the relay project must not stay behind; the login (.tgcloud) and node_modules do
+            $rm = function (string $dir) use (&$rm) {
+                foreach (is_dir($dir) ? array_diff(scandir($dir), ['.', '..']) : [] as $n) {
+                    is_dir("$dir/$n") && !is_link("$dir/$n") ? $rm("$dir/$n") : @unlink("$dir/$n");
+                }
+                @rmdir($dir);
+            };
+            $rm("$dst/tgcloud");
+            $rm("$dst/dist");
+            $rm("$dst/tools");
+        }
+        $skip = ['test', 'node_modules', '.tgcloud', '.htaccess', '.gitignore'];
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
         foreach ($it as $f) {
-            $rel = substr($f->getPathname(), strlen($root . '/serverless') + 1);
-            if ($rel === '.htaccess') {
+            $rel = substr($f->getPathname(), strlen($src) + 1);
+            if (in_array(explode('/', $rel)[0], $skip, true)) {
                 continue;
             }
             $to = "$dst/$rel";
             $f->isDir() ? @mkdir($to, 0700, true) : copy($f->getPathname(), $to);
         }
         if ($main) { // the main bot is public: its server address and key are built in, /setup is off
+            $conf = ['api_url' => $api, 'api_key' => $cfg['main_key'], 'mode' => 'main'];
+            if ($full) { // the administrators who may switch the bot with /mode
+                $conf['admin_ids'] = array_map('strval', $pdo->query("SELECT id_admin FROM admin WHERE rule = 'administrator' AND id_admin REGEXP '^[0-9]+$'")->fetchAll(PDO::FETCH_COLUMN));
+            }
             file_put_contents("$dst/tgcloud/lib/config.js", "// written by scripts/serverless_setup.php project --main — keep private\nexport default " .
-                json_encode(['api_url' => $api, 'api_key' => $cfg['main_key'], 'mode' => 'main'], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
+                json_encode($conf, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
             @chmod("$dst/tgcloud/lib/config.js", 0600);
         }
         echo "✅ پروژه در $dst به‌روز شد (ورود قبلی tgcloud دست نخورد)\n";

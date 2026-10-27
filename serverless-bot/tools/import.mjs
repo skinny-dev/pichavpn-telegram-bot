@@ -7,9 +7,14 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const dir = process.argv[2]
-const only = process.argv.slice(3)
-if (!dir || !fs.existsSync(dir)) { console.error('usage: node tools/import.mjs EXPORT_DIR [table…]'); process.exit(1) }
-const files = fs.readdirSync(dir).filter((f) => f.endsWith('.ndjson')).filter((f) => !only.length || only.includes(f.replace('.ndjson', '')))
+// --hot: what changes all day (the last copy, in the short stop); --cold: everything else (can be copied days before)
+const HOT = ['user', 'invoice', 'Payment_report', 'service_other', 'support_message', 'expenses', 'capital_entries', 'Giftcodeconsumed', 'DiscountSell', 'cancel_service', 'reagent_report', 'Requestagent', 'sms_inbox',
+  'referral_links', 'referral_signups', 'referral_payouts', 'affiliates', 'fin_accounts', 'fin_alloc', 'fin_assets', 'fin_audit', 'fin_docs', 'fin_journal', 'fin_journal_lines', 'fin_loans', 'fin_ownership', 'fin_parties', 'fin_settings', 'fin_taxes', 'fin_txn', 'kv']
+const flag = process.argv.includes('--hot') ? 'hot' : process.argv.includes('--cold') ? 'cold' : ''
+const only0 = process.argv.slice(3).filter((a) => !a.startsWith('--'))
+const only = flag === 'hot' ? HOT : only0
+if (!dir || !fs.existsSync(dir)) { console.error('usage: node tools/import.mjs EXPORT_DIR [--cold | --hot | table…]'); process.exit(1) }
+const files = fs.readdirSync(dir).filter((f) => f.endsWith('.ndjson')).filter((f) => { const t = f.replace('.ndjson', ''); return flag === 'cold' ? !HOT.includes(t) : !only.length || only.includes(t) })
 const MAX = 60_000 // bytes of rows per call (command-line limit)
 let total = 0
 for (const f of files) {

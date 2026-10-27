@@ -1,6 +1,6 @@
-// Every message update goes through the same port of index.php
-import { handleUpdate } from '../lib/bot.js'
+// Every message update: answered by the PHP bot, by this bot or by nobody, depending on the mode (lib/mode.js)
+import { dispatch } from '../lib/mode.js'
 
 export default async function (_payload, ctx) {
-  await handleUpdate(ctx.update)
+  await dispatch(ctx.update)
 }

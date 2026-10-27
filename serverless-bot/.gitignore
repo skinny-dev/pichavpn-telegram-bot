@@ -1,4 +1,2 @@
 .tgcloud/
 node_modules/
-tgcloud/lib/config.js
-dist/
