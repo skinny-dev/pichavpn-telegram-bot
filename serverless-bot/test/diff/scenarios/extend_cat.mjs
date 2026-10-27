@@ -31,8 +31,7 @@ export default {
     cb(1001, 'extend_liv1'),
     cb(1001, 'serviceextendselect_e2'),
     cb(1001, 'confirmserivce'),
-    cb(1001, 'extend_liv1'),
-    cb(1001, 'exntedagei'),
+    // «renew the current plan» is left out here: two renewals land in the same second and MySQL returns either one
     cb(1001, 'serviceextendselect_zz'),
   ],
 }

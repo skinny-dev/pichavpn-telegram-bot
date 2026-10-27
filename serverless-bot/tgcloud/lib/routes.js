@@ -6,6 +6,7 @@ import { extendRoutes } from './routes/extend.js'
 import { manageRoutes } from './routes/manage.js'
 import { usertestRoutes } from './routes/usertest.js'
 import { supportRoutes } from './routes/support.js'
+import { buyRoutes } from './routes/buy.js'
 
 export const routes = [
   ...start,
@@ -15,4 +16,5 @@ export const routes = [
   ...manageRoutes,
   ...usertestRoutes,
   ...supportRoutes,
+  ...buyRoutes,
 ]

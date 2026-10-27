@@ -328,7 +328,7 @@ export async function deductBalance(user, amount) {
   const min = user.agent === 'n2' ? (intval(user.maxbuyagent) !== 0 ? -intval(user.maxbuyagent) : null) : 0
   const r = min === null
     ? await run(sql`UPDATE user SET Balance = Balance - ${amount} WHERE id = ${user.id}`)
-    : await run(sql`UPDATE user SET Balance = Balance - ${amount} WHERE id = ${user.id} AND Balance - ${amount} >= ${min}`)
+    : await run(sql`UPDATE user SET Balance = Balance - ${amount} WHERE id = ${user.id} AND Balance - ${amount} >= ${min} + 0`)
   return changes(r) === 1
 }
 export async function addBalance(userId, amount) {

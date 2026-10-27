@@ -1,9 +1,17 @@
 // Database helpers. Raw SQL with sql`` everywhere (the same queries the PHP bot ran), values always as parameters.
 import { db } from 'sdk'
-import { sql } from 'sdk/db'
+import { sql as sdkSql } from 'sdk/db'
 import COLUMNS from './columns.js'
+import { phpFloat } from './fmt.js'
 
-export { sql }
+/**
+ * sql`` with every number bound as text, the way PHP's PDO sends values: a number written into a TEXT column is
+ * then stored as "101", not "101.0". SQLite still does the math (Balance - '300'); a bound value compared with a
+ * computed number needs `+ 0` (text is never equal to a number in SQLite).
+ */
+const bindable = (v) => (typeof v === 'number' && Number.isFinite(v) ? phpFloat(v) : v)
+export function sql(strings, ...values) { return sdkSql(strings, ...values.map(bindable)) }
+sql.raw = (s) => sdkSql.raw(s)
 export const one = (q) => db.get(q)
 export const all = (q) => db.all(q)
 export const run = (q) => db.run(q)

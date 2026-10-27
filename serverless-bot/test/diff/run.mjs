@@ -91,6 +91,6 @@ function normalize(v) {
   }
   if (typeof v === 'number' || typeof v === 'boolean') v = String(v === true ? 1 : v === false ? '' : v)
   if (typeof v === 'string') return v.replace(/\b1[789]\d{8}\b/g, '<TS>').replace(/\b[0-9a-f]{12}\b/g, '<HEX>').replace(/(?<![0-9a-zA-Z])(?=[0-9]*[a-f])[0-9a-f]{8}(?![0-9a-zA-Z])/g, '<HEX8>')
-    .replace(/[۰-۹]{2}:[۰-۹]{2}:[۰-۹]{2}/g, '<TIME>') // clock times the fake panel derives from "now"
+    .replace(/[۰-۹]{2}:[۰-۹]{2}:[۰-۹]{2}/g, '<TIME>').replace(/(?<!\d)\d{2}:\d{2}:\d{2}(?!\d)/g, '<TIME>').replace(/(?<![\d_])\d{7}_(?=[a-z])/g, '<R7>_') // the random prefix of a taken username // clock times the fake panel derives from "now"
   return v
 }
