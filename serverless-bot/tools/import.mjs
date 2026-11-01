@@ -15,7 +15,8 @@ const only0 = process.argv.slice(3).filter((a) => !a.startsWith('--'))
 const only = flag === 'hot' ? HOT : only0
 if (!dir || !fs.existsSync(dir)) { console.error('usage: node tools/import.mjs EXPORT_DIR [--cold | --hot | table…]'); process.exit(1) }
 const files = fs.readdirSync(dir).filter((f) => f.endsWith('.ndjson')).filter((f) => { const t = f.replace('.ndjson', ''); return flag === 'cold' ? !HOT.includes(t) : !only.length || only.includes(t) })
-const MAX = 60_000 // bytes of rows per call (command-line limit)
+const MAX = Number(process.env.IMPORT_MAX || 20_000) // bytes of rows per call (command-line limit; small = each call stays well inside the run-time limit)
+const MAX_ROWS = 40
 let total = 0
 for (const f of files) {
   const table = f.replace('.ndjson', '')
@@ -24,14 +25,19 @@ for (const f of files) {
   const flush = () => {
     if (!batch.length && !first) return
     const args = JSON.stringify({ table, rows: batch, wipe: first })
-    const r = spawnSync('npx', ['tgcloud', 'run', 'endpoints/admin_import', args], { encoding: 'utf8' })
-    if (r.status !== 0 || !/imported/.test(r.stdout)) { console.error(`❌ ${table}:`, (r.stderr || r.stdout).slice(-800)); process.exit(1) }
+    let r
+    for (let attempt = 1; attempt <= 4; attempt++) { // a slow call is simply tried again (rows are REPLACEd, so a repeat is harmless)
+      r = spawnSync('npx', ['tgcloud', 'run', 'endpoints/admin_import', args], { encoding: 'utf8' })
+      if (r.status === 0 && /imported/.test(r.stdout)) break
+      if (attempt === 4) { console.error(`\n❌ ${table} (${done}/${rows.length}):`, ((r.stderr || '') + (r.stdout || '')).slice(-800)); process.exit(1) }
+      spawnSync('sleep', [String(attempt * 2)])
+    }
     done += batch.length; batch = []; size = 0; first = false
     process.stdout.write(`\r${table}: ${done}/${rows.length}   `)
   }
   for (const row of rows) {
     const s = JSON.stringify(row).length
-    if (size + s > MAX && batch.length) flush()
+    if ((size + s > MAX || batch.length >= MAX_ROWS) && batch.length) flush()
     batch.push(row); size += s
   }
   flush()
