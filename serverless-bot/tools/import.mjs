@@ -38,7 +38,8 @@ for (const f of files) {
     for (let attempt = 1; attempt <= 4; attempt++) { // a slow call is simply tried again (rows are REPLACEd, so a repeat is harmless)
       r = spawnSync('npx', ['tgcloud', 'run', 'endpoints/admin_import', args], { encoding: 'utf8' })
       if (r.status === 0 && /imported/.test(r.stdout)) break
-      if (attempt === 4) { console.error(`\n❌ ${table} (${done}/${rows.length}):`, ((r.stderr || '') + (r.stdout || '')).slice(-800)); process.exit(1) }
+      if (attempt === 4) { const msg = ((r.stderr || '') + '\n' + (r.stdout || '')).split('\n').filter((l) => !l.startsWith('> admin_import(')).join('\n').trim() // the echoed call holds customer rows: never print it
+      console.error(`\n❌ ${table} (${done}/${rows.length}): ${msg.slice(0, 600) || '(no message)'}`); process.exit(1) }
       spawnSync('sleep', [String(attempt * 2)])
     }
     done += batch.length; batch = []; size = 0; first = false
