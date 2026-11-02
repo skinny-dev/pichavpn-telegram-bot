@@ -1451,6 +1451,23 @@ elseif ($datain == "systemsms") {
         Editmessagetext($from_id, $message_id, $textconfrom, $Confirm_pay);
         return;
     }
+    // A second Variza link for the same amount is easy to approve by hand after the first one was paid by the gateway:
+    // the order lock cannot see that (they are two orders). Refuse when the same customer has an equal paid Variza order
+    // from the last 30 minutes; a real second payment is credited with «افزایش موجودی».
+    if (($Payment_report['Payment_Method'] ?? '') === 'variza') {
+        $dupCheck = $pdo->prepare("SELECT id_order FROM Payment_report WHERE id_user = ? AND Payment_Method = 'variza' AND payment_Status = 'paid' AND price = ? AND id_order <> ? AND time >= ? LIMIT 1");
+        $dupCheck->execute([$Payment_report['id_user'], $Payment_report['price'], $order_id, date('Y/m/d H:i:s', time() - 1800)]);
+        $dupOrder = $dupCheck->fetchColumn();
+        if ($dupOrder) {
+            telegram('answerCallbackQuery', array(
+                'callback_query_id' => $callback_query_id,
+                'text' => "⚠️ این کاربر همین الان یک پرداخت واریزای هم‌مبلغ تأییدشده دارد (سفارش {$dupOrder}). احتمالاً تکراری است؛ تأیید نشد.",
+                'show_alert' => true,
+                'cache_time' => 5,
+            ));
+            return;
+        }
+    }
     $claim = $pdo->prepare("UPDATE Payment_report SET payment_Status = 'paid' WHERE id_order = ? AND payment_Status NOT IN ('paid', 'reject')");
     $claim->execute([$order_id]);
     clearSelectCache('Payment_report');
