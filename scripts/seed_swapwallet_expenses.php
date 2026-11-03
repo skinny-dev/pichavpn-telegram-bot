@@ -19,9 +19,10 @@ $payer = 'SwapWallet (حساب کسب‌وکار)';
 // kind, toman, title, payee, reference label, reference (identity), Gregorian date, time
 $rows = [
     ['purchase', 4224000, 'خرید ۸ ترابایت ترافیک', 'پارس سیف', null, null, '2026-11-03', '10:45'],
-    ['purchase', 984500, 'پارس سیف — فاکتور ۹۸۰۷۷', 'پارس سیف', 'فاکتور', '98077', '2026-10-29', '20:18'],
-    ['purchase', 4950000, 'پارس سیف — فاکتور ۹۸۰۷۹', 'پارس سیف', 'فاکتور', '98079', '2026-10-29', '20:18'],
-    // start of 1405/08 (the 29 Oct 20:19 stamp on the forwarded SwapWallet messages was the forwarding time, not the payment time)
+    // the two Pars Safe invoices and the two USDT transfers were paid at the start of 1405/08 (23 Oct 2026);
+    // the 29 Oct 20:18 stamp on the forwarded messages is only when they were forwarded
+    ['purchase', 984500, 'پارس سیف — فاکتور ۹۸۰۷۷', 'پارس سیف', 'فاکتور', '98077', '2026-10-23', '12:00'],
+    ['purchase', 4950000, 'پارس سیف — فاکتور ۹۸۰۷۹', 'پارس سیف', 'فاکتور', '98079', '2026-10-23', '12:00'],
     ['purchase', 13088975, 'خرید سرورهای Aeza — ۴۸٫۷۳ تتر (BSC)، ارزش تقریبی ۱۳٬۰۸۸٬۹۷۵ تومان', 'Aeza', 'تراکنش', 'USDT 48.73 → 0x53B8…5a14', '2026-10-23', '12:00'],
     ['purchase', 12624123, 'خرید سرورهای Doprax — ۴۶٫۹۳ تتر (BSC)، ارزش تقریبی ۱۲٬۶۲۴٬۱۲۳ تومان', 'Doprax', 'تراکنش', 'USDT 46.93 → 0xe79E…2C6F', '2026-10-23', '12:00'],
 ];
