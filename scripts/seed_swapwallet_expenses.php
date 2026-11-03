@@ -21,8 +21,9 @@ $rows = [
     ['purchase', 4224000, 'خرید ۸ ترابایت ترافیک', 'پارس سیف', null, null, '2026-11-03', '10:45'],
     ['purchase', 984500, 'پارس سیف — فاکتور ۹۸۰۷۷', 'پارس سیف', 'فاکتور', '98077', '2026-10-29', '20:18'],
     ['purchase', 4950000, 'پارس سیف — فاکتور ۹۸۰۷۹', 'پارس سیف', 'فاکتور', '98079', '2026-10-29', '20:18'],
-    ['general', 13088975, 'ارسال ۴۸٫۷۳ تتر (BSC) — ارزش تقریبی ۱۳٬۰۸۸٬۹۷۵ تومان', 'آدرس 0x53B8…5a14', 'تراکنش', 'USDT 48.73 → 0x53B8…5a14', '2026-10-29', '20:19'],
-    ['general', 12624123, 'ارسال ۴۶٫۹۳ تتر (BSC) — ارزش تقریبی ۱۲٬۶۲۴٬۱۲۳ تومان', 'آدرس 0xe79E…2C6F', 'تراکنش', 'USDT 46.93 → 0xe79E…2C6F', '2026-10-29', '20:19'],
+    // start of 1405/08 (the 29 Oct 20:19 stamp on the forwarded SwapWallet messages was the forwarding time, not the payment time)
+    ['purchase', 13088975, 'خرید سرورهای Aeza — ۴۸٫۷۳ تتر (BSC)، ارزش تقریبی ۱۳٬۰۸۸٬۹۷۵ تومان', 'Aeza', 'تراکنش', 'USDT 48.73 → 0x53B8…5a14', '2026-10-23', '12:00'],
+    ['purchase', 12624123, 'خرید سرورهای Doprax — ۴۶٫۹۳ تتر (BSC)، ارزش تقریبی ۱۲٬۶۲۴٬۱۲۳ تومان', 'Doprax', 'تراکنش', 'USDT 46.93 → 0xe79E…2C6F', '2026-10-23', '12:00'],
 ];
 
 $records = [];
@@ -58,6 +59,15 @@ foreach ($records as $r) {
         $q->execute([$r['desc'], $r['amount'], $r['ts']]);
     }
     $dup = (int) $q->fetchColumn() > 0;
+    if ($dup && $r['ref'] && $apply) { // rows this script wrote earlier are corrected in place (kind, date, payee, text)
+        $fix = $pdo->prepare("UPDATE expenses SET kind = ?, created_at = ?, payee = ?, description = ?, amount = ? WHERE admin_id = 'swapwallet-seed' AND description LIKE ? AND (kind <> ? OR created_at <> ? OR COALESCE(payee,'') <> ? OR description <> ? OR amount <> ?)");
+        $fix->execute([$r['kind'], $r['ts'], $r['payee'], $r['desc'], $r['amount'], '%' . $r['ref'] . '%', $r['kind'], $r['ts'], $r['payee'], $r['desc'], $r['amount']]);
+        if ($fix->rowCount() > 0) {
+            printf("%-16s %-9s %12s  %s  (updated)\n", $r['when'], $r['kind'], number_format($r['amount']), $r['desc']);
+            $skipped++;
+            continue;
+        }
+    }
     printf("%-16s %-9s %12s  %s → %s  %s\n", $r['when'], $r['kind'], number_format($r['amount']), $r['desc'], $r['payee'], $dup ? '(already there)' : ($apply ? 'ADD' : 'would add'));
     if ($dup) {
         $skipped++;
