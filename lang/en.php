@@ -3724,7 +3724,7 @@ We hope you had a good experience with the ease and speed of your service. If yo
                 'wheelLuck' => '🎲 Wheel of fortune',
                 'zarinPal' => '🟡 ZarinPal',
                 'variza' => '💳 Variza (auto card-to-card)',
-                'tetraminator' => '💳 Online payment (Tetraminator)',
+                'tetraminator' => '💳 Online payment',
         ],
         'keyboard' => [
                 'acceptRules' => '✅ I accept the rules',

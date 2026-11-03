@@ -281,6 +281,7 @@ $payment_status_nowpayment = getPaySettingValue("statusnowpayment");
 $step_payment = [
     'inline_keyboard' => []
 ];
+$priorityPayButtons = [];
 if ($PaySettingcard == "oncard" && intval($users['cardpayment']) == 1) {
     if ($PaySettingpv == "oncardpv") {
         $step_payment['inline_keyboard'][] = [
@@ -355,14 +356,14 @@ if (
     && trim((string) getPaySettingValue("variza_webhook_secret", "")) !== ""
     && trim((string) getPaySettingValue("variza_webhook_secret", "")) !== "0"
 ) {
-    $step_payment['inline_keyboard'][] = [
+    $priorityPayButtons[1] = [
         ['text' => $textbotlang['textbot']['variza'], 'callback_data' => "variza"]
     ];
 }
 $tetraminatorKey = trim((string) getPaySettingValue("tetraminator_api_key", ""));
 if (getPaySettingValue("tetraminator_status", "offtetraminator") == "ontetraminator" && $tetraminatorKey !== "" && $tetraminatorKey !== "0") {
-    $step_payment['inline_keyboard'][] = [
-        ['text' => $textbotlang['textbot']['tetraminator'] ?? '💳 پرداخت آنلاین (تترامینیتور)', 'callback_data' => "tetraminator"]
+    $priorityPayButtons[0] = [
+        ['text' => $textbotlang['textbot']['tetraminator'] ?? '💳 پرداخت آنلاین', 'callback_data' => "tetraminator"]
     ];
 }
 if ($paymentstatussnotverify == "onverifypay") {
@@ -371,10 +372,14 @@ if ($paymentstatussnotverify == "onverifypay") {
     ];
 }
 if (intval($paymentsstartelegram) == 1) {
-    $step_payment['inline_keyboard'][] = [
+    $priorityPayButtons[2] = [
         ['text' => $textbotlang['textbot']['starTelegram'], 'callback_data' => "startelegrams"]
     ];
 }
+// The three main ways to pay come first, always in this order: online payment, automatic card-to-card, Telegram Stars.
+// Everything else that is switched on keeps its old order below them.
+ksort($priorityPayButtons);
+$step_payment['inline_keyboard'] = array_merge(array_values($priorityPayButtons), $step_payment['inline_keyboard'] ?? []);
 $step_payment['inline_keyboard'][] = [
     ['text' => $textbotlang['keyboard']['closeList'], 'callback_data' => "colselist"]
 ];
