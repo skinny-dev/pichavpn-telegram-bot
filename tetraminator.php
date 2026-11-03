@@ -2,7 +2,11 @@
 /*
  * Tetraminator payment gateway (tetraminator.com, API v1).
  *
- *   POST {base}/invoice/create          {"price": toman (>= 50000), "callback_url": "..."}  -> {status, pay_id, payment_link}   (201)
+ *   POST {base}/invoice/create          {"price": toman (50,000 … 10,000,000), "callback_url": "..."}
+ *                                       -> {status, pay_id, url, payment_link, mini_app_link, gateway_link?}   (201)
+ *      url          the shop's default link (card-to-card, mini app or Shaparak, by the shop's priority)
+ *      payment_link the Tetraminator bot chat;  mini_app_link the payment page inside Telegram
+ *      gateway_link the Shaparak website gateway (only when it is active for the shop)
  *   GET  {callback_url}                 sent by Tetraminator after a payment, with NO body and NO signature
  *   GET  {base}/payment/inquiry/{pay_id}                                                     -> {status, payment_status, pay_id, amount}
  *
@@ -11,7 +15,8 @@
  * payment_status=paid and amount >= the billed price. A forged callback can at most trigger one inquiry.
  *
  * Settings (PaySetting): tetraminator_status (ontetraminator/offtetraminator), tetraminator_api_key, minbalancetetraminator,
- * maxbalancetetraminator, chashbacktetraminator, helptetraminator; tetraminator_base_url overrides the API address (tests).
+ * maxbalancetetraminator, chashbacktetraminator, helptetraminator, tetraminator_link_mode (gateway | url | miniapp | bot: which of the
+ * returned links the customer gets first; the others are the fallback in that order); tetraminator_base_url overrides the API address (tests).
  * Set them with  php scripts/tetra_setup.php  (the key is typed into a hidden prompt, never stored in the repository).
  */
 if (!function_exists('tetraminatorBaseUrl')) {
@@ -69,8 +74,25 @@ if (!function_exists('tetraminatorBaseUrl')) {
         }
     }
 
+    /** the link to give the customer from a create-invoice answer, by preference; '' when none is a https link */
+    function tetraminatorPickLink(array $d, string $mode = 'gateway'): string
+    {
+        $orders = [
+            'gateway' => ['gateway_link', 'url', 'mini_app_link', 'payment_link'],
+            'url' => ['url', 'gateway_link', 'mini_app_link', 'payment_link'],
+            'miniapp' => ['mini_app_link', 'url', 'gateway_link', 'payment_link'],
+            'bot' => ['payment_link', 'url', 'mini_app_link', 'gateway_link'],
+        ];
+        foreach ($orders[$mode] ?? $orders['gateway'] as $k) {
+            if (!empty($d[$k]) && is_string($d[$k]) && str_starts_with($d[$k], 'https://')) {
+                return $d[$k];
+            }
+        }
+        return '';
+    }
+
     /**
-     * New invoice for the order $order_id. On success ['pay_id' => ..., 'pay_url' => ...], otherwise ['error' => ..., 'http_code' => ...].
+     * New invoice for the order $order_id. On success ['pay_id' => ..., 'pay_url' => ..., 'links' => all links returned], otherwise ['error' => ..., 'http_code' => ...].
      * A short hiccup (timeout, 5xx, 429) is tried up to 3 times; 400 / 401 / 403 are final.
      */
     function createPayTetraminator($price, $order_id): array
@@ -81,8 +103,10 @@ if (!function_exists('tetraminatorBaseUrl')) {
         for ($try = 1; $try <= 3; $try++) {
             $r = tetraminatorCall('POST', '/invoice/create', ['price' => (int) $price, 'callback_url' => $callback]);
             $d = $r['data'] ?? [];
-            if ($r['http'] >= 200 && $r['http'] < 300 && !empty($d['status']) && !empty($d['pay_id']) && !empty($d['payment_link'])) {
-                return ['pay_id' => (string) $d['pay_id'], 'pay_url' => (string) $d['payment_link']];
+            $link = is_array($d) ? tetraminatorPickLink($d, trim((string) getPaySettingValue('tetraminator_link_mode', 'gateway'))) : '';
+            if ($r['http'] >= 200 && $r['http'] < 300 && !empty($d['status']) && !empty($d['pay_id']) && $link !== '') {
+                return ['pay_id' => (string) $d['pay_id'], 'pay_url' => $link,
+                    'links' => array_intersect_key($d, array_flip(['url', 'payment_link', 'mini_app_link', 'gateway_link']))];
             }
             $res = ['error' => $r['error'] !== '' ? $r['error'] : 'http ' . $r['http'], 'http_code' => $r['http'], 'message' => (string) ($d['message'] ?? '')];
             if (in_array($r['http'], [400, 401, 403], true) || $r['error'] === 'tetraminator_api_key not set') {

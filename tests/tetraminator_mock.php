@@ -28,6 +28,15 @@ if ($path === '/__set') {
     $st['pays'][$id] = array_merge($st['pays'][$id] ?? ['price' => 0], array_filter(['status' => $_GET['status'] ?? null, 'amount' => isset($_GET['amount']) ? (int) $_GET['amount'] : null, 'wrong_id' => $_GET['wrong_id'] ?? null, 'http500' => $_GET['http500'] ?? null], fn($v) => $v !== null));
     $out(200, ['ok' => true]);
 }
+if ($path === '/__gateway') {
+    $st['gateway'] = (int) ($_GET['on'] ?? 0);
+    $out(200, ['ok' => true]);
+}
+if ($path === '/__links') { // what the next invoice answers: ?drop=url,payment_link  ?http=1 makes the url a plain http link
+    $st['drop'] = array_filter(explode(',', (string) ($_GET['drop'] ?? '')));
+    $st['http'] = (int) ($_GET['http'] ?? 0);
+    $out(200, ['ok' => true]);
+}
 if ($path === '/__state') {
     $out(200, $st);
 }
@@ -46,7 +55,17 @@ if ($method === 'POST' && $path === '/v1/invoice/create') {
     }
     $id = 'pay' . (++$st['n']) . 'abc';
     $st['pays'][$id] = ['price' => (int) $in['price'], 'status' => 'pending', 'amount' => (int) $in['price']];
-    $out(201, ['status' => true, 'message' => 'Invoice created successfully', 'pay_id' => $id, 'payment_link' => "https://t.me/tetraminator_bot?start=pay_$id"]);
+    $body = ['status' => true, 'message' => 'Invoice created successfully', 'pay_id' => $id,
+        'url' => ($st['http'] ?? 0 ? 'http' : 'https') . "://tetraminator.com/invoice/$id",
+        'payment_link' => "https://t.me/tetraminator_bot?start=pay_$id",
+        'mini_app_link' => "https://t.me/tetraminator_bot/pay?startapp=$id"];
+    if (!empty($st['gateway'])) {
+        $body['gateway_link'] = "https://tetraminator.com/gateway/$id";
+    }
+    foreach ($st['drop'] ?? [] as $k) {
+        unset($body[$k]);
+    }
+    $out(201, $body);
 }
 if ($method === 'GET' && preg_match('#^/v1/payment/inquiry/([A-Za-z0-9]+)$#', $path, $m)) {
     $p = $st['pays'][$m[1]] ?? null;

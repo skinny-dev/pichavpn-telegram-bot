@@ -97,6 +97,7 @@ $values = [
     'tetraminator_status' => 'offtetraminator',
     'tetraminator_api_key' => '0',
     'tetraminator_base_url' => '0',
+    'tetraminator_link_mode' => 'gateway',
     'minbalancetetraminator' => '50000',
     'maxbalancetetraminator' => '10000000',
     'chashbacktetraminator' => '0',

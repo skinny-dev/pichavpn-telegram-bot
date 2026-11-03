@@ -3,7 +3,8 @@
  * Tetraminator gateway (tetraminator.com). Run on the bot server, from the bot folder:
  *   php scripts/tetra_setup.php key          # the API key is typed into a HIDDEN prompt (or: TETRA_KEY=... php scripts/tetra_setup.php key)
  *   php scripts/tetra_setup.php on | off     # show / hide the button in the payment menu
- *   php scripts/tetra_setup.php limits MIN MAX   # toman; the gateway's own minimum is 50000
+ *   php scripts/tetra_setup.php limits MIN MAX   # toman; the gateway's range is 50,000 … 10,000,000
+ *   php scripts/tetra_setup.php link gateway|url|miniapp|bot   # which returned link the customer gets (default gateway = the Shaparak site gateway, else the shop's default url)
  *   php scripts/tetra_setup.php test         # makes one real 50,000 toman invoice (unpaid, harmless) and prints its pay link
  *   php scripts/tetra_setup.php status
  * The key lives only in the PaySetting table (never in the repository).
@@ -60,13 +61,24 @@ switch ($cmd) {
         $set('maxbalancetetraminator', (string) $max);
         echo "✅ " . number_format($min) . " – " . number_format($max) . " toman\n";
         break;
+    case 'link':
+        $m = $argv[2] ?? '';
+        if (!in_array($m, ['gateway', 'url', 'miniapp', 'bot'], true)) {
+            exit("Usage: php scripts/tetra_setup.php link gateway|url|miniapp|bot\n");
+        }
+        $set('tetraminator_link_mode', $m);
+        echo "✅ Customers get the «$m» link first.\n";
+        break;
     case 'test':
         if (!$hasKey()) {
             exit("❌ Set the key first: php scripts/tetra_setup.php key\n");
         }
         $r = createPayTetraminator(50000, 'test' . bin2hex(random_bytes(3)));
         if (!empty($r['pay_url'])) {
-            echo "✅ The key works. Test invoice (50,000 toman, not paid, can be ignored):\n   pay_id  : {$r['pay_id']}\n   pay link: {$r['pay_url']}\n";
+            echo "✅ The key works. Test invoice (50,000 toman, not paid, can be ignored):\n   pay_id  : {$r['pay_id']}\n   customer link (mode «" . (trim((string) $get('tetraminator_link_mode')) ?: 'gateway') . "»): {$r['pay_url']}\n";
+            foreach ($r['links'] ?? [] as $k => $v) {
+                echo "   $k: $v\n";
+            }
             $i = tetraminatorInquiry($r['pay_id']);
             echo "   inquiry : " . ($i['ok'] ? "ok, status «{$i['payment_status']}»" : "❌ {$i['error']}") . "\n";
         } else {
@@ -78,6 +90,7 @@ switch ($cmd) {
         echo "Tetraminator\n";
         echo "  status : " . ($get('tetraminator_status') === 'ontetraminator' ? '✅ on' : '⛔ off') . "\n";
         echo "  key    : " . ($hasKey() ? '✅ saved' : '— not set') . "\n";
+        echo "  link   : " . (trim((string) $get('tetraminator_link_mode')) ?: 'gateway') . "\n";
         echo "  limits : " . number_format((int) $get('minbalancetetraminator')) . " – " . number_format((int) $get('maxbalancetetraminator')) . " toman\n";
         echo "  callback: https://$domainhosts/payment/tetraminator_webhook.php?order_id=<order>\n";
         $q = $pdo->query("SELECT payment_Status, COUNT(*) c FROM Payment_report WHERE Payment_Method = 'tetraminator' GROUP BY payment_Status");

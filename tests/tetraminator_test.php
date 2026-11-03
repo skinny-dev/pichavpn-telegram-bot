@@ -21,7 +21,8 @@ require 'tetraminator.php';
 
 // ---- create invoice
 $r = createPayTetraminator(144000, 'ord1abc123');
-ok(($r['pay_id'] ?? '') === 'pay1abc' && str_contains($r['pay_url'] ?? '', 'start=pay_pay1abc'), 'create: pay_id + payment_link returned');
+ok(($r['pay_id'] ?? '') === 'pay1abc' && ($r['pay_url'] ?? '') === 'https://tetraminator.com/invoice/pay1abc', 'create: pay_id + the shop\'s default url returned (no website gateway active)');
+ok(isset($r['links']['payment_link'], $r['links']['mini_app_link']) && !isset($r['links']['gateway_link']), 'create: all returned links are kept for the report');
 $log = $mock('/__state')['log'];
 ok($log[0]['body']['price'] === 144000 && $log[0]['body']['callback_url'] === 'https://bot.example.com/payment/tetraminator_webhook.php?order_id=ord1abc123', 'create: price (int toman) and callback_url with our order id');
 ok($log[0]['ctype'] === 'application/json', 'create: JSON content type');
@@ -43,6 +44,30 @@ $SETTINGS['tetraminator_api_key'] = '0';
 $r = createPayTetraminator(60000, 'ord6abc123');
 ok(($r['error'] ?? '') === 'tetraminator_api_key not set', 'create: no key set -> clear error, no request');
 $SETTINGS['tetraminator_api_key'] = 'testkey';
+
+// ---- which link the customer gets
+$mock('/__gateway?on=1');
+$r = createPayTetraminator(60000, 'lnk1abc123');
+ok(str_contains($r['pay_url'], '/gateway/'), 'link: website (Shaparak) gateway_link first when it is active for the shop');
+$SETTINGS['tetraminator_link_mode'] = 'url';
+ok(str_contains(createPayTetraminator(60000, 'lnk2abc123')['pay_url'], '/invoice/'), 'link mode url: the shop default link');
+$SETTINGS['tetraminator_link_mode'] = 'bot';
+ok(str_contains(createPayTetraminator(60000, 'lnk3abc123')['pay_url'], 't.me/tetraminator_bot?start=pay_'), 'link mode bot: the bot chat link');
+$SETTINGS['tetraminator_link_mode'] = 'miniapp';
+ok(str_contains(createPayTetraminator(60000, 'lnk4abc123')['pay_url'], 'startapp='), 'link mode miniapp: the in-Telegram page');
+$SETTINGS['tetraminator_link_mode'] = 'nonsense';
+ok(str_contains(createPayTetraminator(60000, 'lnk5abc123')['pay_url'], '/gateway/'), 'link mode: unknown value behaves like gateway');
+$SETTINGS['tetraminator_link_mode'] = 'gateway';
+$mock('/__gateway?on=0');
+$mock('/__links?drop=gateway_link,url,mini_app_link');
+ok(str_contains(createPayTetraminator(60000, 'lnk6abc123')['pay_url'], 't.me/tetraminator_bot?start=pay_'), 'link: falls back to whichever link exists');
+$mock('/__links?drop=url,payment_link,mini_app_link,gateway_link');
+$r = createPayTetraminator(60000, 'lnk7abc123');
+ok(empty($r['pay_url']) && !empty($r['error']), 'link: an answer without any link is an error, not an empty button');
+$mock('/__links?http=1&drop=payment_link,mini_app_link');
+$r = createPayTetraminator(60000, 'lnk8abc123');
+ok(empty($r['pay_url']), 'link: a plain http:// link is never handed to a customer');
+$mock('/__links?http=0');
 
 // ---- inquiry
 $mock('/__set?pay_id=pay1abc&status=pending');

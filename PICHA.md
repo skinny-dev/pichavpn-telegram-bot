@@ -81,7 +81,10 @@ sends the customer the Telegram payment link. Files: `tetraminator.php` (API cal
 - The callback (`GET …/payment/tetraminator_webhook.php?order_id=<order>`, no body, no signature) is only a hint. Money is credited only after an
   **inquiry** (`GET /v1/payment/inquiry/{pay_id}`, our key, the pay_id we stored in `dec_not_confirmed`): `status:true`, `payment_status:paid`,
   `amount >= price`. One atomic claim of `payment_Status='paid'` means webhook + button + admin approval deliver once.
-- Setup on the bot server: `php scripts/tetra_setup.php key` (hidden prompt), `test` (makes one unpaid 50,000-toman invoice), `on`; `status`, `off`, `limits MIN MAX`.
+- The invoice answer has several links: `gateway_link` (the Shaparak website gateway, only when Tetraminator activated it for the shop), `url` (the shop's
+  default by its priority), `mini_app_link`, `payment_link` (their bot chat). The customer gets `gateway_link` first, then `url`, … (`php scripts/tetra_setup.php link gateway|url|miniapp|bot`);
+  only https links are used. The invoice is valid 60 minutes; price range 50,000 … 10,000,000 toman.
+- Setup on the bot server: `php scripts/tetra_setup.php key` (hidden prompt), `test` (makes one unpaid 50,000-toman invoice and prints every link), `on`; `status`, `off`, `limits MIN MAX`, `link MODE`.
 - The manual «تأیید» of an admin is refused when the same customer has an equal paid order of the same gateway from the last 30 minutes.
 - Not in the JavaScript (Serverless) bot yet: after the cutover the button is hidden there until it is ported.
 Tests: `php tests/tetraminator_test.php` (SQLite + a mock server, no setup needed).

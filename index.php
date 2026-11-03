@@ -4969,7 +4969,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
                 [['text' => $textbotlang['users']['Balance']['tetraminatorCheckButton'] ?? '✅ پرداخت کردم، بررسی پرداخت', 'callback_data' => "checktetra-" . $randomString]],
             ]
         ]);
-        $textnowpayments = sprintf($textbotlang['users']['Balance']['invoiceCreated2'], $randomString, number_format($user['Processing_value'], 0));
+        $textnowpayments = sprintf($textbotlang['users']['Balance']['tetraminatorInvoice'] ?? "✅ فاکتور پرداخت ایجاد شد.\n\n🔢 شماره فاکتور : %s\n💰 مبلغ فاکتور : %s تومان\n\n⏳ این فاکتور ۶۰ دقیقه اعتبار دارد.\n\n📌 بعد از پرداخت موفق چند ثانیه صبر کنید. اگر پیام تأیید نیامد، دکمهٔ «پرداخت کردم، بررسی پرداخت» را بزنید.", $randomString, number_format($user['Processing_value'], 0));
         $gethelp = select("PaySetting", "ValuePay", "NamePay", "helptetraminator", "select")['ValuePay'] ?? 2;
         if ($gethelp != 2) {
             $data = json_decode($gethelp, true);
