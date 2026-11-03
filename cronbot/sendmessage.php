@@ -37,7 +37,8 @@ Editmessagetext($info['id_admin'], $info['id_message'],$textprocces, $cancelmess
 $keyboardbuy = json_encode([
         'inline_keyboard' => [
             [
-                ['text' => $textbotlang['textbot']['sell'], 'callback_data' => 'buy'],
+                // blue (primary) button: the call to action of announcements
+                ['text' => $textbotlang['textbot']['sell'], 'callback_data' => 'buy', 'style' => 'primary'],
             ],
         ]
     ]);
