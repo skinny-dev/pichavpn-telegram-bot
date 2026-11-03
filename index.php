@@ -4715,7 +4715,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     update("user", "Processing_value", $balancelast, "id", $from_id);
     sendmessage($from_id, $textbotlang['users']['Balance']['selectPayment'], $step_payment, 'HTML');
     step('get_step_payment', $from_id);
-} elseif ($user['step'] == "get_step_payment" && in_array($datain, ["cart_to_offline", "aqayepardakht", "zarinpal", "variza", "plisio", "nowpayment", "iranpay1", "iranpay2", "iranpay4", "iranpay3", "digitaltron", "startelegrams"])) {
+} elseif ($user['step'] == "get_step_payment" && in_array($datain, ["cart_to_offline", "aqayepardakht", "zarinpal", "variza", "tetraminator", "plisio", "nowpayment", "iranpay1", "iranpay2", "iranpay4", "iranpay3", "digitaltron", "startelegrams"])) {
     if ($datain == "cart_to_offline") {
         $mainbalance = select("PaySetting", "ValuePay", "NamePay", "minbalancecart", "select")['ValuePay'];
         $maxbalance = select("PaySetting", "ValuePay", "NamePay", "maxbalancecart", "select")['ValuePay'];
@@ -4927,6 +4927,57 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             } elseif ($data['type'] == "photo") {
                 sendphoto($from_id, $data['photoid'], null);
             } elseif ($data['type'] == "video") {
+                sendvideo($from_id, $data['videoid'], null);
+            }
+        }
+        $message_id = sendmessage($from_id, $textnowpayments, $paymentkeyboard, 'HTML');
+        updatePaymentMessageId($message_id, $randomString);
+    } elseif ($datain == "tetraminator") {
+        require_once __DIR__ . '/tetraminator.php';
+        $minTetra = intval(select("PaySetting", "ValuePay", "NamePay", "minbalancetetraminator", "select")['ValuePay'] ?? 50000);
+        $maxTetra = intval(select("PaySetting", "ValuePay", "NamePay", "maxbalancetetraminator", "select")['ValuePay'] ?? 10000000);
+        $minTetra = max($minTetra, 50000); // the gateway refuses invoices below 50,000 toman
+        if ($user['Processing_value'] < $minTetra || $user['Processing_value'] > $maxTetra) {
+            sendmessage($from_id, strtr($textbotlang['users']['Balance']['depositRange'], ['{mainbalance}' => number_format($minTetra), '{maxbalance}' => number_format($maxTetra)]), null, 'HTML');
+            return;
+        }
+        deletemessage($from_id, $message_id);
+        sendmessage($from_id, $textbotlang['users']['Balance']['linkpayments'], $keyboard, 'HTML');
+        $randomString = bin2hex(random_bytes(5));
+        $pay = createPayTetraminator($user['Processing_value'], $randomString);
+        if (empty($pay['pay_url']) || empty($pay['pay_id'])) {
+            $text_error = $pay['error'] ?? json_encode($pay);
+            paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay);
+            sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
+            step('home', $from_id);
+            if (strlen($setting['Channel_Report']) > 0) {
+                telegram('sendmessage', [
+                    'chat_id' => $setting['Channel_Report'],
+                    'message_thread_id' => $errorreport,
+                    'text' => sprintf($textbotlang['Admin']['reportgroup']['errorZarinpalLink'] ?? 'Tetraminator link error: %s user %s', $text_error, $from_id),
+                    'parse_mode' => "HTML"
+                ]);
+            }
+            return;
+        }
+        $invoice = "{$user['Processing_value_tow']}|{$user['Processing_value_one']}";
+        $stmt = $pdo->prepare("INSERT INTO Payment_report (id_user,id_order,time,price,payment_Status,Payment_Method,id_invoice,dec_not_confirmed) VALUES (?,?,?,?,?,?,?,?)");
+        $stmt->execute([$from_id, $randomString, date('Y/m/d H:i:s'), $user['Processing_value'], "Unpaid", "tetraminator", $invoice, $pay['pay_id']]);
+        $paymentkeyboard = json_encode([
+            'inline_keyboard' => [
+                [['text' => $textbotlang['users']['Balance']['payments'], 'url' => $pay['pay_url']]],
+                [['text' => $textbotlang['users']['Balance']['tetraminatorCheckButton'] ?? '✅ پرداخت کردم، بررسی پرداخت', 'callback_data' => "checktetra-" . $randomString]],
+            ]
+        ]);
+        $textnowpayments = sprintf($textbotlang['users']['Balance']['invoiceCreated2'], $randomString, number_format($user['Processing_value'], 0));
+        $gethelp = select("PaySetting", "ValuePay", "NamePay", "helptetraminator", "select")['ValuePay'] ?? 2;
+        if ($gethelp != 2) {
+            $data = json_decode($gethelp, true);
+            if (($data['type'] ?? '') == "text") {
+                sendmessage($from_id, $data['text'], null, 'HTML');
+            } elseif (($data['type'] ?? '') == "photo") {
+                sendphoto($from_id, $data['photoid'], null);
+            } elseif (($data['type'] ?? '') == "video") {
                 sendvideo($from_id, $data['videoid'], null);
             }
         }
@@ -5548,6 +5599,44 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         }
         $message_id = sendmessage($from_id, $textstar, $paymentkeyboard, 'HTML');
         updatePaymentMessageId($message_id, $randomString);
+    }
+} elseif (preg_match('/^checktetra-([A-Za-z0-9]+)$/', $datain, $dataget)) {
+    // «پرداخت کردم»: ask Tetraminator itself (the callback to our server may have been lost) and deliver once if it is paid
+    require_once __DIR__ . '/tetraminator.php';
+    $tOrder = select("Payment_report", "*", "id_order", $dataget[1], "select");
+    if (!is_array($tOrder) || (string) $tOrder['id_user'] !== (string) $from_id || $tOrder['Payment_Method'] !== 'tetraminator') {
+        return;
+    }
+    $tRes = tetraminatorSettle($pdo, $tOrder, fn($id) => DirectPayment($id));
+    $tAlert = function (string $text) use ($callback_query_id) {
+        telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id, 'text' => $text, 'show_alert' => true, 'cache_time' => 3]);
+    };
+    $tB = $textbotlang['users']['Balance'];
+    switch ($tRes['result']) {
+        case 'paid':
+            tetraminatorAfterPaid($tOrder, $tRes, $textbotlang);
+            telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id]);
+            deletemessage($from_id, $message_id);
+            break;
+        case 'already':
+            $tAlert($tB['tetraminatorAlready'] ?? '✅ این پرداخت قبلاً ثبت شده است.');
+            break;
+        case 'unpaid':
+            $tAlert($tB['tetraminatorUnpaid'] ?? '⏳ هنوز پرداختی دریافت نشده. بعد از پرداخت چند ثانیه صبر کنید و دوباره بزنید.');
+            break;
+        case 'amount_mismatch':
+            error_log("tetraminator check: amount mismatch for {$tOrder['id_order']}: billed {$tRes['billed']}, got {$tRes['amount']}");
+            $tAlert($tB['tetraminatorMismatch'] ?? '⚠️ مبلغ پرداخت‌شده با فاکتور یکی نیست. با پشتیبانی در ارتباط باشید.');
+            break;
+        case 'delivery_failed':
+            $tAlert($tB['tetraminatorDeliveryFailed'] ?? '⚠️ پرداخت تأیید شد ولی تحویل سرویس با خطا روبه‌رو شد. پشتیبانی پیگیری می‌کند.');
+            if (strlen($setting['Channel_Report']) > 0) {
+                telegram('sendmessage', ['chat_id' => $setting['Channel_Report'], 'message_thread_id' => $errorreport,
+                    'text' => "⚠️ تترامینیتور پرداخت را تأیید کرد ولی تحویل خطا داد.\n🧾 سفارش: <code>{$tOrder['id_order']}</code>\n👤 کاربر: <code>{$from_id}</code>", 'parse_mode' => 'HTML']);
+            }
+            break;
+        default:
+            $tAlert($tB['tetraminatorError'] ?? '❌ استعلام پرداخت انجام نشد. چند لحظهٔ دیگر دوباره امتحان کنید.');
     }
 } elseif (preg_match('/^sendresidvariza-([A-Za-z0-9]+)$/', $datain, $dataget)) {
     // Manual receipt for a Variza payment that stayed unconfirmed. Same admin approve/reject path as card-to-card.

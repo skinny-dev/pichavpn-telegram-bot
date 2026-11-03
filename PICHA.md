@@ -74,6 +74,18 @@ the stored deposit (exact amount, one unclaimed deposit, received ≤15 min befo
 A message the server missed can be stored by hand: put the Blu texts in a file and run
 `php scripts/sms_setup.php import file.txt`, then the customer presses «پرداخت کردم».
 
+## Tetraminator gateway (tetraminator.com)
+A payment-menu button «💳 پرداخت آنلاین (تترامینیتور)»: the bot creates an invoice (`POST /v1/invoice/create`, toman, minimum 50,000) and
+sends the customer the Telegram payment link. Files: `tetraminator.php` (API calls + `tetraminatorSettle`), `payment/tetraminator_webhook.php`
+(the callback), the «✅ پرداخت کردم، بررسی پرداخت» button (`checktetra-<order>` in `index.php`), `scripts/tetra_setup.php`.
+- The callback (`GET …/payment/tetraminator_webhook.php?order_id=<order>`, no body, no signature) is only a hint. Money is credited only after an
+  **inquiry** (`GET /v1/payment/inquiry/{pay_id}`, our key, the pay_id we stored in `dec_not_confirmed`): `status:true`, `payment_status:paid`,
+  `amount >= price`. One atomic claim of `payment_Status='paid'` means webhook + button + admin approval deliver once.
+- Setup on the bot server: `php scripts/tetra_setup.php key` (hidden prompt), `test` (makes one unpaid 50,000-toman invoice), `on`; `status`, `off`, `limits MIN MAX`.
+- The manual «تأیید» of an admin is refused when the same customer has an equal paid order of the same gateway from the last 30 minutes.
+- Not in the JavaScript (Serverless) bot yet: after the cutover the button is hidden there until it is ported.
+Tests: `php tests/tetraminator_test.php` (SQLite + a mock server, no setup needed).
+
 ## Variza: manual receipt fallback
 Every Variza invoice has a «📎 پرداخت کردم، ارسال رسید» button. It is refused until `variza_receipt_delay` minutes (default 5) have
 passed since the invoice was created (the customer gets an alert with the remaining minutes). After that the customer sends a receipt

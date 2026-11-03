@@ -3724,6 +3724,7 @@ We hope you had a good experience with the ease and speed of your service. If yo
                 'wheelLuck' => '🎲 Wheel of fortune',
                 'zarinPal' => '🟡 ZarinPal',
                 'variza' => '💳 Variza (auto card-to-card)',
+                'tetraminator' => '💳 Online payment (Tetraminator)',
         ],
         'keyboard' => [
                 'acceptRules' => '✅ I accept the rules',
@@ -4407,6 +4408,7 @@ We hope you had a good experience with the ease and speed of your service. If yo
                 'paymentMethodRialGateway3' => 'Rial gateway 3',
                 'paymentMethodTelegramStar' => 'Telegram Stars',
                 'paymentMethodVariza' => 'Variza',
+                'paymentMethodTetraminator' => 'Tetraminator',
                 'paymentMethodZarinpal' => 'ZarinPal',
                 'paymentSearchBtn' => 'Total count',
                 'paymentSearchTransactionPlaceholder' => 'User ID or transaction number...',
@@ -4802,6 +4804,13 @@ Payment method : First Rial currency',
 - 🧾 Order ID : %s
 - 🔗 Variza payment slug : %s
 - 💳 Payment method : Variza',
+                'reportTetraminator' => '💵 New payment
+- 👤 User name : @%s
+- 🆔 User ID : %s
+- 💸 Amount %s
+- 🧾 Order number : %s
+- 🔗 Tetraminator payment id : %s
+- 💳 Payment method : Tetraminator',
                 'invoiceTitle' => 'Payment invoice',
                 'invoiceTransactionNo' => 'Transaction number:',
                 'invoiceAmount' => 'Paid amount:',

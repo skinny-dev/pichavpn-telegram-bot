@@ -3717,6 +3717,7 @@ f,n.n2',
                 'wheelLuck' => '🎲 گردونه شانس',
                 'zarinPal' => '🟡 زرین پال',
                 'variza' => '💳 واریزا (کارت‌به‌کارت خودکار)',
+                'tetraminator' => '💳 پرداخت آنلاین (تترامینیتور)',
         ],
         'keyboard' => [
                 'acceptRules' => '✅ قوانین را می پذیرم',
@@ -4402,6 +4403,7 @@ f,n.n2',
                 'paymentMethodRialGateway3' => 'درگاه ریالی ۳',
                 'paymentMethodTelegramStar' => 'استار تلگرام',
                 'paymentMethodVariza' => 'واریزا',
+                'paymentMethodTetraminator' => 'تترامینیتور',
                 'paymentMethodZarinpal' => 'زرین‌پال',
                 'paymentSearchBtn' => 'تعداد کل',
                 'paymentSearchTransactionPlaceholder' => 'آیدی کاربر یا شماره تراکنش...',
@@ -4797,6 +4799,13 @@ f,n.n2',
 - 🧾 شماره سفارش : %s
 - 🔗 شناسه پرداخت واریزا : %s
 - 💳 روش پرداخت : واریزا',
+                'reportTetraminator' => '💵 پرداخت جدید
+- 👤 نام کاربری کاربر : @%s
+- 🆔 آیدی عددی کاربر : %s
+- 💸 مبلغ تراکنش %s
+- 🧾 شماره سفارش : %s
+- 🔗 شناسه پرداخت تترامینیتور : %s
+- 💳 روش پرداخت : تترامینیتور',
                 'invoiceTitle' => 'فاکتور پرداخت',
                 'invoiceTransactionNo' => 'شماره تراکنش:',
                 'invoiceAmount' => 'مبلغ پرداختی:',

@@ -22,7 +22,7 @@ function paSave(array $s): void
 
 function paGatewayName(string $g): string
 {
-    $map = ['variza' => 'واریزا', 'zarinpal' => 'زرین‌پال', 'aqayepardakht' => 'آقای پرداخت', 'plisio' => 'Plisio (ارز دیجیتال)', 'nowpayment' => 'NowPayments (ارز دیجیتال)',
+    $map = ['variza' => 'واریزا', 'tetraminator' => 'تترامینیتور', 'zarinpal' => 'زرین‌پال', 'aqayepardakht' => 'آقای پرداخت', 'plisio' => 'Plisio (ارز دیجیتال)', 'nowpayment' => 'NowPayments (ارز دیجیتال)',
         'iranpay1' => 'ایران‌پی ۱', 'iranpay2' => 'ایران‌پی ۲', 'iranpay3' => 'ایران‌پی ۳', 'iranpay4' => 'ایران‌پی ۴', 'digitaltron' => 'دیجیتال‌ترون (ترون)',
         'startelegrams' => 'استارز تلگرام', 'cart_to_offline' => 'کارت به کارت'];
     return $map[$g] ?? $g;
@@ -159,6 +159,10 @@ function paymentGatewayProbe(): void
     $token = trim((string) getPaySettingValue('variza_api_token', ''));
     if ($token !== '' && $token !== '0') {
         $checks['variza'] = ['https://variza.ir/', trim((string) getPaySettingValue('variza_proxy', ''))];
+    }
+    $tetraKey = trim((string) getPaySettingValue('tetraminator_api_key', ''));
+    if ($tetraKey !== '' && $tetraKey !== '0' && getPaySettingValue('tetraminator_status', '') === 'ontetraminator') {
+        $checks['tetraminator'] = ['https://api.tetraminator.com/', ''];
     }
     $s = paState();
     foreach ($checks as $g => [$url, $proxy]) {

@@ -1452,11 +1452,11 @@ elseif ($datain == "systemsms") {
         return;
     }
     // A second Variza link for the same amount is easy to approve by hand after the first one was paid by the gateway:
-    // the order lock cannot see that (they are two orders). Refuse when the same customer has an equal paid Variza order
-    // from the last 30 minutes; a real second payment is credited with «افزایش موجودی».
-    if (($Payment_report['Payment_Method'] ?? '') === 'variza') {
-        $dupCheck = $pdo->prepare("SELECT id_order FROM Payment_report WHERE id_user = ? AND Payment_Method = 'variza' AND payment_Status = 'paid' AND price = ? AND id_order <> ? AND time >= ? LIMIT 1");
-        $dupCheck->execute([$Payment_report['id_user'], $Payment_report['price'], $order_id, date('Y/m/d H:i:s', time() - 1800)]);
+    // the order lock cannot see that (they are two orders). Refuse when the same customer has an equal paid order of the same
+    // gateway (Variza / Tetraminator) from the last 30 minutes; a real second payment is credited with «افزایش موجودی».
+    if (in_array(($Payment_report['Payment_Method'] ?? ''), ['variza', 'tetraminator'], true)) {
+        $dupCheck = $pdo->prepare("SELECT id_order FROM Payment_report WHERE id_user = ? AND Payment_Method = ? AND payment_Status = 'paid' AND price = ? AND id_order <> ? AND time >= ? LIMIT 1");
+        $dupCheck->execute([$Payment_report['id_user'], $Payment_report['Payment_Method'], $Payment_report['price'], $order_id, date('Y/m/d H:i:s', time() - 1800)]);
         $dupOrder = $dupCheck->fetchColumn();
         if ($dupOrder) {
             telegram('answerCallbackQuery', array(

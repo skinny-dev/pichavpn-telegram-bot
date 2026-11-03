@@ -359,6 +359,12 @@ if (
         ['text' => $textbotlang['textbot']['variza'], 'callback_data' => "variza"]
     ];
 }
+$tetraminatorKey = trim((string) getPaySettingValue("tetraminator_api_key", ""));
+if (getPaySettingValue("tetraminator_status", "offtetraminator") == "ontetraminator" && $tetraminatorKey !== "" && $tetraminatorKey !== "0") {
+    $step_payment['inline_keyboard'][] = [
+        ['text' => $textbotlang['textbot']['tetraminator'] ?? '💳 پرداخت آنلاین (تترامینیتور)', 'callback_data' => "tetraminator"]
+    ];
+}
 if ($paymentstatussnotverify == "onverifypay") {
     $step_payment['inline_keyboard'][] = [
         ['text' => $textbotlang['textbot']['paymentNotVerify'], 'callback_data' => "paymentnotverify"]
