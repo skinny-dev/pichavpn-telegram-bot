@@ -53,6 +53,9 @@ function paReason($detail, string $gateway): array
     if ($code === 401 || $code === 403) {
         return ["🔑 درگاه دسترسی نداد (HTTP $code) — توکن اشتباه یا منقضی", 'توکن جدید از پنل درگاه بگیرید و در ربات بزنید'];
     }
+    if ($gateway === 'variza' && function_exists('varizaLimitReached') && varizaLimitReached(is_array($detail) ? $detail : [])) {
+        return ['🚫 محدودیت اشتراک واریزا — سقف ساخت لینک پر شده', 'اشتراک واریزا را در پنل آن‌ها بررسی یا ارتقا دهید. تا ۳۰ دقیقه دکمهٔ واریزا از منوی پرداخت مخفی است و بعد خودش دوباره امتحان می‌شود'];
+    }
     if ($code === 400 || $code === 422) {
         return ["⚠️ درگاه درخواست را رد کرد (HTTP $code) — مبلغ یا تنظیمات", ''];
     }

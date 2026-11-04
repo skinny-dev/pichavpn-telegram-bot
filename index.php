@@ -5003,6 +5003,16 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         if (!isset($pay['pay_url']) || empty($pay['pay_url'])) {
             $text_error = isset($pay['error']) ? $pay['error'] : json_encode($pay);
             paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
+            require_once __DIR__ . '/gateway_pause.php';
+            if (varizaLimitReached($pay)) {
+                // Variza's own subscription limit: hide it for 30 minutes and let this customer pick another way to pay right now
+                gatewayPause($pdo, 'variza', 1800);
+                $menu = json_decode($step_payment, true);
+                $menu['inline_keyboard'] = array_values(array_filter($menu['inline_keyboard'] ?? [], fn($row) => ($row[0]['callback_data'] ?? '') !== 'variza'));
+                sendmessage($from_id, $textbotlang['users']['Balance']['gatewayTemporarilyOff'] ?? "⚠️ این روش پرداخت موقتاً در دسترس نیست.\nلطفاً یکی از روش‌های دیگر را انتخاب کنید 👇", json_encode($menu), 'HTML');
+                step('get_step_payment', $from_id);
+                return;
+            }
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             $ErrorsLinkPayment = sprintf($textbotlang['Admin']['reportgroup']['errorZarinpalLink'] ?? 'Variza link error: %s user %s', $text_error, $from_id);

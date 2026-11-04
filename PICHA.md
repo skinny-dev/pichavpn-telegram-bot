@@ -74,6 +74,12 @@ the stored deposit (exact amount, one unclaimed deposit, received ≤15 min befo
 A message the server missed can be stored by hand: put the Blu texts in a file and run
 `php scripts/sms_setup.php import file.txt`, then the customer presses «پرداخت کردم».
 
+## Gateway pause (Variza subscription limit)
+When Variza answers HTTP 422 with «به دلیل محدودیت اشتراک فعلی…» (the Variza account's own plan limit) the button is hidden from the payment menu for 30 minutes
+(`PaySetting variza_pause_until`, `gateway_pause.php`), the customer gets «این روش پرداخت موقتاً در دسترس نیست» with the menu of the other methods, and the admin alert
+says «محدودیت اشتراک واریزا». It ends by itself; a new refusal starts a new pause. Fix at the source: upgrade/renew the Variza plan.
+Tests: `php tests/pay_menu_order_test.php`.
+
 ## Tetraminator gateway (tetraminator.com)
 A payment-menu button «💳 پرداخت آنلاین (تترامینیتور)»: the bot creates an invoice (`POST /v1/invoice/create`, toman, minimum 50,000) and
 sends the customer the Telegram payment link. Files: `tetraminator.php` (API calls + `tetraminatorSettle`), `payment/tetraminator_webhook.php`

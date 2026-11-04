@@ -349,8 +349,10 @@ if ($zarinpal == "onzarinpal") {
     ];
 }
 $variza = getPaySettingValue("variza_status", "offvariza");
+require_once __DIR__ . '/gateway_pause.php';
 if (
     $variza == "onvariza"
+    && !gatewayPaused('variza')
     && trim((string) getPaySettingValue("variza_api_token", "")) !== ""
     && trim((string) getPaySettingValue("variza_api_token", "")) !== "0"
     && trim((string) getPaySettingValue("variza_webhook_secret", "")) !== ""
