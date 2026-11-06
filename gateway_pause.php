@@ -20,6 +20,23 @@ if (!function_exists('gatewayPaused')) {
         }
     }
 
+    /**
+     * How long to hide a gateway after a failed «create link» answer: 0 = do not (a request problem, e.g. a wrong amount).
+     * The gateway being down (no answer, timeout, 5xx such as Cloudflare 522) = 10 minutes; refused key / disabled shop (401, 403) = 30 minutes,
+     * because nothing works until an admin fixes it.
+     */
+    function gatewayOutageSeconds($res): int
+    {
+        $code = is_array($res) ? (int) ($res['http_code'] ?? 0) : 0;
+        if (!is_array($res) || empty($res['error'])) {
+            return 0;
+        }
+        if ($code === 401 || $code === 403) {
+            return 1800;
+        }
+        return ($code === 0 || $code >= 500) ? 600 : 0;
+    }
+
     /** the answer of createPayVariza(): did Variza refuse because the account's subscription limit is reached? */
     function varizaLimitReached($res): bool
     {

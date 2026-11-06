@@ -4948,6 +4948,17 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         if (empty($pay['pay_url']) || empty($pay['pay_id'])) {
             $text_error = $pay['error'] ?? json_encode($pay);
             paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay);
+            require_once __DIR__ . '/gateway_pause.php';
+            $pauseFor = gatewayOutageSeconds($pay);
+            if ($pauseFor > 0) {
+                // the gateway is down (or refuses our key): hide it for a while and let this customer pick another way to pay right now
+                gatewayPause($pdo, 'tetraminator', $pauseFor);
+                $menu = json_decode($step_payment, true);
+                $menu['inline_keyboard'] = array_values(array_filter($menu['inline_keyboard'] ?? [], fn($row) => ($row[0]['callback_data'] ?? '') !== 'tetraminator'));
+                sendmessage($from_id, $textbotlang['users']['Balance']['gatewayTemporarilyOff'] ?? "⚠️ این روش پرداخت موقتاً در دسترس نیست.\nلطفاً یکی از روش‌های دیگر را انتخاب کنید 👇", json_encode($menu), 'HTML');
+                step('get_step_payment', $from_id);
+                return;
+            }
             sendmessage($from_id, $textbotlang['users']['Balance']['errorLinkPayment'], $keyboard, 'HTML');
             step('home', $from_id);
             if (strlen($setting['Channel_Report']) > 0) {

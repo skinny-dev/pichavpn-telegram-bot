@@ -48,5 +48,12 @@ $real = ['error' => 'http 422', 'http_code' => 422, 'raw' => '{"message":"\u0628
 ok(varizaLimitReached($real), 'the real Variza answer from the production alert is recognised');
 ok(!varizaLimitReached(['http_code' => 422, 'decoded' => ['message' => 'amount too low']]), 'another 422 (amount) does not pause the gateway');
 ok(!varizaLimitReached(['http_code' => 500, 'decoded' => ['message' => $msg]]) && !varizaLimitReached(['error' => 'curl: timeout']) && !varizaLimitReached(null), '500 / network errors never pause it');
+// Tetraminator down: hidden while paused; how long the pause is
+$tp = $all; $tp['tetraminator_pause_until'] = (string) (time() + 300);
+ok(!in_array('ONLINE', menu($tp), true) && in_array('AUTO', menu($tp), true), 'Tetraminator paused: its button is hidden, the others stay');
+ok(gatewayOutageSeconds(['error' => 'invalid json', 'http_code' => 522]) === 600, '522 (gateway down) -> 10 minute pause');
+ok(gatewayOutageSeconds(['error' => 'curl: Operation timed out', 'http_code' => 0]) === 600, 'timeout -> 10 minute pause');
+ok(gatewayOutageSeconds(['error' => 'http 401', 'http_code' => 401]) === 1800, 'refused key / disabled shop -> 30 minute pause');
+ok(gatewayOutageSeconds(['error' => 'http 400', 'http_code' => 400]) === 0 && gatewayOutageSeconds(['pay_url' => 'https://x']) === 0 && gatewayOutageSeconds(null) === 0, 'a bad request or a success never pauses it');
 echo $fail ? "\n$fail FAILED\n" : "\nall passed\n";
 exit($fail ? 1 : 0);

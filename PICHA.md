@@ -74,10 +74,12 @@ the stored deposit (exact amount, one unclaimed deposit, received ≤15 min befo
 A message the server missed can be stored by hand: put the Blu texts in a file and run
 `php scripts/sms_setup.php import file.txt`, then the customer presses «پرداخت کردم».
 
-## Gateway pause (Variza subscription limit)
+## Gateway pause (Variza subscription limit, Tetraminator down)
 When Variza answers HTTP 422 with «به دلیل محدودیت اشتراک فعلی…» (the Variza account's own plan limit) the button is hidden from the payment menu for 30 minutes
 (`PaySetting variza_pause_until`, `gateway_pause.php`), the customer gets «این روش پرداخت موقتاً در دسترس نیست» with the menu of the other methods, and the admin alert
 says «محدودیت اشتراک واریزا». It ends by itself; a new refusal starts a new pause. Fix at the source: upgrade/renew the Variza plan.
+Tetraminator: when creating an invoice gets no answer / a timeout / a 5xx (Cloudflare 522 = their server does not answer) the button is hidden for 10 minutes
+(401/403 = refused key or disabled shop: 30 minutes) and the customer gets the menu of the other methods at once. A new invoice is tried twice, 12 s each.
 Tests: `php tests/pay_menu_order_test.php`.
 
 ## Tetraminator gateway (tetraminator.com)

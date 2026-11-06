@@ -363,7 +363,7 @@ if (
     ];
 }
 $tetraminatorKey = trim((string) getPaySettingValue("tetraminator_api_key", ""));
-if (getPaySettingValue("tetraminator_status", "offtetraminator") == "ontetraminator" && $tetraminatorKey !== "" && $tetraminatorKey !== "0") {
+if (getPaySettingValue("tetraminator_status", "offtetraminator") == "ontetraminator" && $tetraminatorKey !== "" && $tetraminatorKey !== "0" && !gatewayPaused('tetraminator')) {
     $priorityPayButtons[0] = [
         ['text' => $textbotlang['textbot']['tetraminator'] ?? '💳 پرداخت آنلاین', 'callback_data' => "tetraminator"]
     ];

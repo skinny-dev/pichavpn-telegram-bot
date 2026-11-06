@@ -21,6 +21,8 @@ $out = function (int $code, array $body) use (&$st, $fh) {
 };
 if ($path === '/__fail') {
     $st['fail'] = (int) ($_GET['n'] ?? 0);
+    $st['fail_code'] = (int) ($_GET['code'] ?? 500);
+    $st['fail_html'] = (int) ($_GET['html'] ?? 0);
     $out(200, ['ok' => true]);
 }
 if ($path === '/__set') {
@@ -48,7 +50,14 @@ if ($method === 'POST' && $path === '/v1/invoice/create') {
     $st['log'][] = ['path' => $path, 'ctype' => $_SERVER['CONTENT_TYPE'] ?? '', 'body' => $in];
     if ($st['fail'] > 0) {
         $st['fail']--;
-        $out(500, ['status' => false, 'message' => 'temporary']);
+        if (!empty($st['fail_html'])) { // Cloudflare's own page, not JSON
+            ftruncate($fh, 0); rewind($fh); fwrite($fh, json_encode($st)); flock($fh, LOCK_UN);
+            http_response_code((int) ($st['fail_code'] ?? 522));
+            header('Content-Type: text/html');
+            echo '<html><body>Connection timed out</body></html>';
+            exit;
+        }
+        $out((int) ($st['fail_code'] ?? 500), ['status' => false, 'message' => 'temporary']);
     }
     if ((int) ($in['price'] ?? 0) < 50000 || empty($in['callback_url'])) {
         $out(400, ['status' => false, 'message' => 'bad request']);

@@ -33,7 +33,7 @@ if (!function_exists('tetraminatorBaseUrl')) {
     }
 
     /** one HTTP call; never throws. ['http' => int (0 = no answer), 'data' => array|null, 'error' => string] */
-    function tetraminatorCall(string $method, string $path, ?array $json = null): array
+    function tetraminatorCall(string $method, string $path, ?array $json = null, int $timeout = 25, int $connect = 10): array
     {
         $key = tetraminatorApiKey();
         if ($key === '') {
@@ -43,8 +43,8 @@ if (!function_exists('tetraminatorBaseUrl')) {
         $opts = [
             CURLOPT_URL => tetraminatorBaseUrl() . $path,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 25,
+            CURLOPT_CONNECTTIMEOUT => $connect,
+            CURLOPT_TIMEOUT => $timeout,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => $method,
         ];
@@ -93,15 +93,16 @@ if (!function_exists('tetraminatorBaseUrl')) {
 
     /**
      * New invoice for the order $order_id. On success ['pay_id' => ..., 'pay_url' => ..., 'links' => all links returned], otherwise ['error' => ..., 'http_code' => ...].
-     * A short hiccup (timeout, 5xx, 429) is tried up to 3 times; 400 / 401 / 403 are final.
+     * A short hiccup (timeout, 5xx, 429) is tried twice, each try waiting at most 12 s (a customer is waiting in the chat, and when
+     * Tetraminator is down — Cloudflare 522 — more tries only make the wait longer); 400 / 401 / 403 are final.
      */
     function createPayTetraminator($price, $order_id): array
     {
         global $domainhosts;
         $callback = 'https://' . $domainhosts . '/payment/tetraminator_webhook.php?order_id=' . rawurlencode((string) $order_id);
         $res = [];
-        for ($try = 1; $try <= 3; $try++) {
-            $r = tetraminatorCall('POST', '/invoice/create', ['price' => (int) $price, 'callback_url' => $callback]);
+        for ($try = 1; $try <= 2; $try++) {
+            $r = tetraminatorCall('POST', '/invoice/create', ['price' => (int) $price, 'callback_url' => $callback], 12, 5);
             $d = $r['data'] ?? [];
             $link = is_array($d) ? tetraminatorPickLink($d, trim((string) getPaySettingValue('tetraminator_link_mode', 'gateway'))) : '';
             if ($r['http'] >= 200 && $r['http'] < 300 && !empty($d['status']) && !empty($d['pay_id']) && $link !== '') {
@@ -112,7 +113,7 @@ if (!function_exists('tetraminatorBaseUrl')) {
             if (in_array($r['http'], [400, 401, 403], true) || $r['error'] === 'tetraminator_api_key not set') {
                 break;
             }
-            if ($try < 3) {
+            if ($try < 2) {
                 error_log("createPayTetraminator try $try failed: " . $res['error']);
                 tetraminatorPause($try);
             }
