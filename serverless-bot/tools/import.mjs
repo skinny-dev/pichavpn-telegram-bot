@@ -22,8 +22,8 @@ const SLICE = sliceArg.length === 2 && sliceArg[1] > 0 && sliceArg[0] >= 0 && sl
 const only = flag === 'hot' ? HOT : only0
 if (!dir || !fs.existsSync(dir)) { console.error('usage: node tools/import.mjs EXPORT_DIR [--cold | --hot | table…]'); process.exit(1) }
 const files = fs.readdirSync(dir).filter((f) => f.endsWith('.ndjson')).filter((f) => { const t = f.replace('.ndjson', ''); return flag === 'cold' ? !HOT.includes(t) : !only.length || only.includes(t) })
-const MAX = Number(process.env.IMPORT_MAX || 20_000) // bytes of rows per call (command-line limit; small = each call stays well inside the run-time limit)
-const MAX_ROWS = 40
+const MAX = Number(process.env.IMPORT_MAX || 60_000) // bytes of rows per call (command-line limit; small = each call stays well inside the run-time limit)
+const MAX_ROWS = Number(process.env.IMPORT_ROWS || 120)
 let total = 0
 for (const f of files) {
   const table = f.replace('.ndjson', '')
@@ -35,12 +35,13 @@ for (const f of files) {
     if (!batch.length && !first) return
     const args = JSON.stringify({ table, rows: batch, wipe: first })
     let r
-    for (let attempt = 1; attempt <= 4; attempt++) { // a slow call is simply tried again (rows are REPLACEd, so a repeat is harmless)
+    for (let attempt = 1; attempt <= 10; attempt++) { // a slow call is simply tried again (rows are REPLACEd, so a repeat is harmless)
       r = spawnSync('npx', ['tgcloud', 'run', 'endpoints/admin_import', args], { encoding: 'utf8' })
       if (r.status === 0 && /imported/.test(r.stdout)) break
-      if (attempt === 4) { const msg = ((r.stderr || '') + '\n' + (r.stdout || '')).split('\n').filter((l) => !l.startsWith('> admin_import(')).join('\n').trim() // the echoed call holds customer rows: never print it
+      if (attempt === 10) { const msg = ((r.stderr || '') + '\n' + (r.stdout || '')).split('\n').filter((l) => !l.startsWith('> admin_import(')).join('\n').trim() // the echoed call holds customer rows: never print it
       console.error(`\n❌ ${table} (${done}/${rows.length}): ${msg.slice(0, 600) || '(no message)'}`); process.exit(1) }
-      spawnSync('sleep', [String(attempt * 2)])
+      const m = /retry after (\d+)/.exec((r.stderr || '') + (r.stdout || '')) // the platform limits calls per second: wait as long as it says
+      spawnSync('sleep', [String(Math.max(attempt * 2, m ? Number(m[1]) + 1 : 0))])
     }
     done += batch.length; batch = []; size = 0; first = false
     process.stdout.write(`\r${table}: ${done}/${rows.length}   `)
