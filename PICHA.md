@@ -74,6 +74,13 @@ the stored deposit (exact amount, one unclaimed deposit, received ≤15 min befo
 A message the server missed can be stored by hand: put the Blu texts in a file and run
 `php scripts/sms_setup.php import file.txt`, then the customer presses «پرداخت کردم».
 
+## Voiding a fake receipt (`scripts/void_payment.php`)
+A card-to-card receipt that was approved and later turned out fake stays in «پول دریافتی» even after the admin took the money back from the wallet by hand
+(a hand-edited balance leaves no record; only the bot's «کسر موجودی» writes one, as «بازپرداخت به مشتریان»).
+`php scripts/void_payment.php --find` lists recent paid wallet top-ups ≥ 1,000,000 toman; `php scripts/void_payment.php ORDER_ID` is a dry run;
+`… ORDER_ID --apply --reason="رسید جعلی"` sets the order to `reject` (revenue in «آمار» and the Mini App drops) and reverses its finance-ledger entry. The wallet is never changed.
+Refused for service purchases/renewals and for admin gifts. Every use is logged in `storage/void_payment.log`.
+
 ## Gateway pause (Variza subscription limit, Tetraminator down)
 When Variza answers HTTP 422 with «به دلیل محدودیت اشتراک فعلی…» (the Variza account's own plan limit) the button is hidden from the payment menu for 30 minutes
 (`PaySetting variza_pause_until`, `gateway_pause.php`), the customer gets «این روش پرداخت موقتاً در دسترس نیست» with the menu of the other methods, and the admin alert
