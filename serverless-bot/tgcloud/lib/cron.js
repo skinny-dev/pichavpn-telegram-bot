@@ -6,6 +6,7 @@ import { sendmessage, deletemessage, telegram } from './tg.js'
 import { dataUser, removeUser, getUsers } from './panel.js'
 import { formatBytes } from './fmt.js'
 import { broadcastTick } from './broadcast.js'
+import { tetraReconcile } from './relay.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
@@ -188,6 +189,7 @@ async function statusDay(c) {
 
 const JOBS = [
   ['broadcast', 20, (c) => broadcastTick(c)],
+  ['tetraminator', 30, tetraReconcile],
   ['notifications', 60, notifications],
   ['configtest', 120, configTest],
   ['payment_expire', 300, paymentExpire],

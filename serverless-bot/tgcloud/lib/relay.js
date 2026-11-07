@@ -2,11 +2,12 @@
 // The bot pulls it: at most every RELAY_EVERY seconds on any update, and at once when a customer presses «I paid».
 // Every event is checked here with the bot's own secrets (Variza signature, forwarder token) before anything is paid.
 import { fetch } from 'sdk'
-import { one, run, sql, kvGet, kvSet } from './db.js'
+import { one, all, run, sql, kvGet, kvSet } from './db.js'
 import { telegram, sendmessage } from './tg.js'
 import { buildKeyboards } from './keyboards.js'
 import { directPayment } from './directpay.js'
 import { smsProcessText } from './sms.js'
+import { tetraSettle, tetraAfterPaid } from './tetraminator.js'
 import { sprintf, numberFormat, intval } from './php.js'
 
 const RELAY_EVERY = 20
@@ -21,7 +22,7 @@ async function hmacHex(secret, body) {
 const same = (a, b) => { a = String(a); b = String(b); if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0 }
 
 /** a context for payments confirmed outside any admin action: no admin message to edit, the customer's keyboard */
-function neutral(c) {
+export function neutral(c) {
   return { ...c, from_id: '', message_id: 0, keyboard: buildKeyboards({ T: c.T, setting: c.setting, users: null, adminRow: null }).keyboard }
 }
 async function report(c, text) {
@@ -66,6 +67,32 @@ async function onVariza(c, ev) {
     await report(c, sprintf(c.T.paymentGateway.reportVariza, u.username ?? '-', o.id_user, numberFormat(billed), o.id_order, slug))
   }
   return 'paid'
+}
+
+/** Tetraminator's callback (GET ?order_id=…, no signature): only says which order to look at — the money is credited after an inquiry */
+async function onTetraminator(c, ev) {
+  const id = String(ev.query?.order_id ?? '')
+  if (!/^[A-Za-z0-9]{6,40}$/.test(id)) return 'bad order id'
+  const o = await one(sql`SELECT * FROM Payment_report WHERE id_order = ${id}`)
+  if (!o || o.Payment_Method !== 'tetraminator') return 'order not found'
+  return settleTetraminator(c, o)
+}
+/** one order: inquire, credit once, tell the report group */
+export async function settleTetraminator(c, o, deliver = null) {
+  const res = await tetraSettle(o, deliver || ((orderId) => directPayment(neutral(c), orderId)))
+  if (res.result === 'paid') await tetraAfterPaid(c, o, res)
+  else if (res.result === 'delivery_failed') await report(c, `⚠️ تترامینیتور پرداخت را تأیید کرد ولی تحویل خطا داد.\n🧾 سفارش: <code>${o.id_order}</code>\n👤 کاربر: <code>${o.id_user}</code>`)
+  else if (res.result === 'amount_mismatch') console.error('tetraminator amount mismatch', o.id_order, res.billed, res.amount)
+  return res.result
+}
+/** lazy cron: a lost callback must not leave a paid customer waiting — ask about the newest open orders (at most 5 a run) */
+export async function tetraReconcile(c) {
+  if (String((await pay('tetraminator_status')) ?? '') !== 'ontetraminator') return
+  const since = new Date((now() - 65 * 60 + 12600) * 1000)
+  const p = (n) => String(n).padStart(2, '0')
+  const cut = `${since.getUTCFullYear()}/${p(since.getUTCMonth() + 1)}/${p(since.getUTCDate())} ${p(since.getUTCHours())}:${p(since.getUTCMinutes())}:${p(since.getUTCSeconds())}`
+  const rows = await all(sql`SELECT * FROM Payment_report WHERE Payment_Method = 'tetraminator' AND payment_Status IN ('Unpaid', 'waiting') AND time >= ${cut} ORDER BY time DESC LIMIT 5`)
+  for (const o of rows) await settleTetraminator(c, o)
 }
 
 /** smsExtractPayload() + payment/sms_webhook.php */
@@ -131,7 +158,7 @@ export async function pullRelay(c, force = false) {
     after = intval(ev.seq)
     await kvSet('relay:after', String(after))
     try {
-      const r = ev.type === 'variza' ? await onVariza(c, ev) : ev.type === 'sms' ? await onSms(c, ev) : 'unknown'
+      const r = ev.type === 'variza' ? await onVariza(c, ev) : ev.type === 'sms' ? await onSms(c, ev) : ev.type === 'tetraminator' ? await onTetraminator(c, ev) : 'unknown'
       console.log('relay', ev.seq, ev.type, r)
     } catch (e) {
       console.error('relay event', ev.seq, e)

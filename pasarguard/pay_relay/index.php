@@ -5,6 +5,7 @@
 // it already has. No database, no bot token, no secrets here except the bot's pull key.
 //
 //   POST /variza          Variza webhook
+//   GET  /tetraminator?order_id=…   Tetraminator's callback (no body, no signature; the bot verifies it with an inquiry)
 //   GET  /variza_return   the page Variza sends the customer back to
 //   POST /sms             the SMS forwarder
 //   GET  /pull?after=N    the bot (header X-Relay-Key): events after N; &ack=M forgets everything up to M
@@ -102,6 +103,15 @@ if (in_array($path, ['/variza_return', '/variza_return.php', '/payment/variza.ph
         . '<p style="color:#666">پرداخت شما دریافت شد و ظرف چند لحظه در ربات تأیید می‌شود. به ربات برگردید؛ اگر تا چند دقیقه تأیید نشد، دکمهٔ «پرداخت کردم» را بزنید.</p>'
         . '</body></html>';
     exit;
+}
+
+if (in_array($path, ['/tetraminator', '/tetraminator_webhook.php', '/payment/tetraminator_webhook.php'], true)) {
+    $orderId = (string) ($_GET['order_id'] ?? '');
+    if (!preg_match('/^[A-Za-z0-9]{6,40}$/', $orderId)) {
+        reply(400, ['status' => 'missing order_id']);
+    }
+    withQueue(['type' => 'tetraminator', 'query' => ['order_id' => $orderId]]);
+    reply(200, ['status' => 'queued']);
 }
 
 if (in_array($path, ['/sms', '/sms_webhook.php', '/payment/sms_webhook.php'], true)) {

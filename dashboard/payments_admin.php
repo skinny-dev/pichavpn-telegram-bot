@@ -64,7 +64,7 @@ function picha_pay_pending(PDO $pdo, int $days): array
             'user' => (string) ($r['namecustom'] ?: ($r['tg_username'] && $r['tg_username'] !== 'none' ? '@' . $r['tg_username'] : $r['id_user'])),
             'price' => (int) $r['price'], 'method' => (string) $r['Payment_Method'], 'status' => $status, 'problem' => $problem,
             'kind' => $purpose['kind'], 'target' => $purpose['target'],
-            'ref' => $r['Payment_Method'] === 'variza' ? (string) $r['dec_not_confirmed'] : '',
+            'ref' => in_array($r['Payment_Method'], ['variza', 'tetraminator'], true) ? (string) $r['dec_not_confirmed'] : '',
         ];
     }
     return ['rows' => $rows, 'counts' => $counts, 'days' => $days];

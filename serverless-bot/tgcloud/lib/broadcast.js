@@ -5,14 +5,14 @@ import { sendmessage, telegram, Editmessagetext } from './tg.js'
 import { J, intval } from './php.js'
 
 const BATCH = 25
-const BUTTONS = (T) => ({ 1: [T.textbot.sell, 'buy'], 2: [T.keyboard.start, 'start'], 3: [T.textbot.userTest, 'usertestbtn'], 4: [T.textbot.help, 'helpbtn'], 5: [T.textbot.affiliates, 'affiliatesbtn'], 6: [T.textbot.addBalance, 'Add_Balance'] })
+const BUTTONS = (T) => ({ 1: [T.textbot.sell, 'buy', 'primary'], 2: [T.keyboard.start, 'start'], 3: [T.textbot.userTest, 'usertestbtn'], 4: [T.textbot.help, 'helpbtn'], 5: [T.textbot.affiliates, 'affiliatesbtn'], 6: [T.textbot.addBalance, 'Add_Balance'] })
 export const broadcastButtons = (T) => Object.entries(BUTTONS(T)).map(([k, [label]]) => `${k} ← ${label}`).join('\n')
 
 export async function broadcastStart(c, draft, button) {
   const total = Number((await one(sql`SELECT COUNT(*) AS n FROM user WHERE User_Status != 'block'`)).n)
   const b = BUTTONS(c.T)[button]
   const progress = await sendmessage(c.from_id, c.T.Admin.messageBulk.progress.replace('%s', String(total)), J({ inline_keyboard: [[{ text: c.T.keyboard.cancelOperation, callback_data: 'cancel_sendmessage' }, { text: '▶️ ادامه ارسال', callback_data: 'continue_sendmessage' }]] }), 'HTML')
-  const job = { ...draft, markup: b ? J({ inline_keyboard: [[{ text: b[0], callback_data: b[1] }]] }) : null, admin: c.from_id, message_id: progress?.result?.message_id ?? progress?.message_id ?? 0, last_id: 0, sent: 0, failed: 0, total }
+  const job = { ...draft, markup: b ? J({ inline_keyboard: [[{ text: b[0], callback_data: b[1], ...(b[2] ? { style: b[2] } : {}) }]] }) : null, admin: c.from_id, message_id: progress?.result?.message_id ?? progress?.message_id ?? 0, last_id: 0, sent: 0, failed: 0, total }
   await kvSet('broadcast:job', JSON.stringify(job))
   return job
 }

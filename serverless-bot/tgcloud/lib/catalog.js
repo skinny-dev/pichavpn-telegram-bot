@@ -351,6 +351,8 @@ export async function stepPaymentKb(c) {
   const paid = Number((await one(sql`SELECT COUNT(*) AS n FROM Payment_report WHERE id_user = ${c.from_id} AND payment_Status = 'paid'`)).n)
   if (paid === 0 && pay('checkpaycartfirst') === 'onpayverify') kb = []
   const set = (v) => { const s = String(v ?? '').trim(); return s !== '' && s !== '0' }
+  const paused = (g) => Number(pay(g + '_pause_until', 0)) > Math.floor(Date.now() / 1000)
+  const priority = [] // the three main ways to pay come first: online payment, automatic card-to-card, Telegram Stars
   if (pay('nowpaymentstatus') === 'onnowpayment') kb.push([{ text: T.textbot.nowPayment, callback_data: 'plisio' }])
   if (pay('statusnowpayment') === '1') kb.push([{ text: T.textbot.cryptoPayment, callback_data: 'nowpayment' }])
   if (pay('digistatus') === 'ondigi') kb.push([{ text: T.textbot.nowPaymentTron, callback_data: 'digitaltron' }])
@@ -360,9 +362,11 @@ export async function stepPaymentKb(c) {
   if (pay('statusiranpay3') === 'oniranpay3' && paid >= 2) kb.push([{ text: T.textbot.iranPay1, callback_data: 'iranpay3' }])
   if (pay('statusaqayepardakht') === 'onaqayepardakht') kb.push([{ text: T.textbot.aqayePardakht, callback_data: 'aqayepardakht' }])
   if (pay('zarinpalstatus') === 'onzarinpal') kb.push([{ text: T.textbot.zarinPal, callback_data: 'zarinpal' }])
-  if (pay('variza_status', 'offvariza') === 'onvariza' && set(pay('variza_api_token', '')) && set(pay('variza_webhook_secret', ''))) kb.push([{ text: T.textbot.variza, callback_data: 'variza' }])
+  if (pay('variza_status', 'offvariza') === 'onvariza' && set(pay('variza_api_token', '')) && set(pay('variza_webhook_secret', '')) && !paused('variza')) priority[1] = [{ text: T.textbot.variza, callback_data: 'variza' }]
+  if (pay('tetraminator_status', 'offtetraminator') === 'ontetraminator' && set(pay('tetraminator_api_key', '')) && !paused('tetraminator')) priority[0] = [{ text: T.textbot.tetraminator || '💳 پرداخت آنلاین', callback_data: 'tetraminator' }]
   if (pay('paymentstatussnotverify') === 'onverifypay') kb.push([{ text: T.textbot.paymentNotVerify, callback_data: 'paymentnotverify' }])
-  if (intval(pay('statusstar')) === 1) kb.push([{ text: T.textbot.starTelegram, callback_data: 'startelegrams' }])
+  if (intval(pay('statusstar')) === 1) priority[2] = [{ text: T.textbot.starTelegram, callback_data: 'startelegrams' }]
+  kb = [...priority.filter(Boolean), ...kb]
   kb.push([{ text: T.keyboard.closeList, callback_data: 'colselist' }])
   return J({ inline_keyboard: kb })
 }

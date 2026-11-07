@@ -7,7 +7,9 @@ import { step, tehranDate } from '../bot.js'
 import { backuserKb } from '../keyboards.js'
 import { stepPaymentKb, customPlanPrice, addBalance } from '../catalog.js'
 import { smsUniqueAmount, smsReconcileOrder, reportTs } from '../sms.js'
-import { pullRelay } from '../relay.js'
+import { pullRelay, settleTetraminator } from '../relay.js'
+import { createPayTetraminator } from '../tetraminator.js'
+import { gatewayPause, varizaLimitReached, gatewayOutageSeconds } from '../gatepause.js'
 import { sprintf, strtr, numberFormat, intval, time, randomHex, J } from '../php.js'
 
 const isNumeric = (v) => (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(v))
@@ -88,6 +90,17 @@ async function createPayVariza(c, price, orderId) {
   }
 }
 
+/** the gateway is down / over its own limit: hide it for a while and give this customer the menu of the other methods at once */
+async function backToMenu(c, gateway, seconds, err) {
+  await gatewayPause(gateway, seconds)
+  const menu = JSON.parse(await stepPaymentKb(c))
+  menu.inline_keyboard = menu.inline_keyboard.filter((row) => row[0]?.callback_data !== gateway)
+  await sendmessage(c.from_id, c.T.users.Balance.gatewayTemporarilyOff || '⚠️ این روش پرداخت موقتاً در دسترس نیست.\nلطفاً یکی از روش‌های دیگر را انتخاب کنید 👇', J(menu), 'HTML')
+  await step(c, 'get_step_payment')
+  await report(c, 'errorreport', `🚫 ${gateway}: ${String(err).slice(0, 300)}\n(دکمهٔ آن ${Math.round(seconds / 60)} دقیقه از منوی پرداخت مخفی شد)`)
+  return true
+}
+
 export const payRoutes = [
   // Add_Balance: ask the amount
   async (c) => {
@@ -122,7 +135,7 @@ export const payRoutes = [
   },
   // a payment method
   async (c) => {
-    const GW = ['cart_to_offline', 'aqayepardakht', 'zarinpal', 'variza', 'plisio', 'nowpayment', 'iranpay1', 'iranpay2', 'iranpay4', 'iranpay3', 'digitaltron', 'startelegrams']
+    const GW = ['cart_to_offline', 'aqayepardakht', 'zarinpal', 'variza', 'tetraminator', 'plisio', 'nowpayment', 'iranpay1', 'iranpay2', 'iranpay4', 'iranpay3', 'digitaltron', 'startelegrams']
     if (!(c.user.step === 'get_step_payment' && GW.includes(c.datain))) return false
     const T = c.T, user = c.user, B = T.users.Balance
     const amount = user.Processing_value
@@ -164,6 +177,7 @@ export const payRoutes = [
       const p = await createPayVariza(c, amount, orderId)
       if (!p.pay_url) {
         const err = p.error ?? JSON.stringify(p)
+        if (varizaLimitReached(p)) return backToMenu(c, 'variza', 1800, err)
         await sendmessage(c.from_id, B.errorLinkPayment, c.keyboard, 'HTML')
         await step(c, 'home')
         await report(c, 'errorreport', sprintf(T.Admin.reportgroup.errorZarinpalLink || 'Variza link error: %s user %s', err, c.from_id))
@@ -174,6 +188,34 @@ export const payRoutes = [
       const kb = J({ inline_keyboard: [[{ text: B.payments, url: p.pay_url }], [{ text: B.varizaReceiptButton || '📎 پرداخت کردم، ارسال رسید', callback_data: 'sendresidvariza-' + orderId }]] })
       await sendHelp(c, 'helpvariza', false)
       await rememberMessage(await sendmessage(c.from_id, sprintf(B.invoiceCreated2, orderId, numberFormat(n(amount), 0)), kb, 'HTML'), orderId)
+      return true
+    }
+    if (c.datain === 'tetraminator') {
+      const lo = Math.max(intval((await pay('minbalancetetraminator')) ?? 50000), 50000) // the gateway refuses invoices below 50,000 toman
+      const hi = intval((await pay('maxbalancetetraminator')) ?? 10000000)
+      if (n(amount) < lo || n(amount) > hi) {
+        await sendmessage(c.from_id, strtr(B.depositRange, { '{mainbalance}': numberFormat(lo), '{maxbalance}': numberFormat(hi) }), null, 'HTML')
+        return true
+      }
+      await deletemessage(c.from_id, c.message_id)
+      await sendmessage(c.from_id, B.linkpayments, c.keyboard, 'HTML')
+      const orderId = randomHex(5)
+      const p = await createPayTetraminator(c, amount, orderId)
+      if (!p.pay_url || !p.pay_id) {
+        const err = p.error ?? JSON.stringify(p)
+        const pauseFor = gatewayOutageSeconds(p)
+        if (pauseFor > 0) return backToMenu(c, 'tetraminator', pauseFor, err)
+        await sendmessage(c.from_id, B.errorLinkPayment, c.keyboard, 'HTML')
+        await step(c, 'home')
+        await report(c, 'errorreport', sprintf(T.Admin.reportgroup.errorZarinpalLink || 'Tetraminator link error: %s user %s', err, c.from_id))
+        return true
+      }
+      await run(sql`INSERT INTO Payment_report (id_user, id_order, time, price, payment_Status, Payment_Method, id_invoice, dec_not_confirmed)
+        VALUES (${c.from_id}, ${orderId}, ${tehranDate()}, ${amount}, 'Unpaid', 'tetraminator', ${invoiceTag}, ${p.pay_id})`)
+      const kb = J({ inline_keyboard: [[{ text: B.payments, url: p.pay_url }], [{ text: B.tetraminatorCheckButton || '✅ پرداخت کردم، بررسی پرداخت', callback_data: 'checktetra-' + orderId }]] })
+      await sendHelp(c, 'helptetraminator', false)
+      const text = sprintf(B.tetraminatorInvoice || '✅ فاکتور پرداخت ایجاد شد.\n\n🔢 شماره فاکتور : %s\n💰 مبلغ فاکتور : %s تومان\n\n⏳ این فاکتور ۶۰ دقیقه اعتبار دارد.\n\n📌 بعد از پرداخت موفق چند ثانیه صبر کنید. اگر پیام تأیید نیامد، دکمهٔ «پرداخت کردم، بررسی پرداخت» را بزنید.', orderId, numberFormat(n(amount), 0))
+      await rememberMessage(await sendmessage(c.from_id, text, kb, 'HTML'), orderId)
       return true
     }
     if (c.datain === 'startelegrams') {
@@ -202,6 +244,23 @@ export const payRoutes = [
     // gateways that need the PHP server's callback pages
     await sendmessage(c.from_id, B.errorLinkPayment, c.keyboard, 'HTML')
     await step(c, 'home')
+    return true
+  },
+  // «I paid» (Tetraminator): ask the gateway itself (the callback may have been lost) and deliver once if it is paid
+  async (c) => {
+    const m = /^checktetra-([A-Za-z0-9]+)$/.exec(c.datain)
+    if (!m) return false
+    const o = await orderBy(m[1])
+    if (!o || String(o.id_user) !== c.from_id || o.Payment_Method !== 'tetraminator') return true
+    const B = c.T.users.Balance
+    const alertText = (text) => telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text, show_alert: true, cache_time: 3 })
+    const r = await settleTetraminator(c, o)
+    if (r === 'paid') { await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id }); await deletemessage(c.from_id, c.message_id) }
+    else if (r === 'already') await alertText(B.tetraminatorAlready || '✅ این پرداخت قبلاً ثبت شده است.')
+    else if (r === 'unpaid') await alertText(B.tetraminatorUnpaid || '⏳ هنوز پرداختی دریافت نشده. بعد از پرداخت چند ثانیه صبر کنید و دوباره بزنید.')
+    else if (r === 'amount_mismatch') await alertText(B.tetraminatorMismatch || '⚠️ مبلغ پرداخت‌شده با فاکتور یکی نیست. با پشتیبانی در ارتباط باشید.')
+    else if (r === 'delivery_failed') await alertText(B.tetraminatorDeliveryFailed || '⚠️ پرداخت تأیید شد ولی تحویل سرویس با خطا روبه‌رو شد. پشتیبانی پیگیری می‌کند.')
+    else await alertText(B.tetraminatorError || '❌ استعلام پرداخت انجام نشد. چند لحظهٔ دیگر دوباره امتحان کنید.')
     return true
   },
   // «I paid, send the receipt» (Variza)

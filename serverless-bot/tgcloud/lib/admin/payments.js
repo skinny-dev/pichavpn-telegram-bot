@@ -32,6 +32,14 @@ export const adminPayRoutes = [
       await Editmessagetext(c.from_id, c.message_id, sprintf(P.approvedByOther, bu.id, o.id_order, bu.username, bu.Balance, fmt), done)
     }
     if (o.payment_Status === 'paid' || o.payment_Status === 'reject') { await other(); return true }
+    // a second Variza / Tetraminator link for the same amount is easy to approve by hand after the first one was paid by the gateway; the order lock
+    // cannot see that (two orders): refused when the same customer has an equal paid order of the same gateway from the last 30 minutes
+    if (['variza', 'tetraminator'].includes(o.Payment_Method)) {
+      const d = new Date((Math.floor(Date.now() / 1000) - 1800 + 12600) * 1000), p2 = (x) => String(x).padStart(2, '0')
+      const cut = `${d.getUTCFullYear()}/${p2(d.getUTCMonth() + 1)}/${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}`
+      const dup = await one(sql`SELECT id_order FROM Payment_report WHERE id_user = ${o.id_user} AND Payment_Method = ${o.Payment_Method} AND payment_Status = 'paid' AND price = ${o.price} AND id_order <> ${id} AND time >= ${cut} LIMIT 1`)
+      if (dup) { await alert(c, `⚠️ این کاربر همین الان یک پرداخت هم‌مبلغ تأییدشده از همین درگاه دارد (سفارش ${dup.id_order}). احتمالاً تکراری است؛ تأیید نشد.`); return true }
+    }
     const claim = await run(sql`UPDATE Payment_report SET payment_Status = 'paid' WHERE id_order = ${id} AND payment_Status NOT IN ('paid', 'reject')`)
     if (Number(claim?.rowsAffected ?? 0) === 0) { await other(); return true }
     await directPayment(c, id, done)
