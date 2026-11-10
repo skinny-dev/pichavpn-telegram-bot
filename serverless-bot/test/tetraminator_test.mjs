@@ -132,6 +132,7 @@ try {
   check('variza limit: another 422 / a 500 do not count', !varizaLimitReached({ http_code: 422, decoded: { message: 'amount' } }) && !varizaLimitReached({ http_code: 500, decoded: { message: msg } }) && !varizaLimitReached(null))
   check('outage seconds: 522 / timeout -> 600, 401 -> 1800, 400 / success -> 0', gatewayOutageSeconds({ error: 'x', http_code: 522 }) === 600 && gatewayOutageSeconds({ error: 'x', http_code: 0 }) === 600 && gatewayOutageSeconds({ error: 'x', http_code: 401 }) === 1800 && gatewayOutageSeconds({ error: 'x', http_code: 400 }) === 0 && gatewayOutageSeconds({ pay_url: 'u' }) === 0)
 
+  check('variza unreachable (DNS / timeout from the server) -> 10 minute pause', gatewayOutageSeconds({ error: 'fetch: Could not resolve host: variza.ir' }) === 600 && gatewayOutageSeconds({ error: 'relay: 500' }) === 600)
   // ---- the payment menu: online payment, automatic card-to-card, Stars, then the rest; paused ones hidden
   const T = { textbot: { cartToCart: 'CARD', variza: 'AUTO', tetraminator: 'ONLINE', starTelegram: 'STARS', zarinPal: 'ZARIN' }, keyboard: { closeList: 'CLOSE' } }
   const menu = async (extra = {}) => {

@@ -5015,9 +5015,11 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             $text_error = isset($pay['error']) ? $pay['error'] : json_encode($pay);
             paymentErrorReport($datain, $from_id, $username, $user['Processing_value'] ?? 0, $pay ?? ($payment ?? ($paylink ?? ($straCreateLink ?? ($text_error ?? null)))));
             require_once __DIR__ . '/gateway_pause.php';
-            if (varizaLimitReached($pay)) {
-                // Variza's own subscription limit: hide it for 30 minutes and let this customer pick another way to pay right now
-                gatewayPause($pdo, 'variza', 1800);
+            $varizaPause = varizaLimitReached($pay) ? 1800 : gatewayOutageSeconds($pay);
+            if ($varizaPause > 0) {
+                // Variza's own subscription limit (30 min) or Variza unreachable from the server: DNS / timeout / 5xx (10 min) —
+                // hide it and let this customer pick another way to pay right now
+                gatewayPause($pdo, 'variza', $varizaPause);
                 $menu = json_decode($step_payment, true);
                 $menu['inline_keyboard'] = array_values(array_filter($menu['inline_keyboard'] ?? [], fn($row) => ($row[0]['callback_data'] ?? '') !== 'variza'));
                 sendmessage($from_id, $textbotlang['users']['Balance']['gatewayTemporarilyOff'] ?? "⚠️ این روش پرداخت موقتاً در دسترس نیست.\nلطفاً یکی از روش‌های دیگر را انتخاب کنید 👇", json_encode($menu), 'HTML');

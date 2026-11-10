@@ -87,6 +87,7 @@ When Variza answers HTTP 422 with «به دلیل محدودیت اشتراک ف
 says «محدودیت اشتراک واریزا». It ends by itself; a new refusal starts a new pause. Fix at the source: upgrade/renew the Variza plan.
 Tetraminator: when creating an invoice gets no answer / a timeout / a 5xx (Cloudflare 522 = their server does not answer) the button is hidden for 10 minutes
 (401/403 = refused key or disabled shop: 30 minutes) and the customer gets the menu of the other methods at once. A new invoice is tried twice, 12 s each.
+Variza that the server cannot reach (DNS failure, connection timeout, 5xx — «Could not resolve host: variza.ir») is hidden for 10 minutes the same way (both bots).
 Tests: `php tests/pay_menu_order_test.php`.
 
 ## Tetraminator gateway (tetraminator.com)

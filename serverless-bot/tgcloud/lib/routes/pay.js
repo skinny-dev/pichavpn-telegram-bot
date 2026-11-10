@@ -177,7 +177,8 @@ export const payRoutes = [
       const p = await createPayVariza(c, amount, orderId)
       if (!p.pay_url) {
         const err = p.error ?? JSON.stringify(p)
-        if (varizaLimitReached(p)) return backToMenu(c, 'variza', 1800, err)
+        const vp = varizaLimitReached(p) ? 1800 : gatewayOutageSeconds(p) // its own limit (30 min) or unreachable / 5xx (10 min)
+        if (vp > 0) return backToMenu(c, 'variza', vp, err)
         await sendmessage(c.from_id, B.errorLinkPayment, c.keyboard, 'HTML')
         await step(c, 'home')
         await report(c, 'errorreport', sprintf(T.Admin.reportgroup.errorZarinpalLink || 'Variza link error: %s user %s', err, c.from_id))

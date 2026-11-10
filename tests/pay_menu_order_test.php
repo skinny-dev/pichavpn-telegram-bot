@@ -55,5 +55,9 @@ ok(gatewayOutageSeconds(['error' => 'invalid json', 'http_code' => 522]) === 600
 ok(gatewayOutageSeconds(['error' => 'curl: Operation timed out', 'http_code' => 0]) === 600, 'timeout -> 10 minute pause');
 ok(gatewayOutageSeconds(['error' => 'http 401', 'http_code' => 401]) === 1800, 'refused key / disabled shop -> 30 minute pause');
 ok(gatewayOutageSeconds(['error' => 'http 400', 'http_code' => 400]) === 0 && gatewayOutageSeconds(['pay_url' => 'https://x']) === 0 && gatewayOutageSeconds(null) === 0, 'a bad request or a success never pauses it');
+// Variza unreachable from the server (what the production alerts showed): hidden for 10 minutes
+ok(gatewayOutageSeconds(['error' => 'curl: Could not resolve host: variza.ir']) === 600, 'Variza DNS failure -> 10 minute pause');
+ok(gatewayOutageSeconds(['error' => 'curl: Failed to connect to variza.ir port 443 after 24224 ms: Connection timed out']) === 600, 'Variza connection timeout -> 10 minute pause');
+ok(gatewayOutageSeconds(['error' => 'http 422', 'http_code' => 422]) === 0, 'a Variza 422 that is not the subscription limit does not pause it');
 echo $fail ? "\n$fail FAILED\n" : "\nall passed\n";
 exit($fail ? 1 : 0);
