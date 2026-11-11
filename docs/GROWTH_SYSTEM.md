@@ -558,7 +558,7 @@ Validator: every number (80, 30, 370000) is in the facts pack ✓ · no forbidde
 | 2 | Content Engine: facts pack, LLM client, validator, dedupe, library, brand voice, variations | validator rejects a draft with an invented number/place (test set of bad drafts) |
 | 3 | Events + triggers: server/plan/promo/maintenance detectors, time triggers, dry-run | each detector fires once per real event; no event ⇒ no post |
 | 4 | Campaign Engine: templates, state machine, promo-module integration, tracking links, attribution, stats snapshot | a campaign changes real prices through promo and restores them; revenue attributed matches the stats definition |
-| 5 | Lifecycle private path + opt-out + audience segments | users in opt-out never get messages; rate limits respected |
+| 5 | Lifecycle private path + opt-out + audience segments + **customer care follow-ups (§14)** (5a our-fault cases, 5b payments/tests, 5c renewals + reasons page) | users in opt-out never get messages; rate limits respected |
 | 6 | Analytics + recommendations; optional views via MTProto/stat service | recommendation shown with its numbers; optimizer never uses views as objective |
 
 Every phase ships with node tests (like `tetraminator_test.mjs`) and is switched on in approval mode first.
@@ -570,3 +570,95 @@ Every phase ships with node tests (like `tetraminator_test.mjs`) and is switched
 2. Which categories you want enabled first (suggested: promotion, product_update, server_update, education, poll, status).
 3. Your brand voice in 3–5 example posts you like (I will turn them into the voice sheet).
 4. The LLM key will be entered later through a hidden prompt on the server, never in chat.
+
+---
+
+## 14. Customer care follow-ups («مراقبت از مشتری») — problem first, never pushy
+
+Goal: when someone started something and did not finish it (cancelled/unpaid order, expired test, service that never connected …) we **ask what happened and fix it**. Selling is a side effect of solving the problem. This is the private lifecycle path (§4.2) with stricter rules; it is added to Phase 5 and uses only data the bot already has.
+
+### 14.1 Cases (each = one trigger, one detector, one message, at most once)
+| # | Case | Detector (real data) | When | Priority |
+|---|---|---|---|---|
+| C1 | **Our fault: payment link failed / gateway error** the customer saw | `paymentErrorReport` / `order_failures` log, gateway-pause events | when the gateway is back (or the same hour) | highest |
+| C2 | **Paid but not delivered** | `pending_watch` result `paid_undelivered` / `delivery_failed` | immediately — not a "follow-up": a human is alerted and the customer is told it is being fixed | highest |
+| C3 | **Receipt rejected** by an admin | `Payment_report.payment_Status = reject` | right after, with the reason and what to do next | high |
+| C4 | **Abandoned / expired payment** | `Payment_report` Unpaid/expire for a purchase or renewal with no paid order from the same user after it | 2–3 h after expiry, daytime only | normal |
+| C5 | **Sold but never connected** | invoice active with panel status `on_hold` (waiting for first connection) | 12–24 h after purchase | high (helps, no sales) |
+| C6 | **Test account not converted** | test invoice ended/used, no paid order | 6–24 h after the test ended | normal |
+| C7 | **Service expired, not renewed** | invoice `Service_time` passed, no renewal | 2–3 days after expiry | normal |
+| C8 | **Cancelled a service** | `cancel_service` row | after the decision | normal |
+| C9 | **Support ticket closed** | ticket closed | 1 day later: «حل شد؟» | normal |
+| C10 | **Started, never tested/bought** | `/start` only, no test, no order | 24–48 h | low |
+
+C1–C3 are our responsibility and always go out; C4–C10 follow the rules below.
+
+### 14.2 Rules that keep it respectful
+1. **Verify before writing:** for C4 first run the pending-watch inquiry — a customer whose payment actually arrived is never asked why they did not pay (they get the service instead).
+2. **One message per case, one case per week per person** (global cap `care_max_per_user_week`, default 1; C1–C3 are exempt). No second reminder, ever, for the same case.
+3. **Quiet hours** 22:00–09:00 Tehran; no messages while a ticket is open or in the last 24 h after a human conversation; never after a successful purchase from the same user.
+4. **First message is never a discount.** Help first. A discount may be attached only to C4/C7 if an administrator enabled it for that case, as a *second* option shown after the person says "قیمت" is the problem — never pushed.
+5. **Always an exit:** every message has «🔕 دیگر پیام نده» (the same opt-out flag as the reminders) and «✅ مشکلی نبود، ممنون». Choosing either ends the case and snoozes the user for 60 days.
+6. **A reply is a conversation, not a form:** any free text goes to support as a ticket with the case context attached (order id, gateway, error, service) so the agent does not ask again.
+7. **Tone:** polite, short (≤ 4 lines), one question, no guilt, no urgency tricks, no "آخرین فرصت". Admin approves each template once; the LLM may only vary the wording of an approved template (facts are filled from data, §5).
+8. **Circuit breaker:** if opt-outs exceed 3% of a case's sends in a week, that case pauses itself and tells the admin.
+9. Blocked users are skipped silently; sends use the shared rate-limited sender (§7).
+
+### 14.3 Messages (templates; `{}` filled from data)
+**C4 abandoned payment** (buttons below)
+> سلام {name} 👋
+> دیدم پرداخت سفارش {product} کامل نشد. اگر موقع پرداخت مشکلی پیش آمد یا سؤالی دارید بفرمایید تا همین‌جا حلش کنیم.
+
+Buttons: `🔗 لینک پرداخت باز نشد / مشکل در پرداخت` · `💸 پرداخت کردم ولی فعال نشد` · `🤔 نمی‌دانم کدام پلن مناسب است` · `💰 قیمت برایم زیاد بود` · `✅ فعلاً نیاز ندارم` · `🔕 دیگر پیام نده`
+
+What each button does:
+- *لینک باز نشد / مشکل پرداخت* → the bot offers the **other** payment methods that are currently healthy (gateway pause aware) with a fresh link, and opens a care ticket with the gateway and error attached.
+- *پرداخت کردم ولی فعال نشد* → immediate inquiry (Tetraminator) / check of the card-to-card SMS; if found it is delivered at once, otherwise a ticket marked **urgent** is opened and an admin is alerted in the report group.
+- *نمی‌دانم کدام پلن* → a two-question advisor (what for: social/streaming/gaming/work; how many devices) that recommends one plan from real products; no pressure.
+- *قیمت زیاد بود* → shows the cheapest plan and the active promo if one exists; if an admin enabled it, one discount option. Reason stored.
+- *فعلاً نیاز ندارم* → «باشه، هر وقت نیاز داشتید اینجا هستیم 🌱», snooze 30 days.
+
+**C5 never connected**
+> سلام {name}، سرویس شما فعال شده ولی هنوز وصل نشده‌اید. راهنمای اتصال برای گوشی/ویندوز اینجاست. اگر وصل نشد بگویید کدام برنامه و چه خطایی می‌بینید تا کمک کنیم.
+
+Buttons: `📱 آموزش اتصال` · `❌ وصل نمی‌شود` · `✅ وصل شدم`. («وصل نمی‌شود» → ticket with the service's panel status and last-online time.)
+
+**C6 test not converted**
+> سلام {name}، تست شما تمام شد. سرعت و اتصال چطور بود؟ اگر چیزی راضی‌تان نکرد بگویید تا درستش کنیم.
+
+Buttons: `👍 خوب بود` (→ plan list) · `🐢 کند بود` · `❌ وصل نمی‌شد` · `📶 روی اینترنت من خوب نبود` · `🔕 دیگر پیام نده`. Answers go to the "reasons" report; «کند بود / وصل نمی‌شد» open a ticket.
+
+**C7 expired, not renewed**
+> سلام {name}، سرویس {service} چند روز پیش تمام شد. اگر تمدید مشکلی داشت یا می‌خواهید چیزی را تغییر دهید، پیام بدهید. تمدید یک دکمه است:
+
+Buttons: `🔄 تمدید` · `🔁 تغییر پلن` · `🙋 مشکلی داشتم` · `✅ فعلاً نیاز ندارم` · `🔕`.
+
+**C8 cancelled a service** — «متأسفیم که می‌روید. اگر مشکل فنی یا قیمت بود بگویید» + reasons: `کند بود` · `قطع می‌شد` · `گران بود` · `دیگر نیاز ندارم` · `سرویس بهتری پیدا کردم`.
+
+**C9 ticket closed** — «مشکل شما حل شد؟» `✅ بله` / `❌ هنوز نه` (reopens the ticket).
+
+**C1 / C3** are plain apologies/explanations with the next step (new link / why the receipt was rejected and how to resend).
+
+### 14.4 Data (added to §3)
+```sql
+growth_care_cases(
+  id INT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT, case_type VARCHAR(8),   -- C1..C10
+  ref VARCHAR(40),                      -- order id / invoice id / ticket id
+  state VARCHAR(16),                    -- queued | sent | answered | resolved | snoozed | opted_out | skipped
+  skip_reason VARCHAR(40),              -- paid_meanwhile | quiet | cap | blocked | optout ...
+  reason VARCHAR(40), ticket_id INT NULL,
+  sent_at INT, answered_at INT, resolved_at INT, purchased_within_48h TINYINT,
+  UNIQUE KEY (user_id, case_type, ref)  -- one message per case, ever
+)
+```
+Reuses: `Payment_report`, `invoice`, `cancel_service`, `support_message`, `pending_watch` results, the broadcast sender, the opt-out flag, gateway pause.
+
+### 14.5 What you see (panel page «مراقبت از مشتری»)
+- This week: cases found / sent / answered / resolved / opt-outs; per case.
+- **Reasons ranking** («چرا پرداخت نکردند / چرا نرفتند»): e.g. link did not open 14, price 9, don't know the plan 6 — each with the people, so a repeated technical reason becomes a bug to fix (for example, one gateway failing).
+- Open care tickets (urgent first) with the context attached.
+- Recovered: purchases within 48 h of a message (counted, not used to push harder).
+- Per-case switches (on/off), approval of templates, the weekly cap and quiet hours.
+
+### 14.6 Phasing and tests
+Runs on the Serverless bot's lazy cron (follow-ups are not minute-critical). Phase 5a: C1–C3 (our fault) + opt-out + cap; 5b: C4–C6; 5c: C7–C10 and the reasons page. Tests: no message to someone whose payment arrived; the cap and quiet hours hold; one message per case under repeated runs; opt-out/snooze respected; each button leads to the described action (ticket opened with context / inquiry run / other gateways offered); the circuit breaker pauses a case.
