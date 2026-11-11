@@ -84,7 +84,12 @@ export async function statsByMethod(start, end) {
   const rows = await qAll(`SELECT CASE WHEN Payment_Method = 'cart to cart' AND EXISTS (SELECT 1 FROM sms_inbox x WHERE x.id_order = Payment_report.id_order AND x.status = 'matched')
       THEN 'cart to cart sms' ELSE Payment_Method END m, COUNT(*) c, SUM(CAST(price AS INTEGER)) s FROM Payment_report
       WHERE payment_Status = 'paid' AND ${statsTs('time')} BETWEEN ? AND ? AND Payment_Method NOT IN (${NON_CASH}) GROUP BY m ORDER BY s DESC`, [start, end])
-  return rows.map((x) => ({ m: String(x.m), c: Math.trunc(N(x.c)), s: N(x.s) }))
+  const all = rows.map((x) => ({ m: String(x.m), c: Math.trunc(N(x.c)), s: N(x.s) }))
+  // one «card to card» line with the two ways it was confirmed under it
+  const sub = all.filter((x) => x.m === 'cart to cart sms' || x.m === 'cart to cart').map((x) => ({ ...x, m: x.m === 'cart to cart' ? 'cart to cart receipt' : 'cart to cart sms' }))
+  const out = all.filter((x) => x.m !== 'cart to cart sms' && x.m !== 'cart to cart')
+  if (sub.length) out.push({ m: 'cart to cart', c: sub.reduce((a, x) => a + x.c, 0), s: sub.reduce((a, x) => a + x.s, 0), sub })
+  return out.sort((a, b) => b.s - a.s)
 }
 
 export async function statsCollect(start, end) {
@@ -212,7 +217,7 @@ export async function statsOverall() {
 }
 
 const METHODS = {
-  'cart to cart sms': '💳 کارت به کارت (خودکار، با پیامک)', 'cart to cart': '💳 کارت به کارت (رسید، تأیید ادمین)', variza: '🏦 واریزا', 'Currency Rial 1': '🏦 درگاه ریالی ۱', 'Currency Rial 2': '🏦 درگاه ریالی ۲', 'Currency Rial 3': '🏦 درگاه ریالی ۳', AbanGateway: '🏦 درگاه آبان', 'Star Telegram': '⭐ استار تلگرام', tetraminator: '🏦 تترامینیتور', 'after pay': '🧾 پرداخت بعد از دریافت',
+  'cart to cart': '💳 کارت به کارت', 'cart to cart sms': 'خودکار با پیامک', 'cart to cart receipt': 'با رسید (تأیید ادمین)', variza: '🏦 واریزا', 'Currency Rial 1': '🏦 درگاه ریالی ۱', 'Currency Rial 2': '🏦 درگاه ریالی ۲', 'Currency Rial 3': '🏦 درگاه ریالی ۳', AbanGateway: '🏦 درگاه آبان', 'Star Telegram': '⭐ استار تلگرام', tetraminator: '🏦 تترامینیتور', 'after pay': '🧾 پرداخت بعد از دریافت',
   'manual invoice': '✍️ فاکتور دستی', 'add order by admin': '🛠 سفارش ثبت‌شده توسط ادمین', 'extend by admin': '🛠 تمدید توسط ادمین', wallet: '👛 پرداخت از کیف پول (داخلی)',
   'add balance by admin': '🎁 شارژ توسط ادمین (هدیه)', 'low balance by admin': '➖ کسر موجودی توسط ادمین', zarinpal: 'زرین‌پال', aqayepardakht: 'آقای پرداخت',
   plisio: 'Plisio', nowpayment: 'NowPayments', 'arze digital offline': 'ارز دیجیتال (دستی)',
@@ -258,7 +263,7 @@ export async function statsReport(key) {
     '🛒 خرید نمایندگان پیشرفته : ' + n(d.agent_n2) + ' عدد — ' + n(d.agent_n2_sum) + ' تومان', '',
     '💳 <b>پول دریافتی (مبنای درآمد)</b>', '• پرداخت مشتریان (درگاه‌ها) : ' + n(d.wallet_in) + ' عدد — ' + n(d.wallet_in_sum) + ' تومان',
     '• ثبت‌شده توسط ادمین : ' + n(d.admin_in) + ' عدد — ' + n(d.admin_in_sum) + ' تومان',
-    ...(d.by_method?.length ? ['', '🏦 <b>دریافتی به تفکیک منبع</b>', ...d.by_method.map((m) => '• ' + statsMethodLabel(m.m) + ' : ' + n(m.c) + ' عدد — ' + n(m.s) + ' تومان' + (d.revenue > 0 ? ' (' + pct(m.s, d.revenue) + '٪)' : ''))] : []), '',
+    ...(d.by_method?.length ? ['', '🏦 <b>دریافتی به تفکیک منبع</b>', ...d.by_method.flatMap((m) => ['• ' + statsMethodLabel(m.m) + ' : ' + n(m.c) + ' عدد — ' + n(m.s) + ' تومان' + (d.revenue > 0 ? ' (' + pct(m.s, d.revenue) + '٪)' : ''), ...(m.sub ?? []).map((x) => '   ↳ ' + statsMethodLabel(x.m) + ' : ' + n(x.c) + ' عدد — ' + n(x.s) + ' تومان')])] : []), '',
     '📒 <b>صورت سود و زیان</b>', '• فروش (پول دریافتی) : ' + n(d.revenue) + ' تومان')
   if (d.wallet_out_sum > 0) L.push('• − بازپرداخت به مشتریان : ' + n(d.wallet_out) + ' عدد — ' + n(d.wallet_out_sum) + ' تومان')
   L.push('• − خرید (بهای تمام‌شده) : ' + n(d.cogs) + ' عدد — ' + n(d.cogs_sum) + ' تومان',

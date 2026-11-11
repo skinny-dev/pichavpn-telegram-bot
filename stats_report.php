@@ -186,7 +186,22 @@ function statsByMethod(PDO $pdo, $start, $end)
     $st = $pdo->prepare("SELECT $m m, COUNT(*) c, SUM(CAST(price AS SIGNED)) s FROM Payment_report WHERE payment_Status = 'paid' AND " . statsTs('time') . " BETWEEN :s AND :e
         AND Payment_Method NOT IN (" . STATS_NON_CASH . ") GROUP BY m ORDER BY s DESC");
     $st->execute([':s' => $start, ':e' => $end]);
-    return array_map(fn($x) => ['m' => (string) $x['m'], 'c' => (int) $x['c'], 's' => (float) $x['s']], $st->fetchAll(PDO::FETCH_ASSOC));
+    $rows = array_map(fn($x) => ['m' => (string) $x['m'], 'c' => (int) $x['c'], 's' => (float) $x['s']], $st->fetchAll(PDO::FETCH_ASSOC));
+    // one «card to card» line with the two ways it was confirmed under it
+    $sub = [];
+    $out = [];
+    foreach ($rows as $x) {
+        if ($x['m'] === 'cart to cart sms' || $x['m'] === 'cart to cart') {
+            $sub[] = ['m' => $x['m'] === 'cart to cart' ? 'cart to cart receipt' : 'cart to cart sms', 'c' => $x['c'], 's' => $x['s']];
+        } else {
+            $out[] = $x;
+        }
+    }
+    if ($sub) {
+        $out[] = ['m' => 'cart to cart', 'c' => array_sum(array_column($sub, 'c')), 's' => array_sum(array_column($sub, 's')), 'sub' => $sub];
+    }
+    usort($out, fn($a, $b) => $b['s'] <=> $a['s']);
+    return $out;
 }
 
 function statsCollect(PDO $pdo, $start, $end)
@@ -391,7 +406,7 @@ function statsOverall(PDO $pdo)
 function statsMethodLabel($m)
 {
     static $map = [
-        'cart to cart sms' => '💳 کارت به کارت (خودکار، با پیامک)', 'cart to cart' => '💳 کارت به کارت (رسید، تأیید ادمین)', 'variza' => '🏦 واریزا', 'Currency Rial 1' => '🏦 درگاه ریالی ۱', 'Currency Rial 2' => '🏦 درگاه ریالی ۲', 'Currency Rial 3' => '🏦 درگاه ریالی ۳', 'AbanGateway' => '🏦 درگاه آبان', 'Star Telegram' => '⭐ استار تلگرام', 'tetraminator' => '🏦 تترامینیتور',
+        'cart to cart' => '💳 کارت به کارت', 'cart to cart sms' => 'خودکار با پیامک', 'cart to cart receipt' => 'با رسید (تأیید ادمین)', 'variza' => '🏦 واریزا', 'Currency Rial 1' => '🏦 درگاه ریالی ۱', 'Currency Rial 2' => '🏦 درگاه ریالی ۲', 'Currency Rial 3' => '🏦 درگاه ریالی ۳', 'AbanGateway' => '🏦 درگاه آبان', 'Star Telegram' => '⭐ استار تلگرام', 'tetraminator' => '🏦 تترامینیتور',
         'after pay' => '🧾 پرداخت بعد از دریافت', 'manual invoice' => '✍️ فاکتور دستی', 'add order by admin' => '🛠 سفارش ثبت‌شده توسط ادمین',
         'extend by admin' => '🛠 تمدید توسط ادمین', 'wallet' => '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin' => '🎁 شارژ توسط ادمین (هدیه)',
         'low balance by admin' => '➖ کسر موجودی توسط ادمین', 'zarinpal' => 'زرین‌پال', 'aqayepardakht' => 'آقای پرداخت', 'plisio' => 'Plisio',
@@ -464,6 +479,9 @@ function statsReport(PDO $pdo, $key)
         $L[] = '🏦 <b>دریافتی به تفکیک منبع</b>';
         foreach ($d['by_method'] as $m) {
             $L[] = '• ' . statsMethodLabel($m['m']) . ' : ' . $n($m['c']) . ' عدد — ' . $n($m['s']) . ' تومان' . ($d['revenue'] > 0 ? ' (' . statsPct($m['s'], $d['revenue']) . '٪)' : '');
+            foreach ($m['sub'] ?? [] as $x) {
+                $L[] = '   ↳ ' . statsMethodLabel($x['m']) . ' : ' . $n($x['c']) . ' عدد — ' . $n($x['s']) . ' تومان';
+            }
         }
     }
     $L[] = '';
