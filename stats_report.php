@@ -174,6 +174,21 @@ function accFormatDateTime($ts)
     return jdate('Y/m/d H:i', (int) $ts, '', 'Asia/Tehran', 'en');
 }
 
+/**
+ * Money received in [start,end] by source (paid payments, same cash rules as revenue). Card-to-card is split into the ones
+ * the bank SMS confirmed by itself and the ones an admin approved from a receipt. [['m' => method key, 'c' => count, 's' => toman], ...] by amount.
+ */
+function statsByMethod(PDO $pdo, $start, $end)
+{
+    $m = statsHas($pdo, 'sms_inbox', 'id_order')
+        ? "CASE WHEN Payment_Method = 'cart to cart' AND EXISTS (SELECT 1 FROM sms_inbox x WHERE x.id_order = Payment_report.id_order AND x.status = 'matched') THEN 'cart to cart sms' ELSE Payment_Method END"
+        : 'Payment_Method';
+    $st = $pdo->prepare("SELECT $m m, COUNT(*) c, SUM(CAST(price AS SIGNED)) s FROM Payment_report WHERE payment_Status = 'paid' AND " . statsTs('time') . " BETWEEN :s AND :e
+        AND Payment_Method NOT IN (" . STATS_NON_CASH . ") GROUP BY m ORDER BY s DESC");
+    $st->execute([':s' => $start, ':e' => $end]);
+    return array_map(fn($x) => ['m' => (string) $x['m'], 'c' => (int) $x['c'], 's' => (float) $x['s']], $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
 function statsCollect(PDO $pdo, $start, $end)
 {
     $pdo->exec("SET time_zone = '+03:30'"); // bot times are Tehran local; Iran has no DST
@@ -236,6 +251,7 @@ function statsCollect(PDO $pdo, $start, $end)
     $row = $one("SELECT COUNT(*) c, SUM(CAST(price AS SIGNED)) p $pay AND Payment_Method IN (" . STATS_ADMIN_SALE . ')', $p);
     $r['admin_in'] = (int) $n($row['c']);
     $r['admin_in_sum'] = $n($row['p']);
+    $r['by_method'] = statsByMethod($pdo, $start, $end);
     // customers who paid in the period (cash in, same rules as revenue) and customers who bought (orders)
     $row = $one("SELECT COUNT(DISTINCT id_user) c $pay AND Payment_Method NOT IN (" . STATS_NON_CASH . ") AND id_user IS NOT NULL AND id_user != ''", $p);
     $r['payers'] = (int) $n($row['c']);
@@ -375,7 +391,7 @@ function statsOverall(PDO $pdo)
 function statsMethodLabel($m)
 {
     static $map = [
-        'cart to cart' => '💳 کارت به کارت', 'Star Telegram' => '⭐ استار تلگرام', 'tetraminator' => '🏦 درگاه tetraminator',
+        'cart to cart sms' => '💳 کارت به کارت (خودکار، با پیامک)', 'cart to cart' => '💳 کارت به کارت (رسید، تأیید ادمین)', 'variza' => '🏦 واریزا', 'Currency Rial 1' => '🏦 درگاه ریالی ۱', 'Currency Rial 2' => '🏦 درگاه ریالی ۲', 'Currency Rial 3' => '🏦 درگاه ریالی ۳', 'AbanGateway' => '🏦 درگاه آبان', 'Star Telegram' => '⭐ استار تلگرام', 'tetraminator' => '🏦 تترامینیتور',
         'after pay' => '🧾 پرداخت بعد از دریافت', 'manual invoice' => '✍️ فاکتور دستی', 'add order by admin' => '🛠 سفارش ثبت‌شده توسط ادمین',
         'extend by admin' => '🛠 تمدید توسط ادمین', 'wallet' => '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin' => '🎁 شارژ توسط ادمین (هدیه)',
         'low balance by admin' => '➖ کسر موجودی توسط ادمین', 'zarinpal' => 'زرین‌پال', 'aqayepardakht' => 'آقای پرداخت', 'plisio' => 'Plisio',
@@ -443,6 +459,13 @@ function statsReport(PDO $pdo, $key)
     $L[] = '💳 <b>پول دریافتی (مبنای درآمد)</b>';
     $L[] = '• پرداخت مشتریان (درگاه‌ها) : ' . $n($d['wallet_in']) . ' عدد — ' . $n($d['wallet_in_sum']) . ' تومان';
     $L[] = '• ثبت‌شده توسط ادمین : ' . $n($d['admin_in']) . ' عدد — ' . $n($d['admin_in_sum']) . ' تومان';
+    if (!empty($d['by_method'])) {
+        $L[] = '';
+        $L[] = '🏦 <b>دریافتی به تفکیک منبع</b>';
+        foreach ($d['by_method'] as $m) {
+            $L[] = '• ' . statsMethodLabel($m['m']) . ' : ' . $n($m['c']) . ' عدد — ' . $n($m['s']) . ' تومان' . ($d['revenue'] > 0 ? ' (' . statsPct($m['s'], $d['revenue']) . '٪)' : '');
+        }
+    }
     $L[] = '';
     $L[] = '📒 <b>صورت سود و زیان</b>';
     $L[] = '• فروش (پول دریافتی) : ' . $n($d['revenue']) . ' تومان';
@@ -493,11 +516,6 @@ function statsReport(PDO $pdo, $key)
             $L[] = '• تمدید خودکار : ' . $n($o['auto_users']) . ' کاربر · ' . $n($o['auto_services']) . ' سرویس';
         }
         $L[] = '• نمایندگان : ' . $n($o['agents_n'] + $o['agents_n2']) . ' (عادی ' . $n($o['agents_n']) . ' · پیشرفته ' . $n($o['agents_n2']) . ') · پنل‌ها : ' . $n($o['panels']);
-        $L[] = '';
-        $L[] = '🏦 <b>پرداخت‌ها به تفکیک روش</b>';
-        foreach (array_slice($o['methods'], 0, 10) as $m) {
-            $L[] = '• ' . statsMethodLabel($m['m']) . ' : ' . $n($m['c']) . ' عدد — ' . $n($m['s']) . ' تومان';
-        }
     }
     return implode("\n", $L);
 }

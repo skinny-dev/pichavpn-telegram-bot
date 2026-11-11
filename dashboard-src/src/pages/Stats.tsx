@@ -12,12 +12,12 @@ import { StatCard } from '@/components/Stat'
 
 const PERIODS = [['all', 'کل'], ['hour', 'یک ساعت اخیر'], ['today', 'امروز'], ['yesterday', 'دیروز'], ['month', 'ماه فعلی'], ['lastmonth', 'ماه قبل']] as const
 type KindSum = Record<string, { c: number; s: number }>
-type D = Record<string, number> & { by_kind: KindSum }
+type D = Record<string, number> & { by_kind: KindSum; by_method?: { m: string; c: number; s: number }[] }
 interface Kind { key: string; label: string; group: 'cogs' | 'opex' | 'equity' }
 interface Method { m: string; c: string; s: string }
 interface Overall { users: number; with_service: number; buyers: number; test_users: number; test_only: number; test_then_buy: number; balance: number; agents_n: number; agents_n2: number; panels: number; active_services: number; active_sum: number; auto_users: number | null; auto_services: number | null; repeat_buyers: number; revenue_30d: number; volume_30d: number; methods: Method[] }
 interface StatsRes { title: string; start: number; end: number; data: D; all: D; overall: Overall | null; kinds: Kind[]; text: string }
-const LABELS: Record<string, string> = { 'cart to cart': '💳 کارت به کارت', 'Star Telegram': '⭐ استار تلگرام', tetraminator: '🏦 درگاه tetraminator', 'after pay': '🧾 پرداخت بعد از دریافت', 'manual invoice': '✍️ فاکتور دستی', 'add order by admin': '🛠 سفارش ثبت‌شده توسط ادمین', 'extend by admin': '🛠 تمدید توسط ادمین', wallet: '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin': '🎁 شارژ توسط ادمین (هدیه)', zarinpal: 'زرین‌پال', aqayepardakht: 'آقای پرداخت' }
+const LABELS: Record<string, string> = { 'cart to cart sms': '💳 کارت به کارت (خودکار، با پیامک)', 'cart to cart': '💳 کارت به کارت (رسید، تأیید ادمین)', variza: '🏦 واریزا', 'Currency Rial 1': '🏦 درگاه ریالی ۱', 'Currency Rial 2': '🏦 درگاه ریالی ۲', 'Currency Rial 3': '🏦 درگاه ریالی ۳', AbanGateway: '🏦 درگاه آبان', 'Star Telegram': '⭐ استار تلگرام', tetraminator: '🏦 تترامینیتور', 'after pay': '🧾 پرداخت بعد از دریافت', 'manual invoice': '✍️ فاکتور دستی', 'add order by admin': '🛠 سفارش ثبت‌شده توسط ادمین', 'extend by admin': '🛠 تمدید توسط ادمین', wallet: '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin': '🎁 شارژ توسط ادمین (هدیه)', zarinpal: 'زرین‌پال', aqayepardakht: 'آقای پرداخت' }
 const dur = (sec: number) => { const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600); return d ? `${fmtNum(d)} روز${h ? ` و ${fmtNum(h)} ساعت` : ''}` : h ? `${fmtNum(h)} ساعت` : `${fmtNum2(sec / 60)} دقیقه` }
 const gb = (v: number) => `${fmtNum2(v)} گیگابایت`
 const pct = (a: number, b: number) => (b > 0 ? `${fmtNum2((a * 100) / b)}٪` : '—')
@@ -106,6 +106,11 @@ export default function Stats() {
               <Row label="ثبت‌شده توسط ادمین" count={d.admin_in} sum={d.admin_in_sum} />
               <Row label="جمع پرداخت‌های موفق" count={d.count_all} />
             </Section>
+            {!!d.by_method?.length && (
+              <Section title="دریافتی به تفکیک منبع" icon={Landmark}>
+                {d.by_method.map((m) => <Row key={m.m} label={`${LABELS[m.m] ?? m.m}${d.revenue > 0 ? ` (${pct(m.s, d.revenue)})` : ''}`} count={m.c} sum={m.s} />)}
+              </Section>
+            )}
             {q.data?.overall && (
               <>
                 <Section title="قیف کاربران" icon={Users}>

@@ -81,6 +81,9 @@ A card-to-card receipt that was approved and later turned out fake stays in «پ
 `… ORDER_ID --apply --reason="رسید جعلی"` sets the order to `reject` (revenue in «آمار» and the Mini App drops) and reverses its finance-ledger entry. The wallet is never changed.
 Refused for service purchases/renewals and for admin gifts. Every use is logged in `storage/void_payment.log`.
 
+## Receipts by source in every report («آمار», panel «آمار», overview data)
+`statsCollect()` (PHP `stats_report.php`, JS `panelapi/stats.js`) now returns `by_method`: the money received in the period (same cash rules as revenue) per source, by amount: card-to-card **confirmed by the bank SMS** (`cart to cart sms`, matched in `sms_inbox`) vs card-to-card **approved by an admin from a receipt**, Variza, Tetraminator, Stars, Zarinpal, crypto, admin-registered sales … Shown as «دریافتی به تفکیک منبع» (count, toman, % of revenue) in the bot report for every period (hour / today / yesterday / month / last month / all) and in the Mini App «آمار» page. The parts add up to the revenue.
+
 ## Pending-payment watch (`pending_watch.php`, cron job `pending_watch`, `scripts/pending_reconcile.php`)
 Every 3 minutes (and on demand) every open or expired Tetraminator order of the last 48 hours is asked at the gateway (the inquiry is the truth): if it is really paid and the amount is right it is delivered once (same atomic claim as the «پرداخت کردم» button) and reported; amount mismatch / delivery failure / a customer waiting 15+ minutes / a Variza receipt waiting go to the report group's payment topic once per order. Variza has no inquiry here, so its orders are only listed.
 `php scripts/pending_reconcile.php --hours=168` is a read-only report of what was paid but not delivered; add `--deliver` to deliver the confirmed ones. Test: `tests/pending_watch_test.php`.
