@@ -6,3 +6,4 @@ maintenance/token.txt
 *.zip
 backup*
 storage/sms_webhook.log
+storage/pending_watch.json
