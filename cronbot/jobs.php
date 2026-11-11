@@ -21,6 +21,7 @@ function mirza_cron_jobs(): array
         ['job' => 'uptime_panel', 'schedule' => '*/15 * * * *', 'title' => 'پایش وضعیت پنل‌ها'],
         ['job' => 'expireagent', 'schedule' => '*/30 * * * *', 'title' => 'انقضای اشتراک نمایندگان'],
         ['job' => 'backupbot', 'schedule' => '0 */5 * * *', 'title' => 'پشتیبان‌گیری ربات‌ساز'],
+        ['job' => 'pending_watch', 'schedule' => '*/3 * * * *', 'title' => 'پیگیری پرداخت‌های معلق و هشدار به گروه'],
         ['job' => 'gateway_health', 'schedule' => '*/10 * * * *', 'title' => 'پایش درگاه‌های پرداخت'],
         ['job' => 'server_status', 'schedule' => '*/5 * * * *', 'title' => 'وضعیت سرورها (تست سرعت و پینگ)'],
         ['job' => 'lottery', 'schedule' => '*/1 * * * *', 'title' => 'قرعه‌کشی و امتیازات'],

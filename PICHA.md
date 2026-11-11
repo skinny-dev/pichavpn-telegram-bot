@@ -81,6 +81,10 @@ A card-to-card receipt that was approved and later turned out fake stays in «پ
 `… ORDER_ID --apply --reason="رسید جعلی"` sets the order to `reject` (revenue in «آمار» and the Mini App drops) and reverses its finance-ledger entry. The wallet is never changed.
 Refused for service purchases/renewals and for admin gifts. Every use is logged in `storage/void_payment.log`.
 
+## Pending-payment watch (`pending_watch.php`, cron job `pending_watch`, `scripts/pending_reconcile.php`)
+Every 3 minutes (and on demand) every open or expired Tetraminator order of the last 48 hours is asked at the gateway (the inquiry is the truth): if it is really paid and the amount is right it is delivered once (same atomic claim as the «پرداخت کردم» button) and reported; amount mismatch / delivery failure / a customer waiting 15+ minutes / a Variza receipt waiting go to the report group's payment topic once per order. Variza has no inquiry here, so its orders are only listed.
+`php scripts/pending_reconcile.php --hours=168` is a read-only report of what was paid but not delivered; add `--deliver` to deliver the confirmed ones. Test: `tests/pending_watch_test.php`.
+
 ## Gateway pause (Variza subscription limit, Tetraminator down)
 When Variza answers HTTP 422 with «به دلیل محدودیت اشتراک فعلی…» (the Variza account's own plan limit) the button is hidden from the payment menu for 30 minutes
 (`PaySetting variza_pause_until`, `gateway_pause.php`), the customer gets «این روش پرداخت موقتاً در دسترس نیست» with the menu of the other methods, and the admin alert
