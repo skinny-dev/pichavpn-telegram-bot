@@ -23,7 +23,7 @@ function Avatar({ name, size = 'size-7' }: { name: string; size?: string }) {
 /** dots filled in proportion, like the segment cards of a CRM table */
 function DotMeter({ part, whole, tone }: { part: number; whole: number; tone: string }) {
   const n = 18, on = whole > 0 ? Math.round((part / whole) * n) : 0
-  return <span className="flex flex-1 items-center gap-[3px]" aria-hidden>{Array.from({ length: n }, (_, i) => <span key={i} className={cn('size-1.5 rounded-full', i < on ? tone : 'bg-muted')} />)}</span>
+  return <span className="flex min-w-0 flex-1 items-center gap-[3px] overflow-hidden" aria-hidden>{Array.from({ length: n }, (_, i) => <span key={i} className={cn('size-1.5 shrink-0 rounded-full', i < on ? tone : 'bg-muted')} />)}</span>
 }
 const clean = (v: unknown) => (v === null || v === undefined || v === '' || v === 'none' || v === 'NOT_USERNAME' ? '' : String(v))
 
@@ -111,7 +111,7 @@ export function Orders() {
           return (
             <button key={key} onClick={() => setGroup(on ? '' : key)} data-on={on} className="grid gap-2 rounded-xl border bg-card p-3 text-start transition-colors hover:bg-accent/40 data-[on=true]:border-primary data-[on=true]:bg-primary/5">
               <span className="flex items-center justify-between gap-2"><Badge variant={variant} className="gap-1.5"><span className="size-1.5 rounded-full bg-current" />{label}</Badge><span className="text-xs text-muted-foreground tabular">{g ? fmtToman(g.sum) : ''}</span></span>
-              <span className="flex items-center gap-3"><span className="text-2xl font-bold tabular">{sum ? fmtNum(g?.count ?? 0) : '—'}</span><DotMeter part={g?.count ?? 0} whole={totalCount} tone={tone} /><span className="text-xs text-muted-foreground tabular">{totalCount && g ? Math.round((g.count / totalCount) * 100) : 0}٪</span></span>
+              <span className="flex min-w-0 items-center gap-3"><span className="text-2xl font-bold tabular">{sum ? fmtNum(g?.count ?? 0) : '—'}</span><DotMeter part={g?.count ?? 0} whole={totalCount} tone={tone} /><span className="text-xs text-muted-foreground tabular">{totalCount && g ? Math.round((g.count / totalCount) * 100) : 0}٪</span></span>
             </button>
           )
         })}

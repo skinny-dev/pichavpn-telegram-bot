@@ -82,7 +82,7 @@ export default function Finance() {
       {tab === 'settings' && <SettingsPage />}
 
       {/* quick action button: thumb-reachable above the mobile bottom bar */}
-      <button onClick={() => setPicker(true)} aria-label="ثبت سریع" className="fixed bottom-20 end-4 z-40 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 md:hidden print:hidden"><Plus className="size-6" /></button>
+      <button onClick={() => setPicker(true)} aria-label="ثبت سریع" className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] end-4 md:bottom-6 z-40 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 md:hidden print:hidden"><Plus className="size-6" /></button>
 
       <Dialog open={picker} onOpenChange={setPicker}>
         <DialogContent className="md:max-w-xl">

@@ -2,6 +2,7 @@ import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { pushLayer } from '@/lib/backstack'
 
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
@@ -11,6 +12,12 @@ const DialogOverlay = React.forwardRef<React.ElementRef<typeof DialogPrimitive.O
   <DialogPrimitive.Overlay ref={ref} className={cn('fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0', className)} {...p} />
 ))
 DialogOverlay.displayName = 'DialogOverlay'
+
+// Mounted only while a dialog is open: Telegram's Back button / hardware back closes it (Radix closes the topmost layer on Escape).
+function BackLayer() {
+  React.useEffect(() => pushLayer(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), [])
+  return null
+}
 
 // On phones the dialog is a bottom sheet; from md up it's centered.
 const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(({ className, children, ...p }, ref) => (
@@ -26,6 +33,7 @@ const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.C
       )}
       {...p}
     >
+      <BackLayer />
       {children}
       <DialogPrimitive.Close className="absolute end-4 top-4 z-20 rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100" aria-label="بستن">
         <X className="size-4" />

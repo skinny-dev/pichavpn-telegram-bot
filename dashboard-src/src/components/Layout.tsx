@@ -1,7 +1,8 @@
 import { Suspense, useEffect, useState } from 'react'
-import { inTelegram, setTelegramSession } from '@/lib/telegram'
+import { inTelegram, setTelegramSession, tgBackButton } from '@/lib/telegram'
+import { closeTop, useLayerCount } from '@/lib/backstack'
 import { ManageProvider } from '@/components/manage'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, BadgePercent, BarChart3, Banknote, Headset, LayoutDashboard, LogOut, Megaphone, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
@@ -48,7 +49,21 @@ export function Layout() {
   const { pathname } = useLocation()
   const theme = useTheme()
   const [more, setMore] = useState(false)
+  const navigate = useNavigate()
+  const layers = useLayerCount()
   useEffect(() => setMore(false), [pathname])
+  // a new page starts at the top (the router keeps the old scroll offset otherwise)
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  // Telegram's Back button: shown on every page but home, or while a sheet is open; closes the sheet first, then goes back
+  const home = pathname === '/' || (role !== 'administrator' && pathname === '/support')
+  useEffect(() => {
+    const onBack = () => {
+      if (closeTop()) return
+      if (window.history.state && typeof window.history.state.idx === 'number' && window.history.state.idx > 0) navigate(-1)
+      else navigate(role === 'administrator' ? '/' : '/support', { replace: true })
+    }
+    return tgBackButton(!home || layers > 0 ? onBack : null)
+  }, [home, layers, navigate, role])
   const current = ITEMS.find((i) => (i.to === '/' ? pathname === '/' : pathname.startsWith(i.to)))
 
   async function logout() {
@@ -64,6 +79,7 @@ export function Layout() {
       key={i.to}
       to={i.to}
       end={i.to === '/'}
+      onClick={() => setMore(false)}
       className={({ isActive }) => cn(
         mobile ? 'relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px]' : 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
         isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -96,7 +112,7 @@ export function Layout() {
           <h1 className="flex-1 truncate text-[15px] font-semibold">{current?.label ?? brand}</h1>
           {!tg && <Button variant="ghost" size="icon-sm" onClick={theme.toggle} aria-label="تغییر تم">{theme.dark ? <Sun /> : <Moon />}</Button>}
         </header>
-        <main className="mx-auto w-full max-w-[90rem] px-3 pb-24 pt-3 md:px-8 md:pb-10 md:pt-8">
+        <main className="mx-auto w-full max-w-[90rem] px-4 pb-24 pt-3 md:px-8 md:pb-10 md:pt-8">
           <h1 className="mb-6 hidden text-2xl font-bold md:block print:block">{current?.label}</h1>
           <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted" />}><Outlet /></Suspense>
         </main>

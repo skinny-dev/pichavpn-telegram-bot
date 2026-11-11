@@ -10,7 +10,8 @@ import { api, ApiError } from '@/lib/api'
 import { fmtNum, fmtStr, fmtToman, fmtTs, normalizeDigits } from '@/lib/format'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
-import { tgBackButton, tgHaptic } from '@/lib/telegram'
+import { tgHaptic } from '@/lib/telegram'
+import { useBackLayer } from '@/lib/backstack'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -49,7 +50,7 @@ export function ManageProvider({ children }: { children: React.ReactNode }) {
   const pop = useCallback(() => setStack((st) => st.slice(0, -1)), [])
   const value = useMemo(() => ({ openOrder: (id: string) => push({ kind: 'order', id }), openUser: (id: string) => push({ kind: 'user', id }) }), [push])
   const top = stack.at(-1)
-  useEffect(() => tgBackButton(top ? pop : null), [top, pop]) // Telegram's back button closes the sheet
+  useBackLayer(!!top, pop) // Back steps out of nested order/user sheets one level at a time
   return (
     <Ctx.Provider value={value}>
       {children}

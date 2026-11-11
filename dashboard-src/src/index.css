@@ -39,6 +39,8 @@
 
 @layer utilities {
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  /* a plain `grid` has an auto column that grows to its widest child (and pushes the page sideways); make it a shrinkable one */
+  .grid:not([class*='grid-cols']) { grid-template-columns: minmax(0, 1fr); }
   .tabular { font-variant-numeric: tabular-nums; }
 }
 
