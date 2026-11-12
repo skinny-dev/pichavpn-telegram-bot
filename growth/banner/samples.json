@@ -1,5 +1,8 @@
 [
- { "theme": "brand", "kicker": "تست رایگان", "title": "اتصال پایدار، برای هرچیزی که لازم داری", "subtitle": "کار، بازی، استریم و سرویس‌های مختلف؛ با پشتیبانی سریع.", "badges": ["تست رایگان", "پشتیبانی سریع", "چند لوکیشن"], "cta": "شروع در ربات", "handle": "@pichanet_bot" },
- { "theme": "night", "kicker": "آموزش", "title": "اتصال در ۲ دقیقه", "subtitle": "اندروید، iOS، ویندوز و مک؛ قدم‌به‌قدم، بدون دردسر.", "badges": ["اندروید", "iOS", "ویندوز", "مک"], "cta": "آموزش کامل", "handle": "@pichanet_bot" },
- { "theme": "gold", "kicker": "۳۰ آذر", "title": "شب یلدا مبارک", "subtitle": "بلندترین شب سال، با ارتباطی که قطع نمی‌شود.", "badges": ["پیچا"], "handle": "@pichanet_bot" }
+ { "theme": "brand", "kicker": "تست رایگان", "title": "اتصال پایدار برای هرچیزی که لازم داری", "subtitle": "کار، بازی، استریم و سرویس‌های مختلف؛ با پشتیبانی سریع.", "icon": "wrapped-gift", "extra": ["sparkles", "rocket"], "badges": ["تست رایگان", "پشتیبانی سریع"], "cta": "شروع در ربات", "handle": "@pichanet_bot" },
+ { "theme": "night", "kicker": "آموزش", "title": "اتصال در ۲ دقیقه", "subtitle": "اندروید، iOS، ویندوز و مک؛ قدم‌به‌قدم.", "icon": "mobile-phone", "extra": ["laptop", "sparkles"], "badges": ["اندروید", "iOS", "ویندوز"], "cta": "آموزش کامل", "handle": "@pichanet_bot" },
+ { "theme": "gold", "kicker": "۳۰ آذر", "title": "شب یلدا مبارک", "subtitle": "بلندترین شب سال، با ارتباطی که قطع نمی‌شود.", "icon": "watermelon", "extra": ["crescent-moon", "candle", "glowing-star"], "badges": ["پیچا"], "handle": "@pichanet_bot" },
+ { "theme": "mint", "kicker": "امنیت", "title": "فقط از ربات رسمی پیچا خرید کنید", "subtitle": "ما هرگز رمز یا کد تأیید نمی‌خواهیم.", "icon": "shield", "extra": ["locked", "sparkles"], "badges": ["ربات رسمی", "بدون درخواست رمز"], "handle": "@pichanet_bot" },
+ { "theme": "brand", "kicker": "دعوت دوستان", "title": "دوستت را دعوت کن، هدیه بگیر", "subtitle": "بعد از اولین خرید دوستت، هدیه به حساب تو می‌آید.", "icon": "handshake", "extra": ["wrapped-gift", "party-popper"], "badges": ["هدیه‌ی دعوت"], "cta": "لینک دعوت من", "handle": "@pichanet_bot" },
+ { "theme": "night", "kicker": "اطلاعیه", "title": "تعمیر برنامه‌ریزی‌شده‌ی سرور", "subtitle": "ممکن است چند دقیقه اتصال قطع شود.", "icon": "wrench", "extra": ["hourglass-not-done"], "badges": ["پشتیبانی آنلاین است"], "handle": "@pichanet_bot" }
 ]
