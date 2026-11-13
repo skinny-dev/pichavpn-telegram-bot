@@ -1826,6 +1826,13 @@ Your current merchant code: %s',
                         'askVarizaApiToken' => '💳 Enter your Variza API token from Variza panel (Profile → API key)
 
 Current key: <code>%s</code>',
+                        'askVarizaApiUrl' => '🌐 Enter the Variza-compatible API address.
+
+Variza: <code>https://variza.ir/api/v1</code>
+Paychi Variz: <code>https://YOUR-PAYCHI/api/compat/variza/v1</code>
+
+Current: <code>%s</code>',
+                        'invalidVarizaApiUrl' => '❌ The address must start with http:// or https://',
                         'askVarizaWebhookSecret' => '🔐 Enter your Variza webhook secret from Variza panel (Profile → Webhook)
 
 Current key: <code>%s</code>
@@ -4180,6 +4187,7 @@ We hope you had a good experience with the ease and speed of your service. If yo
                 'varizaGateway' => 'Variza',
                 'zarinPalMerchant' => 'ZarinPal merchant',
                 'varizaApiToken' => 'Variza API token',
+                'varizaApiUrl' => 'Variza API address',
                 'varizaWebhookSecret' => 'Variza webhook secret',
                 'cashbackVariza' => 'Variza cashback',
                 'minAmountVariza' => 'Variza min amount',
