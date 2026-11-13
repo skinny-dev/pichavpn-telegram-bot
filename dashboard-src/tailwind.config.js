@@ -5,7 +5,8 @@ export default {
   theme: {
     container: { center: true, padding: '1rem' },
     extend: {
-      fontFamily: { sans: ['"Vazirmatn Variable"', 'system-ui', 'sans-serif'] },
+      // Yekan Bakh first (add the files and the @font-face in index.css); until then Vazirmatn carries the Persian text
+      fontFamily: { sans: ['"Yekan Bakh"', '"Vazirmatn Variable"', 'system-ui', 'sans-serif'], mono: ['"JetBrains Mono Variable"', 'ui-monospace', 'monospace'] },
       colors: {
         border: 'hsl(var(--border))', input: 'hsl(var(--input))', ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))', foreground: 'hsl(var(--foreground))',

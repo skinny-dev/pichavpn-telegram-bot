@@ -1,37 +1,41 @@
 @import '@fontsource-variable/vazirmatn';
+@import '@fontsource-variable/jetbrains-mono';
+@import 'augmented-ui/augmented-ui.min.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%; --foreground: 222 28% 12%;
-    --card: 0 0% 100%; --card-foreground: 222 28% 12%;
-    --popover: 0 0% 100%; --popover-foreground: 222 28% 12%;
-    --primary: 221 83% 53%; --primary-foreground: 0 0% 100%;
-    --secondary: 220 20% 95%; --secondary-foreground: 222 28% 18%;
-    --muted: 220 20% 96%; --muted-foreground: 220 9% 40%;
-    --accent: 220 30% 94%; --accent-foreground: 222 28% 18%;
-    --destructive: 0 72% 46%; --destructive-foreground: 0 0% 100%;
-    --success: 142 66% 33%; --success-foreground: 0 0% 100%; --warning: 32 90% 40%;
-    --border: 220 16% 90%; --input: 220 16% 86%; --ring: 221 83% 53%;
-    --radius: 0.75rem;
+    --background: 210 22% 97%; --foreground: 222 30% 10%;
+    --card: 0 0% 100%; --card-foreground: 222 30% 10%;
+    --popover: 0 0% 100%; --popover-foreground: 222 30% 10%;
+    --primary: 190 90% 28%; --primary-foreground: 0 0% 100%;
+    --secondary: 214 20% 93%; --secondary-foreground: 222 30% 16%;
+    --muted: 214 20% 94%; --muted-foreground: 218 12% 38%;
+    --accent: 190 40% 92%; --accent-foreground: 222 30% 14%;
+    --destructive: 352 72% 44%; --destructive-foreground: 0 0% 100%;
+    --success: 152 62% 29%; --success-foreground: 0 0% 100%; --warning: 32 90% 38%;
+    --border: 214 18% 84%; --input: 214 18% 80%; --ring: 190 90% 34%;
+    --radius: 0.375rem;
   }
   .dark {
-    --background: 222 30% 7%; --foreground: 210 20% 96%;
-    --card: 222 28% 10%; --card-foreground: 210 20% 96%;
-    --popover: 222 28% 10%; --popover-foreground: 210 20% 96%;
-    --primary: 217 91% 64%; --primary-foreground: 222 30% 8%;
-    --secondary: 222 20% 16%; --secondary-foreground: 210 20% 96%;
-    --muted: 222 20% 14%; --muted-foreground: 215 14% 66%;
-    --accent: 222 20% 18%; --accent-foreground: 210 20% 96%;
-    --destructive: 0 72% 58%; --destructive-foreground: 0 0% 100%;
-    --success: 142 55% 48%; --success-foreground: 222 30% 8%; --warning: 38 92% 58%;
-    --border: 222 18% 18%; --input: 222 18% 22%; --ring: 217 91% 64%;
+    --background: 222 32% 5%; --foreground: 210 24% 94%;
+    --card: 222 28% 8%; --card-foreground: 210 24% 94%;
+    --popover: 222 28% 9%; --popover-foreground: 210 24% 94%;
+    --primary: 188 86% 53%; --primary-foreground: 222 40% 6%;
+    --secondary: 222 22% 13%; --secondary-foreground: 210 24% 94%;
+    --muted: 222 22% 11%; --muted-foreground: 215 14% 64%;
+    --accent: 188 40% 16%; --accent-foreground: 210 24% 94%;
+    --destructive: 352 90% 66%; --destructive-foreground: 222 40% 6%;
+    --success: 152 66% 52%; --success-foreground: 222 40% 6%; --warning: 40 94% 60%;
+    --border: 215 20% 17%; --input: 215 20% 20%; --ring: 188 86% 53%;
   }
   * { @apply border-border; }
   html { -webkit-text-size-adjust: 100%; }
-  body { @apply bg-background text-foreground font-sans antialiased; font-feature-settings: 'ss01'; overscroll-behavior-y: none; }
+  body { @apply bg-background text-foreground font-sans antialiased; overscroll-behavior-y: none; }
+  /* a hairline measuring grid behind the page — only felt, never noticed */
+  .dark body { background-image: linear-gradient(hsl(var(--primary) / .035) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary) / .035) 1px, transparent 1px); background-size: 40px 40px; background-attachment: fixed; }
   :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { @apply rounded-full bg-border; }
@@ -41,6 +45,7 @@
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   /* a plain `grid` has an auto column that grows to its widest child (and pushes the page sideways); make it a shrinkable one */
   .grid:not([class*='grid-cols']) { grid-template-columns: minmax(0, 1fr); }
+  .label { font-family: 'JetBrains Mono Variable', ui-monospace, monospace; font-size: .6875rem; letter-spacing: .06em; text-transform: uppercase; color: hsl(var(--muted-foreground)); direction: ltr; }
   .tabular { font-variant-numeric: tabular-nums; }
 }
 

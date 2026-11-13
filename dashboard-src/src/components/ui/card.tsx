@@ -2,7 +2,12 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...p }, ref) => (
-  <div ref={ref} className={cn('rounded-xl border bg-card text-card-foreground shadow-sm', className)} {...p} />
+  <div
+    ref={ref}
+    data-augmented-ui="tl-clip br-clip border"
+    className={cn('bg-card text-card-foreground [--aug-tl:12px] [--aug-br:12px] [--aug-border-all:1px] [--aug-border-bg:hsl(var(--border))]', className)}
+    {...p}
+  />
 ))
 Card.displayName = 'Card'
 const CardHeader = ({ className, ...p }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('flex flex-col gap-1.5 p-4 md:p-6', className)} {...p} />

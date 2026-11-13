@@ -39,10 +39,11 @@ page.on('console', (m) => { if (m.type() === 'error' && !/ERR_FAILED|ERR_CERT|ER
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 if (process.env.DEBUG_UI) { page.on('requestfailed', (r) => console.log('REQ FAILED', r.url().slice(0, 90), r.failure()?.errorText)); page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url().slice(0, 90)) }); page.on('console', (m) => console.log('console', m.type(), m.text().slice(0, 140))) }
 await page.route("https://telegram.org/**", (r) => r.abort()) // keep the stand-in WebApp; the real script would replace it
-await page.addInitScript(() => {
-  window.Telegram = { WebApp: { initData: 'x', ready() {}, expand() {}, disableVerticalSwipes() {}, isVersionAtLeast: () => true, BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} }, HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
+if (process.env.THEME) await page.addInitScript((t) => { try { localStorage.setItem('picha-theme', t) } catch {} }, process.env.THEME)
+await page.addInitScript((scheme) => {
+  window.Telegram = { WebApp: { colorScheme: scheme, initData: 'x', ready() {}, expand() {}, disableVerticalSwipes() {}, isVersionAtLeast: () => true, BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} }, HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     Serverless: { call(name, input, cb) { fetch('/api/' + name, { method: 'POST', body: JSON.stringify(input) }).then((r) => r.json()).then((x) => cb(null, x), (e) => cb(e)) } } } }
-})
+}, process.env.THEME || 'light')
 await page.goto(`http://127.0.0.1:${port}/#tgWebAppData=x`)
 await page.waitForTimeout(1500)
 const routes = ['/', '/users', '/orders', '/products', '/categories', '/payments', '/expenses', '/capital', '/stats', '/support', '/promo', '/referrals', '/admins', '/activity', '/finance', '/pending', '/manual-order']
