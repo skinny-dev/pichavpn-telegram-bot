@@ -2,6 +2,7 @@
 // the VPN panels, what is the cron state. Prints panel HOSTS only (never usernames, passwords or tokens).
 import { EndpointError, fetch } from 'sdk'
 import { one, all, sql, kvGet } from '../lib/db.js'
+import { tetraCall, tetraKey, tetraBase } from '../lib/tetraminator.js'
 
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
@@ -29,6 +30,22 @@ export default async function (input, ctx) {
   for (const k of ['lock', 'payment_expire', 'tetraminator', 'relay', 'notifications', 'statusday', 'on_hold', 'alert_balance']) {
     try { out.cron[k] = (await kvGet('cron:' + k)) ?? null } catch { out.cron[k] = 'ERR' }
   }
+  // payment gateways, as seen from this cloud (no invoice is created; an unknown id only tells whether the call gets through)
+  out.gateways = {}
+  try {
+    const s = Date.now()
+    const r = await tetraCall('GET', '/payment/inquiry/diagprobe', null, 12000)
+    out.gateways.tetraminator = { key_set: (await tetraKey()) !== '', base: await tetraBase(), http: r.http, error: r.error, ms: Date.now() - s }
+  } catch (e) { out.gateways.tetraminator = { threw: String(e?.message ?? e).slice(0, 100) } }
+  try {
+    const relay = String((await kvGet('config:pay_relay_url')) || '').replace(/\/+$/, '')
+    out.gateways.relay = { set: relay !== '', host: (/^[a-z]+:\/\/([^/\s]+)/i.exec(relay) || [])[1] ?? null }
+    if (relay) {
+      const s = Date.now()
+      try { const res = await fetch(relay + '/pull', { method: 'GET' }); out.gateways.relay.http = res.status } catch (e) { out.gateways.relay.error = String(e?.message ?? e).slice(0, 80) }
+      out.gateways.relay.ms = Date.now() - s
+    }
+  } catch (e) { out.gateways.relay = { threw: String(e?.message ?? e).slice(0, 100) } }
   try { out.mode = await kvGet('config:mode') } catch { out.mode = 'ERR' }
   out.total_ms = Date.now() - t0
   return out
