@@ -77,7 +77,7 @@ const { chromium } = (() => { try { return require('playwright') } catch { retur
 const SUB = { celebration: 'از طرف تیم پیچا', culture: 'یادی از بزرگان فرهنگ ایران', tech: 'نکته‌ی امروز از پیچا' }
 const jobs = [
   ...days.map((e) => ({ file: `d${pad(e.day + 1)}-${e.spec.tag}.png`, label: `${fa(pad(e.j[1]))}/${fa(pad(e.j[2]))} ${e.wd} · ${e.type}`, spec: { ...e.spec, title: e.title, cta: e.cta } })),
-  ...occasions.map((o) => { const g = occDate(o, 1405), j = g2j(...g); return { file: `occ-${o.id}.png`, label: `مناسبت · ${o.title}`, spec: { ...o.spec, title: o.title.replace(/^(.*?)(\s|$)/, '[[$1]]$2'), subtitle: SUB[o.kind], badges: [`${fa(j[2])} ${MONTH[j[1]]}`], handle: '@pichanet_bot' } } }),
+  ...occasions.map((o) => { const g = occDate(o, 1405), j = g2j(...g); return { file: `occ-${o.id}.png`, label: `مناسبت · ${o.title}`, spec: { ...o.spec, scene: 'calendar', date: [fa(j[2]), MONTH[j[1]]], title: o.title.replace(/^(.*?)(\s|$)/, '[[$1]]$2'), subtitle: SUB[o.kind], badges: [o.kind === 'celebration' ? 'تبریک' : o.kind === 'culture' ? 'فرهنگ' : 'فناوری'], handle: '@pichanet_bot' } } }),
   { file: 'news-template.png', label: 'خبر روز (قالب)', spec: { ...NEWS_SLOT.spec, title: '[[عنوان خبر]] از منبع تأییدشده', subtitle: 'خلاصه‌ی دو خطی با کلمات خودمان؛ لینک منبع زیر پست.', badges: ['منبع: ...'] } },
 ]
 if (!errors.length) {
