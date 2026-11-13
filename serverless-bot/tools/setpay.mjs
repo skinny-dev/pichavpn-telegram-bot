@@ -36,7 +36,8 @@ if (cmd === 'status') call({})
 else if (cmd === 'variza' && ['on', 'off'].includes(arg)) call({ set: { variza_status: arg === 'on' ? 'onvariza' : 'offvariza' } })
 else if (cmd === 'paychi' && ['on', 'off'].includes(arg)) call({ set: { paychi_status: arg === 'on' ? 'onpaychi' : 'offpaychi' } })
 else if (cmd === 'paychi') {
-  const base = await ask('Paychi address (https://…, port 443): ')
+  const rawBase = await ask('Paychi address (https://…, port 443): ')
+  const base = (/^(https:\/\/[^\/?#\s]+)/.exec(rawBase.trim()) || [])[1] || rawBase.trim() // only scheme+host: a pasted dashboard/pairing link keeps no path or #token
   const key = await ask('Paychi API key (hidden): ', true)
   const secret = await ask('Paychi webhook secret (hidden, Enter to skip): ', true)
   const set = { paychi_base_url: base, paychi_api_key: key }
