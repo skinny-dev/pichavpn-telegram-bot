@@ -1,2 +1,3 @@
-Icons: Fluent UI Emoji (Microsoft), MIT licence, via the npm package `@fluentui-emoji/svg` (see LICENSE-fluent-emoji.txt).
-Used only as banner illustrations. Add an icon by copying its SVG here and naming it in a banner spec (`icon`, `extra`).
+Icons: Lucide (ISC licence, LICENSE-lucide.txt) + two drawn in the same 24-grid line style (watermelon, pomegranate).
+Fonts (fonts/): Vazirmatn (OFL) for Persian, JetBrains Mono (OFL) for the technical labels.
+Add an icon: copy a 24x24 stroke SVG here and name it in a banner spec (`icon`, `extra`).
