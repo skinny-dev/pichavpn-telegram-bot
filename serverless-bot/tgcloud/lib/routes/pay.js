@@ -244,11 +244,22 @@ export const payRoutes = [
       }
       await run(sql`INSERT INTO Payment_report (id_user, id_order, time, price, payment_Status, Payment_Method, id_invoice, dec_not_confirmed)
         VALUES (${c.from_id}, ${orderId}, ${tehranDate()}, ${amount}, 'Unpaid', 'paychi', ${invoiceTag}, ${p.pay_id})`)
-      const kb = J({ inline_keyboard: [[{ text: B.payments, url: p.pay_url }], [{ text: B.tetraminatorCheckButton || '✅ پرداخت کردم، بررسی پرداخت', callback_data: 'checkpaychi-' + orderId }]] })
-      await sendHelp(c, 'helppaychi', false)
       const rial = intval(p.amount_rial)
-      const exact = rial > 0 ? `\n\n💰 مبلغ دقیقِ کارت‌به‌کارت: <b>${numberFormat(rial)} ریال</b> (${numberFormat(Math.round(rial / 10))} تومان)\n⚠️ دقیقاً همین مبلغ را واریز کنید؛ تشخیص پرداخت با همین عدد انجام می‌شود.` : ''
-      const text = sprintf(B.paychiInvoice || '✅ فاکتور پرداخت ایجاد شد.\n\n🔢 شماره فاکتور : %s\n💰 مبلغ فاکتور : %s تومان', orderId, numberFormat(n(amount), 0)) + exact + '\n\n⏳ شماره کارت و جزئیات را از دکمهٔ زیر ببینید. بعد از واریز، پرداخت خودکار تأیید می‌شود.'
+      const card = p.card && /^\d{12,19}$/.test(String(p.card.number ?? '')) ? p.card : null
+      const esc = (v) => String(v ?? '').replace(/[<>&]/g, '')
+      const pretty = card ? String(card.number).replace(/(\d{4})(?=\d)/g, '$1 ') : ''
+      // the card and the exact amount are right here with copy buttons (Telegram «copy_text»): the customer never has to open the page
+      const rows = []
+      if (card) rows.push([{ text: '📋 کپی شمارهٔ کارت', copy_text: { text: String(card.number) } }])
+      if (rial > 0) rows.push([{ text: '📋 کپی مبلغ (ریال)', copy_text: { text: String(rial) } }])
+      rows.push([{ text: B.tetraminatorCheckButton || '✅ پرداخت کردم، بررسی پرداخت', callback_data: 'checkpaychi-' + orderId }])
+      rows.push([{ text: '🌐 صفحهٔ پرداخت', url: p.pay_url }])
+      const kb = J({ inline_keyboard: rows })
+      await sendHelp(c, 'helppaychi', false)
+      let text = sprintf(B.paychiInvoice || '✅ فاکتور پرداخت ایجاد شد.\n\n🔢 شماره فاکتور : %s\n💰 مبلغ فاکتور : %s تومان', orderId, numberFormat(n(amount), 0))
+      if (card) text += `\n\n💳 <b>کارت مقصد</b>\n<code>${pretty}</code>${card.bank_name ? `\n🏦 ${esc(card.bank_name)}` : ''}${card.holder_name ? `\n👤 به نام ${esc(card.holder_name)}` : ''}`
+      if (rial > 0) text += `\n\n💰 <b>مبلغ دقیق: <code>${rial}</code> ریال</b> (${numberFormat(Math.round(rial / 10))} تومان)\n⚠️ دقیقاً همین مبلغ را واریز کنید؛ تشخیص پرداخت با همین عدد انجام می‌شود.`
+      text += '\n\n⏳ بعد از واریز، پرداخت خودکار تأیید می‌شود (تا چند دقیقه). اگر نشد، دکمهٔ «پرداخت کردم» را بزنید.'
       await rememberMessage(await sendmessage(c.from_id, text, kb, 'HTML'), orderId)
       return true
     }

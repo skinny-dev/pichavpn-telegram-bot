@@ -28,7 +28,7 @@ const mock = http.createServer((req, res) => {
       st.log.push(inb)
       if (st.errCode) return send(st.errHttp, { error: { code: st.errCode, message: 'refused' } })
       const id = 'tx_' + ++st.n + 'abc'
-      st.txs[id] = { id, status: 'pending', amount: inb.amount + 7, requested_amount: inb.amount, order_id: inb.order_id, card: { number: '6037000011112222', holder: 'Test' }, payment_url: `https://pay.example.test/p/${id}`, expires_at: '2099-01-01T00:00:00Z' }
+      st.txs[id] = { id, status: 'pending', amount: inb.amount + 7, requested_amount: inb.amount, order_id: inb.order_id, card: { number: '6037000011112222', bank_name: 'ملی', holder_name: 'Ali Test' }, payment_url: `https://pay.example.test/p/${id}`, expires_at: '2099-01-01T00:00:00Z' }
       return send(201, st.txs[id])
     }
     const m = /^\/api\/v1\/transactions\/([\w]+)$/.exec(u.pathname)
@@ -77,7 +77,10 @@ try {
   check('api: the amount sent is in RIAL (toman x 10) with our order id and a callback via the relay', st.log[0]?.amount === 600000 && st.log[0]?.order_id === inv?.id_order && /\/paychi\?order_id=/.test(String(st.log[0]?.callback_url)), JSON.stringify(st.log[0]))
   const msg = texts().find(([, p]) => /پرداخت|فاکتور/.test(String(p.text)) && JSON.stringify(p.reply_markup ?? {}).includes('checkpaychi-'))
   check('bot: the customer gets the pay link and the check button', !!msg && JSON.stringify(msg[1].reply_markup).includes('checkpaychi-' + inv.id_order) && JSON.stringify(msg[1].reply_markup).includes('https://pay.example.test/p/'), JSON.stringify(texts().map(([, p]) => p.text)))
-  check('bot: the exact unique amount (rial) is shown', /600[,٬]?007|۶۰۰[,٬]?۰۰۷/.test(String(msg?.[1]?.text)), String(msg?.[1]?.text))
+  check('bot: the exact unique amount (rial) is shown', /600007/.test(String(msg?.[1]?.text)), String(msg?.[1]?.text))
+  check('bot: the card number, bank and holder are in the message', /6037 0000 1111 2222/.test(String(msg?.[1]?.text)) && /ملی/.test(String(msg?.[1]?.text)) && /Ali Test/.test(String(msg?.[1]?.text)), String(msg?.[1]?.text))
+  const rk = JSON.stringify(msg?.[1]?.reply_markup)
+  check('bot: copy buttons for the card and the exact amount', rk.includes('"copy_text":{"text":"6037000011112222"}') && rk.includes('"copy_text":{"text":"600007"}'), rk)
 
   // ---- the webhook comes through the relay
   await ctl(`id=${inv.dec_not_confirmed}&status=paid`)
