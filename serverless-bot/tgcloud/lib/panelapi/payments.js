@@ -48,7 +48,7 @@ export async function pending(q) {
     counts[problem]++
     out.push({ id_order: str(r.id_order), time: str(r.time), id_user: str(r.id_user),
       user: str(r.namecustom) !== '' && r.namecustom !== '0' ? str(r.namecustom) : r.tg_username && r.tg_username !== 'none' ? '@' + r.tg_username : str(r.id_user),
-      price: parseInt(r.price) || 0, method: str(r.Payment_Method), status, problem, kind: pu.kind, target: pu.target, ref: ['variza', 'tetraminator'].includes(r.Payment_Method) ? str(r.dec_not_confirmed) : '' })
+      price: parseInt(r.price) || 0, method: str(r.Payment_Method), status, problem, kind: pu.kind, target: pu.target, ref: ['variza', 'tetraminator', 'paychi'].includes(r.Payment_Method) ? str(r.dec_not_confirmed) : '' })
   }
   return { ok: true, rows: out, counts, days }
 }

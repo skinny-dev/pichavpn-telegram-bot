@@ -1,5 +1,6 @@
 // Card-to-card auto approval from bank SMS (sms_pay.php): parse, match an open order by its unique amount, approve.
 // On Serverless the SMS reaches the bot through the payment relay (lib/relay.js); everything else is here.
+import { sha1Hex } from './hash.js'
 import { one, all, run, sql } from './db.js'
 import { sendmessage, telegram } from './tg.js'
 import { directPayment } from './directpay.js'
@@ -54,10 +55,7 @@ export function smsTimeToUnix(s) {
   const [gy, gm, gd] = jalaliToGregorian(+m[1], +m[2], +m[3])
   return Math.floor(Date.UTC(gy, gm - 1, gd, +m[4], +m[5]) / 1000) - 12600
 }
-async function sha1(s) {
-  const h = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(s))
-  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+const sha1 = sha1Hex
 const fingerprint = (p, bank) => sha1([p.kind, p.amount_rial, p.balance_rial ?? '', p.sms_time ?? '', String(bank).toLowerCase()].join('|'))
 export function smsSplitMessages(text) {
   const out = []

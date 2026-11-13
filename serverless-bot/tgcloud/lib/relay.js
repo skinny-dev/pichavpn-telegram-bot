@@ -8,17 +8,15 @@ import { buildKeyboards } from './keyboards.js'
 import { directPayment } from './directpay.js'
 import { smsProcessText } from './sms.js'
 import { tetraSettle, tetraAfterPaid } from './tetraminator.js'
+import { paychiSettle, paychiAfterPaid } from './paychi.js'
 import { sprintf, numberFormat, intval } from './php.js'
+import { hmacSha256Hex } from './hash.js'
 
 const RELAY_EVERY = 20
 const pay = async (name) => (await one(sql`SELECT ValuePay FROM PaySetting WHERE NamePay = ${name}`))?.ValuePay ?? null
 const now = () => Math.floor(Date.now() / 1000)
 
-async function hmacHex(secret, body) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body))
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+const hmacHex = hmacSha256Hex
 const same = (a, b) => { a = String(a); b = String(b); if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0 }
 
 /** a context for payments confirmed outside any admin action: no admin message to edit, the customer's keyboard */
@@ -95,6 +93,41 @@ export async function tetraReconcile(c) {
   for (const o of rows) await settleTetraminator(c, o)
 }
 
+/** Paychi's webhook (POST, signed) or a bare GET ?order_id=…: only says which order to look at — the money is credited after an inquiry.
+ *  When a webhook secret is set and a signature header is present it must verify; a bad one is dropped (it would only cost an inquiry, but there is no reason to run it). */
+async function onPaychi(c, ev) {
+  let data = null
+  try { data = JSON.parse(String(ev.body ?? '')) } catch { data = null }
+  const id = String(ev.query?.order_id ?? data?.data?.order_id ?? '')
+  if (!/^[A-Za-z0-9]{6,40}$/.test(id)) return 'bad order id'
+  const secret = String((await pay('paychi_webhook_secret')) ?? '').trim()
+  const header = String(ev.headers?.['x-paychi-signature'] ?? '')
+  if (secret !== '' && secret !== '0' && header !== '') {
+    const t = /(?:^|,)t=(\d+)/.exec(header)?.[1], v1 = /(?:^|,)v1=([0-9a-f]+)/i.exec(header)?.[1]
+    if (!t || !v1 || !same(await hmacHex(secret, t + '.' + String(ev.body ?? '')), v1.toLowerCase())) return 'invalid signature'
+  }
+  const o = await one(sql`SELECT * FROM Payment_report WHERE id_order = ${id}`)
+  if (!o || o.Payment_Method !== 'paychi') return 'order not found'
+  return settlePaychi(c, o)
+}
+/** one order: inquire, credit once, tell the report group */
+export async function settlePaychi(c, o, deliver = null) {
+  const res = await paychiSettle(o, deliver || ((orderId) => directPayment(neutral(c), orderId)))
+  if (res.result === 'paid') await paychiAfterPaid(c, o, res)
+  else if (res.result === 'delivery_failed') await report(c, `⚠️ پیچی پرداخت را تأیید کرد ولی تحویل خطا داد.\n🧾 سفارش: <code>${o.id_order}</code>\n❗️ ${String(res.error).slice(0, 200)}\nپرداخت ثبت شد؛ تحویل دوباره از پنل («پرداخت‌های معلق»).`)
+  else if (res.result === 'amount_mismatch') console.error('paychi amount mismatch', o.id_order, res.billed, res.amount)
+  return res.result
+}
+/** lazy cron: a lost webhook must not leave a paid customer waiting — ask about the newest open orders (at most 5 a run) */
+export async function paychiReconcile(c) {
+  if (String((await pay('paychi_status')) ?? '') !== 'onpaychi') return
+  const since = new Date((now() - 65 * 60 + 12600) * 1000)
+  const p = (n) => String(n).padStart(2, '0')
+  const cut = `${since.getUTCFullYear()}/${p(since.getUTCMonth() + 1)}/${p(since.getUTCDate())} ${p(since.getUTCHours())}:${p(since.getUTCMinutes())}:${p(since.getUTCSeconds())}`
+  const rows = await all(sql`SELECT * FROM Payment_report WHERE Payment_Method = 'paychi' AND payment_Status IN ('Unpaid', 'waiting') AND time >= ${cut} ORDER BY time DESC LIMIT 5`)
+  for (const o of rows) await settlePaychi(c, o)
+}
+
 /** smsExtractPayload() + payment/sms_webhook.php */
 async function onSms(c, ev) {
   const flat = {}
@@ -158,7 +191,7 @@ export async function pullRelay(c, force = false) {
     after = intval(ev.seq)
     await kvSet('relay:after', String(after))
     try {
-      const r = ev.type === 'variza' ? await onVariza(c, ev) : ev.type === 'sms' ? await onSms(c, ev) : ev.type === 'tetraminator' ? await onTetraminator(c, ev) : 'unknown'
+      const r = ev.type === 'variza' ? await onVariza(c, ev) : ev.type === 'sms' ? await onSms(c, ev) : ev.type === 'tetraminator' ? await onTetraminator(c, ev) : ev.type === 'paychi' ? await onPaychi(c, ev) : 'unknown'
       console.log('relay', ev.seq, ev.type, r)
     } catch (e) {
       console.error('relay event', ev.seq, e)

@@ -7,8 +7,9 @@ import { step, tehranDate } from '../bot.js'
 import { backuserKb } from '../keyboards.js'
 import { stepPaymentKb, customPlanPrice, addBalance } from '../catalog.js'
 import { smsUniqueAmount, smsReconcileOrder, reportTs } from '../sms.js'
-import { pullRelay, settleTetraminator } from '../relay.js'
+import { pullRelay, settleTetraminator, settlePaychi } from '../relay.js'
 import { createPayTetraminator } from '../tetraminator.js'
+import { createPayPaychi, paychiPauseSeconds } from '../paychi.js'
 import { gatewayPause, varizaLimitReached, gatewayOutageSeconds } from '../gatepause.js'
 import { sprintf, strtr, numberFormat, intval, time, randomHex, J } from '../php.js'
 
@@ -135,7 +136,7 @@ export const payRoutes = [
   },
   // a payment method
   async (c) => {
-    const GW = ['cart_to_offline', 'aqayepardakht', 'zarinpal', 'variza', 'tetraminator', 'plisio', 'nowpayment', 'iranpay1', 'iranpay2', 'iranpay4', 'iranpay3', 'digitaltron', 'startelegrams']
+    const GW = ['cart_to_offline', 'aqayepardakht', 'zarinpal', 'variza', 'tetraminator', 'paychi', 'plisio', 'nowpayment', 'iranpay1', 'iranpay2', 'iranpay4', 'iranpay3', 'digitaltron', 'startelegrams']
     if (!(c.user.step === 'get_step_payment' && GW.includes(c.datain))) return false
     const T = c.T, user = c.user, B = T.users.Balance
     const amount = user.Processing_value
@@ -220,6 +221,37 @@ export const payRoutes = [
       await rememberMessage(await sendmessage(c.from_id, text, kb, 'HTML'), orderId)
       return true
     }
+    if (c.datain === 'paychi') {
+      const lo = Math.max(intval((await pay('minbalancepaychi')) ?? 20000), 1000) // the service refuses bills below 10,000 rial
+      const hi = intval((await pay('maxbalancepaychi')) ?? 5000000)
+      if (n(amount) < lo || n(amount) > hi) {
+        await sendmessage(c.from_id, strtr(B.depositRange, { '{mainbalance}': numberFormat(lo), '{maxbalance}': numberFormat(hi) }), null, 'HTML')
+        return true
+      }
+      await deletemessage(c.from_id, c.message_id)
+      await sendmessage(c.from_id, B.linkpayments, c.keyboard, 'HTML')
+      const orderId = randomHex(5)
+      // whatever goes wrong inside, the customer gets an answer (never stays on «creating the link»)
+      const p = await createPayPaychi(c, amount, orderId).catch((e) => ({ http_code: 0, error: 'exception: ' + String((e && e.message) || e) }))
+      if (!p.pay_url || !p.pay_id) {
+        const err = p.error ?? JSON.stringify(p)
+        const pauseFor = paychiPauseSeconds(p)
+        if (pauseFor > 0) return backToMenu(c, 'paychi', pauseFor, `${err} ${p.code ?? ''} ${p.message ?? ''}`.trim())
+        await sendmessage(c.from_id, B.errorLinkPayment, c.keyboard, 'HTML')
+        await step(c, 'home')
+        await report(c, 'errorreport', `Paychi link error: ${String(err).slice(0, 200)} ${p.code ?? ''} user ${c.from_id}`)
+        return true
+      }
+      await run(sql`INSERT INTO Payment_report (id_user, id_order, time, price, payment_Status, Payment_Method, id_invoice, dec_not_confirmed)
+        VALUES (${c.from_id}, ${orderId}, ${tehranDate()}, ${amount}, 'Unpaid', 'paychi', ${invoiceTag}, ${p.pay_id})`)
+      const kb = J({ inline_keyboard: [[{ text: B.payments, url: p.pay_url }], [{ text: B.tetraminatorCheckButton || '✅ پرداخت کردم، بررسی پرداخت', callback_data: 'checkpaychi-' + orderId }]] })
+      await sendHelp(c, 'helppaychi', false)
+      const rial = intval(p.amount_rial)
+      const exact = rial > 0 ? `\n\n💰 مبلغ دقیقِ کارت‌به‌کارت: <b>${numberFormat(rial)} ریال</b> (${numberFormat(Math.round(rial / 10))} تومان)\n⚠️ دقیقاً همین مبلغ را واریز کنید؛ تشخیص پرداخت با همین عدد انجام می‌شود.` : ''
+      const text = sprintf(B.paychiInvoice || '✅ فاکتور پرداخت ایجاد شد.\n\n🔢 شماره فاکتور : %s\n💰 مبلغ فاکتور : %s تومان', orderId, numberFormat(n(amount), 0)) + exact + '\n\n⏳ شماره کارت و جزئیات را از دکمهٔ زیر ببینید. بعد از واریز، پرداخت خودکار تأیید می‌شود.'
+      await rememberMessage(await sendmessage(c.from_id, text, kb, 'HTML'), orderId)
+      return true
+    }
     if (c.datain === 'startelegrams') {
       const rates = await rateArze()
       if (!rates || !rates.USD) { await sendmessage(c.from_id, B.errorLinkPayment, c.keyboard, 'HTML'); await step(c, 'home'); return true }
@@ -262,6 +294,23 @@ export const payRoutes = [
     else if (r === 'unpaid') await alertText(B.tetraminatorUnpaid || '⏳ هنوز پرداختی دریافت نشده. بعد از پرداخت چند ثانیه صبر کنید و دوباره بزنید.')
     else if (r === 'amount_mismatch') await alertText(B.tetraminatorMismatch || '⚠️ مبلغ پرداخت‌شده با فاکتور یکی نیست. با پشتیبانی در ارتباط باشید.')
     else if (r === 'delivery_failed') await alertText(B.tetraminatorDeliveryFailed || '⚠️ پرداخت تأیید شد ولی تحویل سرویس با خطا روبه‌رو شد. پشتیبانی پیگیری می‌کند.')
+    else await alertText(B.tetraminatorError || '❌ استعلام پرداخت انجام نشد. چند لحظهٔ دیگر دوباره امتحان کنید.')
+    return true
+  },
+  // «I paid» (Paychi): ask the service itself (the webhook may have been lost) and deliver once if it is paid
+  async (c) => {
+    const m = /^checkpaychi-([A-Za-z0-9]+)$/.exec(c.datain)
+    if (!m) return false
+    const o = await orderBy(m[1])
+    if (!o || String(o.id_user) !== c.from_id || o.Payment_Method !== 'paychi') return true
+    const B = c.T.users.Balance
+    const alertText = (text) => telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text, show_alert: true, cache_time: 3 })
+    const r = await settlePaychi(c, o)
+    if (r === 'paid') { await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id }); await deletemessage(c.from_id, c.message_id) }
+    else if (r === 'already') await alertText(B.tetraminatorAlready || '✅ این پرداخت قبلاً ثبت شده است.')
+    else if (r === 'unpaid') await alertText('⏳ هنوز واریزی دریافت نشده. بعد از واریز دقیقِ همان مبلغ، چند ثانیه صبر کنید و دوباره بزنید.')
+    else if (r === 'amount_mismatch') await alertText(B.tetraminatorMismatch || '⚠️ مبلغ پرداخت‌شده با فاکتور یکی نیست. با پشتیبانی در ارتباط باشید.')
+    else if (r === 'delivery_failed') await alertText(B.tetraminatorDeliveryFailed || '⚠️ پرداخت تأیید شد ولی تحویل سرویس با خطا روبه‌رو شد. پشتیبانی بررسی می‌کند.')
     else await alertText(B.tetraminatorError || '❌ استعلام پرداخت انجام نشد. چند لحظهٔ دیگر دوباره امتحان کنید.')
     return true
   },

@@ -5,6 +5,7 @@
 // it already has. No database, no bot token, no secrets here except the bot's pull key.
 //
 //   POST /variza          Variza webhook
+//   POST /paychi?order_id=…  Paychi's webhook (signed; the bot verifies and always inquires)
 //   GET  /tetraminator?order_id=…   Tetraminator's callback (no body, no signature; the bot verifies it with an inquiry)
 //   GET  /variza_return   the page Variza sends the customer back to
 //   POST /sms             the SMS forwarder
@@ -81,7 +82,7 @@ $path = '/' . trim((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PA
 $path = (string) preg_replace('#^/index\.php#', '', $path) ?: '/';
 $raw = (string) file_get_contents('php://input', false, null, 0, MAX_BODY);
 $headers = [];
-foreach (['Authorization', 'X-Admin-Token', 'X-Token', 'X-Api-Key', 'X-Webhook-Signature', 'Content-Type'] as $h) {
+foreach (['Authorization', 'X-Admin-Token', 'X-Token', 'X-Api-Key', 'X-Webhook-Signature', 'X-Paychi-Signature', 'Content-Type'] as $h) {
     if (($v = headerValue($h)) !== '') {
         $headers[strtolower($h)] = mb_substr($v, 0, 500);
     }
@@ -103,6 +104,19 @@ if (in_array($path, ['/variza_return', '/variza_return.php', '/payment/variza.ph
         . '<p style="color:#666">پرداخت شما دریافت شد و ظرف چند لحظه در ربات تأیید می‌شود. به ربات برگردید؛ اگر تا چند دقیقه تأیید نشد، دکمهٔ «پرداخت کردم» را بزنید.</p>'
         . '</body></html>';
     exit;
+}
+
+if ($path === '/paychi') {
+    // Paychi's webhook (POST, signed with t=…,v1=…) or a bare GET: both only name an order; the bot verifies the signature when it has a secret and always asks Paychi
+    $orderId = (string) ($_GET['order_id'] ?? '');
+    if ($orderId !== '' && !preg_match('/^[A-Za-z0-9]{6,40}$/', $orderId)) {
+        reply(400, ['status' => 'bad order_id']);
+    }
+    if ($orderId === '' && $raw === '') {
+        reply(400, ['status' => 'empty']);
+    }
+    withQueue(['type' => 'paychi', 'query' => $orderId !== '' ? ['order_id' => $orderId] : [], 'body' => $raw, 'headers' => $headers]);
+    reply(200, ['status' => 'queued']);
 }
 
 if (in_array($path, ['/tetraminator', '/tetraminator_webhook.php', '/payment/tetraminator_webhook.php'], true)) {
