@@ -2990,6 +2990,16 @@ function createPayZarinpal($price, $order_id)
     curl_close($curl);
     return json_decode($response, true);
 }
+/** Variza-compatible API base (Variza, or Paychi Variz's /api/compat/variza/v1). */
+function varizaApiBase()
+{
+    $url = trim((string) getPaySettingValue('variza_api_url', ''));
+    if ($url === '' || $url === '0' || !preg_match('~^https?://~i', $url)) {
+        $url = 'https://variza.ir/api/v1';
+    }
+    return rtrim($url, '/');
+}
+
 function createPayVariza($price, $order_id)
 {
     // variza.ir sometimes fails for a moment (timeout, 5xx, 429): try up to 3 times before giving up
@@ -3018,7 +3028,7 @@ function createPayVarizaOnce($price, $order_id)
     }
     $curl = curl_init();
     curl_setopt_array($curl, [
-        CURLOPT_URL => 'https://variza.ir/api/v1/pay',
+        CURLOPT_URL => varizaApiBase() . '/pay',
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_ENCODING => '',
         CURLOPT_MAXREDIRS => 10,

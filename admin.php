@@ -65,7 +65,7 @@ $backmenu_register(["apiiranpay", "helpiranpay3", "maxbalanceiranpay", "minbalan
 $backmenu_register(["apiiranpay4", "endpointiranpay4", "getcashiranpay4", "getdailyiranpay4", "getmaaxiranpay4", "getmainiranpay4", "helpiranpay4"], $abangatewaykeyboard);
 $backmenu_register(["getmaindigitaltron", "getmaxdigitaltron", "helpofflinearze"], $tronnowpayments);
 $backmenu_register(["chashbackstar", "gethelpstar", "getmainaqstar", "maxbalancestar"], $Startelegram);
-$backmenu_register(["variza_api_token", "variza_webhook_secret", "getcashvariza", "getmainvariza", "getmaaxvariza", "helpvariza"], $keyboardvariza);
+$backmenu_register(["variza_api_token", "variza_webhook_secret", "variza_api_url", "getcashvariza", "getmainvariza", "getmaaxvariza", "helpvariza"], $keyboardvariza);
 $backmenu_register([
     "addchannelid", "limit_usertest_allusers", "getimagebackgroundqr", "getpricereqagent",
     "getcronvolumere", "on_hold_day", "getdaycron", "getvolumewarn", "getdaywarn", "getlowbalancealert"
@@ -2218,6 +2218,21 @@ elseif ($datain == "systemsms") {
 } elseif ($user['step'] == "variza_api_token") {
     sendmessage($from_id, $textbotlang['Admin']['SettingnowPayment']['saveApi'], $keyboardvariza, 'HTML');
     update("PaySetting", "ValuePay", trim($text), "NamePay", "variza_api_token");
+    step('home', $from_id);
+} elseif ($text == $textbotlang['keyboard']['varizaApiUrl'] && $adminrulecheck['rule'] == "administrator") {
+    $msg = sprintf($textbotlang['Admin']['gateway']['askVarizaApiUrl'], varizaApiBase());
+    sendmessage($from_id, $msg, $backadmin, 'HTML');
+    step('variza_api_url', $from_id);
+} elseif ($user['step'] == "variza_api_url") {
+    $url = rtrim(trim($text), '/');
+    if (!preg_match('~^https?://[^\s]+$~i', $url)) {
+        sendmessage($from_id, $textbotlang['Admin']['gateway']['invalidVarizaApiUrl'], $backadmin, 'HTML');
+        return;
+    }
+    // the row may be missing on installs created before this setting existed
+    $pdo->prepare("INSERT IGNORE INTO PaySetting (NamePay, ValuePay) VALUES ('variza_api_url', ?)")->execute([$url]);
+    update("PaySetting", "ValuePay", $url, "NamePay", "variza_api_url");
+    sendmessage($from_id, $textbotlang['Admin']['SettingnowPayment']['saveApi'], $keyboardvariza, 'HTML');
     step('home', $from_id);
 } elseif ($text == $textbotlang['keyboard']['varizaWebhookSecret'] && $adminrulecheck['rule'] == "administrator") {
     $PaySetting = select("PaySetting", "ValuePay", "NamePay", "variza_webhook_secret")['ValuePay'];

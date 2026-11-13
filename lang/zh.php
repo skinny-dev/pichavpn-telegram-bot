@@ -1823,6 +1823,13 @@ nowpayments.io
 'askVarizaApiToken' => '💳 请从 Variza 控制面板（个人资料 → API 密钥）输入您的 Variza API 令牌
 
 当前密钥：<code>%s</code>',
+'askVarizaApiUrl' => '🌐 请输入兼容 Variza 的 API 地址。
+
+Variza: <code>https://variza.ir/api/v1</code>
+Paychi Variz: <code>https://YOUR-PAYCHI/api/compat/variza/v1</code>
+
+当前: <code>%s</code>',
+'invalidVarizaApiUrl' => '❌ 地址必须以 http:// 或 https:// 开头',
 'askVarizaWebhookSecret' => '🔐 请从 Variza 控制面板（个人资料 → Webhook）输入您的 Variza Webhook 密钥
 
 当前密钥：<code>%s</code>
@@ -4178,6 +4185,7 @@ f,n.n2',
                 'zarinPalGateway' => 'ZarinPal',
                 'varizaGateway' => 'Variza',
 'varizaApiToken' => 'Variza API 令牌',
+'varizaApiUrl' => 'Variza API 地址',
 'varizaWebhookSecret' => 'Variza Webhook 密钥',
 'cashbackVariza' => 'Variza 返现',
 'minAmountVariza' => 'Variza 最低金额',

@@ -1832,6 +1832,13 @@ nowpayments.io
                         'askVarizaApiToken' => '💳 کلید API واریزا را از پنل واریزا (پروفایل ← کلید API) دریافت و وارد کنید
 
 کلید فعلی شما: <code>%s</code>',
+                        'askVarizaApiUrl' => '🌐 آدرس API سازگار با واریزا را وارد کنید.
+
+واریزا: <code>https://variza.ir/api/v1</code>
+پی‌چی واریز: <code>https://YOUR-PAYCHI/api/compat/variza/v1</code>
+
+آدرس فعلی: <code>%s</code>',
+                        'invalidVarizaApiUrl' => '❌ آدرس باید با http:// یا https:// شروع شود.',
                         'askVarizaWebhookSecret' => '🔐 کلید امضای وب‌هوک واریزا را از پنل واریزا (پروفایل ← وب‌هوک) دریافت و وارد کنید
 
 کلید فعلی شما: <code>%s</code>
@@ -4175,6 +4182,7 @@ f,n.n2',
                 'varizaGateway' => 'واریزا',
                 'zarinPalMerchant' => 'مرچنت زرین پال',
                 'varizaApiToken' => 'کلید API واریزا',
+                'varizaApiUrl' => 'آدرس API واریزا',
                 'varizaWebhookSecret' => 'کلید وب‌هوک واریزا',
                 'cashbackVariza' => 'کش‌بک واریزا',
                 'minAmountVariza' => 'حداقل واریز واریزا',

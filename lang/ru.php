@@ -1823,6 +1823,13 @@ nowpayments.io
                         'askVarizaApiToken' => '💳 Введите API-токен Variza из панели Variza (Профиль → API-ключ)
 
 Текущий ключ: <code>%s</code>',
+                        'askVarizaApiUrl' => '🌐 Введите адрес API, совместимого с Variza.
+
+Variza: <code>https://variza.ir/api/v1</code>
+Paychi Variz: <code>https://YOUR-PAYCHI/api/compat/variza/v1</code>
+
+Текущий: <code>%s</code>',
+                        'invalidVarizaApiUrl' => '❌ Адрес должен начинаться с http:// или https://',
                         'askVarizaWebhookSecret' => '🔐 Введите секретный ключ вебхука Variza из панели Variza (Профиль → Вебхук)
 
 Текущий ключ: <code>%s</code>
@@ -4178,6 +4185,7 @@ ID пользователя : %s
                 'zarinPalGateway' => 'ZarinPal',
                 'varizaGateway' => 'Variza',
                 'varizaApiToken' => 'API-токен Variza',
+                'varizaApiUrl' => 'Адрес API Variza',
                 'varizaWebhookSecret' => 'Webhook-секрет Variza',
                 'cashbackVariza' => 'Кэшбэк Variza',
                 'minAmountVariza' => 'Минимальная сумма Variza',

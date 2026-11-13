@@ -224,6 +224,7 @@ $keyboardzarinpal = json_encode([
 $keyboardvariza = json_encode([
     'inline_keyboard' => [
         [['text' => $textbotlang['keyboard']['varizaApiToken'], 'callback_data' => "paygwopt-varizaApiToken"], ['text' => $textbotlang['keyboard']['varizaWebhookSecret'], 'callback_data' => "paygwopt-varizaWebhookSecret"]],
+        [['text' => $textbotlang['keyboard']['varizaApiUrl'], 'callback_data' => "paygwopt-varizaApiUrl"]],
         [['text' => $textbotlang['keyboard']['cashbackVariza'], 'callback_data' => "paygwopt-cashbackVariza"]],
         [['text' => $textbotlang['keyboard']['minAmountVariza'], 'callback_data' => "paygwopt-minAmountVariza"], ['text' => $textbotlang['keyboard']['maxAmountVariza'], 'callback_data' => "paygwopt-maxAmountVariza"]],
         [['text' => $textbotlang['keyboard']['setEducationVariza'], 'callback_data' => "paygwopt-setEducationVariza"]],

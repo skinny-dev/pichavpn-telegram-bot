@@ -89,6 +89,8 @@ $values = [
     'variza_status' => 'offvariza',
     'variza_api_token' => '0',
     'variza_webhook_secret' => '0',
+    // Variza-compatible API base: Variza itself, or Paychi Variz (https://<host>/api/compat/variza/v1)
+    'variza_api_url' => 'https://variza.ir/api/v1',
     'variza_receipt_delay' => '5',
     'minbalancevariza' => '20000',
     'maxbalancevariza' => '1000000',
