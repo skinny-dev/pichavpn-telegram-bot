@@ -1,5 +1,6 @@
 // Admin keyboards of keyboard.php
 import { J } from '../php.js'
+import { GATEWAY_BTN } from './gateways.js'
 
 export function keyboardAdmin(c) {
   const T = c.T, rule = c.adminRow?.rule
@@ -9,6 +10,7 @@ export function keyboardAdmin(c) {
     [{ text: T.keyboard.quickSetTimePrice }, { text: T.keyboard.quickSetVolumePrice }],
     [{ text: T.Admin.btnKeyboard.manageUser }, { text: T.keyboard.shopSettings }],
     [{ text: T.keyboard.financial }, { text: T.keyboard.cronStatus }],
+    [{ text: GATEWAY_BTN }],
     [{ text: T.keyboard.supportSection }, { text: T.keyboard.educationSection }],
     [{ text: T.keyboard.botReport }],
     [{ text: T.keyboard.generalSettings }, { text: T.keyboard.pendingReceipts }],

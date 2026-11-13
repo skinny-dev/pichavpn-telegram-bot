@@ -154,6 +154,21 @@ try {
   calls.length = 0
   await cb(5550001, 'Confirm_pay_dup2')
   check('admin: approving a duplicate of a paid order of the same gateway is refused', (await status('dup2')) === 'Unpaid' && calls.some(([m, p]) => m === 'answerCallbackQuery' && /احتمالاً تکراری/.test(String(p.text))), JSON.stringify(calls.filter(([m]) => m === 'answerCallbackQuery')))
+
+  // ---- the admin switches Paychi off and on from the bot
+  calls.length = 0
+  await msgU(5550001, '💳 درگاه‌های کارت به کارت')
+  const gwMsg = texts().find(([, p]) => /درگاه‌های کارت به کارت/.test(String(p.text)))
+  check('admin: the gateway menu shows both gateways with switches', !!gwMsg && JSON.stringify(gwMsg[1].reply_markup).includes('gw_off_paychi'), JSON.stringify(texts().map(([, p]) => p.text)))
+  await cb(5550001, 'gw_off_paychi')
+  check('admin: switching off writes offpaychi', (await db.get(sql`SELECT ValuePay FROM PaySetting WHERE NamePay = 'paychi_status'`)).ValuePay === 'offpaychi')
+  await readyUser('7001', '60000'); calls.length = 0
+  await cb(7001, 'colselist')
+  check('admin: the customer no longer sees the Paychi button', !calls.some(([, p]) => JSON.stringify(p.reply_markup ?? {}).includes('"paychi"')))
+  await cb(5550001, 'gw_on_paychi')
+  check('admin: switching on writes onpaychi', (await db.get(sql`SELECT ValuePay FROM PaySetting WHERE NamePay = 'paychi_status'`)).ValuePay === 'onpaychi')
+  await cb(7001, 'gw_off_paychi')
+  check('admin: a customer cannot use the switch', (await db.get(sql`SELECT ValuePay FROM PaySetting WHERE NamePay = 'paychi_status'`)).ValuePay === 'onpaychi')
 } finally {
   php.kill(); mock.close(); fs.rmSync(dir, { recursive: true, force: true })
 }

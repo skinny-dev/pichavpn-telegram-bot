@@ -11,6 +11,7 @@ import { bulkRoutes } from './routes/bulk.js'
 import { payRoutes } from './routes/pay.js'
 import { adminPayRoutes } from './admin/payments.js'
 import { adminRelayRoutes } from './admin/relay.js'
+import { adminGatewayRoutes } from './admin/gateways.js'
 import { adminMenuRoutes } from './admin/menu.js'
 import { starsRoutes } from './routes/stars.js'
 import { miscRoutes } from './routes/misc.js'
@@ -35,6 +36,7 @@ export const routes = [
 // admin.php, for admins, after the customer routes
 export const adminRoutes = [
   ...adminRelayRoutes,
+  ...adminGatewayRoutes,
   ...adminPayRoutes,
   ...adminMenuRoutes,
 ]
