@@ -28,6 +28,7 @@ const iconBody = (name) => {
 }
 const glyph = (name, cx, cy, size, sw, color, extra = '') =>
   `<g transform="translate(${cx - size / 2} ${cy - size / 2}) scale(${size / 24})" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" ${extra}>${iconBody(name)}</g>`
+const LOGO = 'data:image/png;base64,' + fs.readFileSync(path.join(here, '../brand/picha-logo.png')).toString('base64')
 const hash = (s) => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
 
 function art(s, th) {
@@ -85,7 +86,7 @@ body{width:1280px;height:720px;font-family:V,sans-serif;color:#eef6ff;position:r
 .col{position:absolute;right:76px;top:66px;bottom:64px;width:600px;display:flex;flex-direction:column}
 .top{display:flex;justify-content:space-between;align-items:center}
 .brand{display:flex;align-items:center;gap:14px;font-weight:800;font-size:32px}
-.mark{width:50px;height:50px;border:2.5px solid ${th.c};border-radius:14px;display:grid;place-items:center;box-shadow:0 0 22px ${th.c}55 inset,0 0 18px ${th.c}33}
+.mark{width:58px;height:58px;border:2.5px solid ${th.c};border-radius:14px;display:grid;place-items:center;box-shadow:0 0 22px ${th.c}55 inset,0 0 18px ${th.c}33}
 .tag{font:700 20px M,monospace;color:${th.c};direction:ltr;letter-spacing:1px;padding:7px 14px;border:1.5px solid ${th.c}66;border-radius:8px;background:${th.c}12}
 .tag b{opacity:.6}
 .mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
@@ -103,7 +104,7 @@ p.sub{text-wrap:balance;font-size:28px;line-height:1.7;font-weight:500;color:#c9
 <div class="frame"></div><div class="cn a"></div><div class="cn b"></div><div class="cn c"></div><div class="cn d"></div>
 ${art(s, th)}
 <div class="col">
- <div class="top"><div class="brand"><div class="mark"><svg width="26" height="26" viewBox="0 0 32 32"><path d="M10 23V9h7a4.5 4.5 0 010 9h-7" stroke="${th.c}" stroke-width="3.4" fill="none" stroke-linecap="round"/></svg></div>پیچا</div><div class="tag"><b>&gt;</b> ${esc(s.tag || 'picha')}</div></div>
+ <div class="top"><div class="brand"><div class="mark"><img src="${LOGO}" width="42" height="42"></div>پیچا</div><div class="tag"><b>&gt;</b> ${esc(s.tag || 'picha')}</div></div>
  <div class="mid"><h1>${title}</h1>${s.subtitle ? `<p class="sub">${esc(s.subtitle)}</p>` : ''}</div>
  ${badges ? `<div class="chips">${badges}</div>` : ''}
  <div class="row"><div class="status"><u></u>${esc(s.handle || '@pichanet_bot')}</div>${s.cta ? `<span class="cta">${esc(s.cta)} ←</span>` : ''}</div>
