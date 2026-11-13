@@ -1,0 +1,10 @@
+{
+  "_help": "A news item is a candidate only if it matches allow and does not match deny. Both are checked on title + summary. Edit freely; the job never publishes a political/security/crime story automatically.",
+  "allow": ["اینترنت", "فیلتر", "قطعی", "پهنای باند", "ویپیان", "VPN", "امنیت سایبری", "حریم خصوصی", "گوشی", "اندروید", "iOS", "ویندوز", "تلگرام", "اینستاگرام", "واتساپ", "بازی", "استریم", "نت‌فلیکس", "هوش مصنوعی", "به‌روزرسانی", "آپدیت", "نفوذ", "هک", "رمز عبور"],
+  "deny": ["دولت", "مجلس", "انتخابات", "تحریم", "جنگ", "حمله", "کشته", "بازداشت", "دادگاه", "اعدام", "اعتراض", "شهادت", "رهبر", "سپاه", "نظامی"],
+  "perDay": 1,
+  "fridayDigest": 5,
+  "postTime": "12:30",
+  "mustHaveSourceLink": true,
+  "maxQuoteWords": 12
+}

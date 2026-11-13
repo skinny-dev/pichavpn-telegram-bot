@@ -1,0 +1,6 @@
+{
+  "_help": "Add one entry per source you want followed. type: rss | tme (a PUBLIC Telegram channel's t.me/s/<name> page). status must be set to \"ok\" only after `node check-feeds.mjs` has fetched it from the server that will run the job. Nothing is published from an unverified source.",
+  "sources": [
+    { "id": "zoomit", "name": "زومیت", "type": "rss", "url": "https://www.zoomit.ir/feed", "topics": ["فناوری", "اینترنت"], "status": "unverified" }
+  ]
+}
