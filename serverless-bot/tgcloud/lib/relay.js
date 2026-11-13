@@ -114,7 +114,7 @@ async function onPaychi(c, ev) {
 export async function settlePaychi(c, o, deliver = null) {
   const res = await paychiSettle(o, deliver || ((orderId) => directPayment(neutral(c), orderId)))
   if (res.result === 'paid') await paychiAfterPaid(c, o, res)
-  else if (res.result === 'delivery_failed') await report(c, `⚠️ پیچی پرداخت را تأیید کرد ولی تحویل خطا داد.\n🧾 سفارش: <code>${o.id_order}</code>\n❗️ ${String(res.error).slice(0, 200)}\nپرداخت ثبت شد؛ تحویل دوباره از پنل («پرداخت‌های معلق»).`)
+  else if (res.result === 'delivery_failed') await report(c, `⚠️ پی‌چی پرداخت را تأیید کرد ولی تحویل خطا داد.\n🧾 سفارش: <code>${o.id_order}</code>\n❗️ ${String(res.error).slice(0, 200)}\nپرداخت ثبت شد؛ تحویل دوباره از پنل («پرداخت‌های معلق»).`)
   else if (res.result === 'amount_mismatch') console.error('paychi amount mismatch', o.id_order, res.billed, res.amount)
   return res.result
 }

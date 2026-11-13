@@ -121,6 +121,6 @@ export async function paychiAfterPaid(c, order, res) {
   if (String(c.setting.Channel_Report ?? '').length === 0 || !c.topicsAll?.paymentreport) return
   const send = (text) => telegram('sendmessage', { chat_id: c.setting.Channel_Report, message_thread_id: c.topicsAll.paymentreport, text, parse_mode: 'HTML' })
   await send(`💵 پرداخت جدید (پیچی، کارت به کارت خودکار)\n- 👤 نام کاربری کاربر : @${buyer?.username ?? '-'}\n- 🆔 آیدی عددی کاربر : ${order.id_user}\n- 💸 مبلغ : ${numberFormat(billed)} تومان\n- 🛒 کد سفارش : <code>${res.order_id}</code>\n- 🧾 تراکنش : <code>${res.pay_id}</code>`)
-  if (res.before === 'waiting') await send(`✅ پیچی خودکار تأیید کرد؛ رسید دستی سفارش <code>${res.order_id}</code> دیگر نیاز به بررسی ندارد.`)
-  else if (res.before === 'reject') await send(`⚠️ پیچی پرداختی را تأیید کرد که قبلاً رد شده بود؛ مبلغ ${numberFormat(billed)} تومان برای کاربر <code>${order.id_user}</code> ثبت شد.`)
+  if (res.before === 'waiting') await send(`✅ پی‌چی خودکار تأیید کرد؛ رسید دستی سفارش <code>${res.order_id}</code> دیگر نیاز به بررسی ندارد.`)
+  else if (res.before === 'reject') await send(`⚠️ پی‌چی پرداختی را تأیید کرد که قبلاً رد شده بود؛ مبلغ ${numberFormat(billed)} تومان برای کاربر <code>${order.id_user}</code> ثبت شد.`)
 }

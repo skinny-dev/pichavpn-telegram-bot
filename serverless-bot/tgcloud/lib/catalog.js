@@ -366,7 +366,7 @@ export async function stepPaymentKb(c) {
   if (pay('tetraminator_status', 'offtetraminator') === 'ontetraminator' && set(pay('tetraminator_api_key', '')) && !paused('tetraminator')) priority[0] = [{ text: T.textbot.tetraminator || '💳 پرداخت آنلاین', callback_data: 'tetraminator' }]
   if (pay('paymentstatussnotverify') === 'onverifypay') kb.push([{ text: T.textbot.paymentNotVerify, callback_data: 'paymentnotverify' }])
   // Paychi (own card-to-card service) sits next to Variza until it is trusted enough to replace it
-  if (pay('paychi_status', 'offpaychi') === 'onpaychi' && set(pay('paychi_api_key', '')) && set(pay('paychi_base_url', '')) && !paused('paychi')) priority[2] = [{ text: T.textbot.paychi || '💳 کارت به کارت (پیچی)', callback_data: 'paychi' }]
+  if (pay('paychi_status', 'offpaychi') === 'onpaychi' && set(pay('paychi_api_key', '')) && set(pay('paychi_base_url', '')) && !paused('paychi')) priority[2] = [{ text: T.textbot.paychi || '💳 کارت به کارت (پی‌چی)', callback_data: 'paychi' }]
   if (intval(pay('statusstar')) === 1) priority[3] = [{ text: T.textbot.starTelegram, callback_data: 'startelegrams' }]
   kb = [...priority.filter(Boolean), ...kb]
   kb.push([{ text: T.keyboard.closeList, callback_data: 'colselist' }])

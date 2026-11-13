@@ -406,7 +406,7 @@ function statsOverall(PDO $pdo)
 function statsMethodLabel($m)
 {
     static $map = [
-        'cart to cart' => '💳 کارت به کارت', 'cart to cart sms' => 'خودکار با پیامک', 'cart to cart receipt' => 'با رسید (تأیید ادمین)', 'variza' => '🏦 واریزا', 'paychi' => '🏦 پیچی (کارت به کارت خودکار)', 'Currency Rial 1' => '🏦 درگاه ریالی ۱', 'Currency Rial 2' => '🏦 درگاه ریالی ۲', 'Currency Rial 3' => '🏦 درگاه ریالی ۳', 'AbanGateway' => '🏦 درگاه آبان', 'Star Telegram' => '⭐ استار تلگرام', 'tetraminator' => '🏦 تترامینیتور',
+        'cart to cart' => '💳 کارت به کارت', 'cart to cart sms' => 'خودکار با پیامک', 'cart to cart receipt' => 'با رسید (تأیید ادمین)', 'variza' => '🏦 واریزا', 'paychi' => '🏦 پی‌چی (کارت به کارت خودکار)', 'Currency Rial 1' => '🏦 درگاه ریالی ۱', 'Currency Rial 2' => '🏦 درگاه ریالی ۲', 'Currency Rial 3' => '🏦 درگاه ریالی ۳', 'AbanGateway' => '🏦 درگاه آبان', 'Star Telegram' => '⭐ استار تلگرام', 'tetraminator' => '🏦 تترامینیتور',
         'after pay' => '🧾 پرداخت بعد از دریافت', 'manual invoice' => '✍️ فاکتور دستی', 'add order by admin' => '🛠 سفارش ثبت‌شده توسط ادمین',
         'extend by admin' => '🛠 تمدید توسط ادمین', 'wallet' => '👛 پرداخت از کیف پول (داخلی)', 'add balance by admin' => '🎁 شارژ توسط ادمین (هدیه)',
         'low balance by admin' => '➖ کسر موجودی توسط ادمین', 'zarinpal' => 'زرین‌پال', 'aqayepardakht' => 'آقای پرداخت', 'plisio' => 'Plisio',
