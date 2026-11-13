@@ -18,6 +18,10 @@ const SECRET = new Set(['paychi_api_key', 'paychi_webhook_secret'])
 
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+  if (input?.unpause && ['paychi', 'variza', 'tetraminator'].includes(input.unpause)) {
+    await run(sql`DELETE FROM PaySetting WHERE NamePay = ${input.unpause + '_pause_until'}`)
+    return { unpaused: input.unpause }
+  }
   const set = input?.set
   if (set && typeof set === 'object') {
     const done = []

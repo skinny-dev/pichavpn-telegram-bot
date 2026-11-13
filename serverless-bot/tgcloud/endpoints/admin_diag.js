@@ -3,6 +3,7 @@
 import { EndpointError, fetch } from 'sdk'
 import { one, all, sql, kvGet } from '../lib/db.js'
 import { tetraCall, tetraKey, tetraBase } from '../lib/tetraminator.js'
+import { paychiCall, paychiKey, paychiBase } from '../lib/paychi.js'
 
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
@@ -37,6 +38,13 @@ export default async function (input, ctx) {
     const r = await tetraCall('GET', '/payment/inquiry/diagprobe', null, 12000)
     out.gateways.tetraminator = { key_set: (await tetraKey()) !== '', base: await tetraBase(), http: r.http, error: r.error, ms: Date.now() - s }
   } catch (e) { out.gateways.tetraminator = { threw: String(e?.message ?? e).slice(0, 100) } }
+  try {
+    // a real (tiny) create: the answer tells exactly why the customer sees «method unavailable» (code/message), if it does. It expires by itself.
+    const s = Date.now()
+    const r = await paychiCall('POST', '/api/v1/transactions', { amount: 200000, order_id: 'diag' + Date.now().toString(36), description: 'diag', ttl: 300 }, 12000)
+    const until = Number((await one(sql`SELECT ValuePay FROM PaySetting WHERE NamePay = 'paychi_pause_until'`))?.ValuePay ?? 0)
+    out.gateways.paychi = { key_set: (await paychiKey()) !== '', base: await paychiBase(), http: r.http, ok: r.http === 201, code: r.data?.error?.code ?? null, message: String(r.data?.error?.message ?? '').slice(0, 160) || null, error: r.error || null, paused_for_s: Math.max(0, until - Math.floor(Date.now() / 1000)), ms: Date.now() - s }
+  } catch (e) { out.gateways.paychi = { threw: String(e?.message ?? e).slice(0, 100) } }
   try {
     const relay = String((await kvGet('config:pay_relay_url')) || '').replace(/\/+$/, '')
     out.gateways.relay = { set: relay !== '', host: (/^[a-z]+:\/\/([^/\s]+)/i.exec(relay) || [])[1] ?? null }

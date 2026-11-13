@@ -39,6 +39,7 @@ export const adminGatewayRoutes = [
       for (const k of g.need) if (!filled(await getPay(k))) { await answerCallback(c.callback_query_id, `${g.name}: ابتدا کلید و آدرس را ثبت کنید (tools/setpay.mjs)`, true); return true }
     }
     await setPay(g.key, m[1] === 'on' ? g.on : g.off)
+    if (m[1] === 'on') await run(sql`DELETE FROM PaySetting WHERE NamePay = ${m[2] + '_pause_until'}`) // switching on also ends a pause
     await answerCallback(c.callback_query_id, `${g.name} ${m[1] === 'on' ? 'روشن' : 'خاموش'} شد`)
     const v = await view()
     await Editmessagetext(c.from_id, c.message_id, v.text, v.kb, 'HTML')
