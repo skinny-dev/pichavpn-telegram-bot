@@ -31,83 +31,70 @@ const glyph = (name, cx, cy, size, sw, color, extra = '') =>
 const LOGO = 'data:image/png;base64,' + fs.readFileSync(path.join(here, '../brand/picha-logo.png')).toString('base64')
 const hash = (s) => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
 
-function art(s, th) {
-  const W = 540, cx = 270, cy = 280
-  const ticks = Array.from({ length: 72 }, (_, i) => {
-    const a = (i * 5 * Math.PI) / 180, r1 = 236, r2 = i % 6 === 0 ? 252 : 244
-    return `<line x1="${cx + r1 * Math.cos(a)}" y1="${cy + r1 * Math.sin(a)}" x2="${cx + r2 * Math.cos(a)}" y2="${cy + r2 * Math.sin(a)}" stroke="${th.c}" stroke-opacity="${i % 6 === 0 ? 0.7 : 0.28}" stroke-width="${i % 6 === 0 ? 2 : 1.5}"/>`
-  }).join('')
-  const hex = (r) => Array.from({ length: 6 }, (_, i) => { const a = (Math.PI / 3) * i - Math.PI / 2; return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}` }).join(' ')
-  const angles = [-38, 38, 150]
-  const orbit = (s.extra || []).slice(0, 3).map((n, i) => {
-    const a = (angles[i] * Math.PI) / 180, x = cx + 232 * Math.cos(a), y = cy + 232 * Math.sin(a)
-    return `<circle cx="${x}" cy="${y}" r="40" fill="#05080d" stroke="${th.c}" stroke-opacity=".9" stroke-width="2"/><circle cx="${x}" cy="${y}" r="48" fill="none" stroke="${th.c}" stroke-opacity=".25"/>${glyph(n, x, y, 38, 1.8, th.c)}`
-  }).join('')
-  return `<svg class="art" width="${W}" height="560" viewBox="0 0 ${W} 560" xmlns="http://www.w3.org/2000/svg">
-<defs><radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="${th.c}" stop-opacity=".30"/><stop offset="1" stop-color="${th.c}" stop-opacity="0"/></radialGradient>
-<filter id="neon" filterUnits="userSpaceOnUse" x="0" y="0" width="540" height="560"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-<circle cx="${cx}" cy="${cy}" r="262" fill="url(#g)"/>
-<circle cx="${cx}" cy="${cy}" r="226" fill="none" stroke="${th.c}" stroke-opacity=".30" stroke-dasharray="3 9" stroke-width="2"/>
-${ticks}
-<circle cx="${cx}" cy="${cy}" r="176" fill="none" stroke="${th.c}" stroke-opacity=".18" stroke-width="1.5"/>
-<polygon points="${hex(158)}" fill="${th.c}" fill-opacity=".07" stroke="${th.c}" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round"/>
-<polygon points="${hex(128)}" fill="none" stroke="${th.c}" stroke-opacity=".28" stroke-width="1.5" stroke-linejoin="round"/>
-<g filter="url(#neon)">${glyph(s.icon, cx, cy, 168, 1.15, th.c)}</g>
-${orbit}
-<g font-family="M,monospace" font-size="15" fill="${th.c}" fill-opacity=".7" direction="ltr"><text x="${cx - 232}" y="${cy + 262}">SIG // ${esc(String(s.tag || 'PICHA').toUpperCase())}</text><text x="${cx + 92}" y="${cy + 262}">${String(hash(s.title) % 9000 + 1000)}</text></g>
-</svg>`
+// ---- surfaces shared with the panel (dashboard-src/src/index.css, dark): bg 222 32% 5%, card 222 28% 8%, border 215 20% 17%
+const SURF = { bg: '#080b11', card: '#0d1118', border: '#232c3a', fg: '#eaf0f8', muted: '#97a6ba' }
+
+// Yekan Bakh: drop its files into ../brand/fonts (any of woff2/ttf/otf with the weight in the name) and it is used automatically
+const WEIGHTS = [[/black|heavy/i, 900], [/extra.?bold/i, 800], [/bold/i, 700], [/semi.?bold|demi/i, 600], [/medium/i, 500], [/light/i, 300], [/thin/i, 100], [/regular|normal|book/i, 400]]
+const yekan = () => {
+  const dir = path.join(here, '../brand/fonts')
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir).filter((f) => /yekan/i.test(f) && /\.(woff2?|ttf|otf)$/i.test(f)).map((f) => ({ f, w: (WEIGHTS.find(([re]) => re.test(f)) || [0, 400])[1], fmt: /woff2$/i.test(f) ? 'woff2' : /woff$/i.test(f) ? 'woff' : /otf$/i.test(f) ? 'opentype' : 'truetype' }))
 }
+export const hasYekan = () => yekan().length > 0
 
 export function html(s) {
   const th = THEMES[s.theme] || THEMES.cyan
   const len = String(s.title).replace(/\[\[|\]\]/g, '').length
-  const h = len > 34 ? 56 : len > 24 ? 64 : 74
+  const h = len > 30 ? 54 : len > 20 ? 62 : 72
   const title = esc(s.title).replace(/\[\[(.+?)\]\]/g, '<em>$1</em>')
-  const bits = Array.from({ length: 3 }, (_, i) => Array.from({ length: 26 }, (_, j) => ((hash(s.title) >> ((i * 7 + j) % 24)) & 1)).join(' ')).map((t) => `<div>${t}</div>`).join('')
-  const badges = (s.badges || []).slice(0, 3).map((b) => `<span class="chip"><i>[</i>${esc(b)}<i>]</i></span>`).join('')
+  const badges = (s.badges || []).slice(0, 3).map((b) => `<span class="chip">${esc(b)}</span>`).join('')
+  const extras = (s.extra || []).slice(0, 3).map((n) => `<div class="cell sm"><svg width="64" height="64" viewBox="0 0 64 64">${glyph(n, 32, 32, 40, 1.7, th.c)}</svg></div>`).join('')
+  const yf = yekan().map((x) => `@font-face{font-family:Y;src:url('file://${path.join(here, '../brand/fonts', x.f)}') format('${x.fmt}');font-weight:${x.w}}`).join('\n')
   return `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><style>
+${yf}
 @font-face{font-family:V;src:url('file://${here}/fonts/vazirmatn-arabic.woff2') format('woff2');unicode-range:U+0600-06FF,U+200C-200D,U+FB50-FDFF,U+FE70-FEFF;font-weight:100 900}
 @font-face{font-family:V;src:url('file://${here}/fonts/vazirmatn-latin.woff2') format('woff2');unicode-range:U+0000-00FF;font-weight:100 900}
 @font-face{font-family:M;src:url('file://${here}/fonts/mono-500.woff2') format('woff2');font-weight:500}
 @font-face{font-family:M;src:url('file://${here}/fonts/mono-700.woff2') format('woff2');font-weight:700}
 *{box-sizing:border-box;margin:0}
 html{width:1280px;height:720px;overflow:hidden}
-body{width:1280px;height:720px;font-family:V,sans-serif;color:#eef6ff;position:relative;overflow:hidden;background:#05080d}
-.bg{position:absolute;inset:0;overflow:hidden;
- background:radial-gradient(620px 520px at 22% 50%,${th.c}2e,transparent 70%),radial-gradient(500px 360px at 100% 100%,${th.d}40,transparent 70%)}
-.grid{position:absolute;inset:0;background-image:linear-gradient(${th.c}12 1px,transparent 1px),linear-gradient(90deg,${th.c}12 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(900px 600px at 40% 50%,#000 20%,transparent 80%)}
-.scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.20) 0 1px,transparent 1px 4px);mix-blend-mode:multiply}
-.bits{position:absolute;left:34px;top:46px;font:500 15px/1.9 M,monospace;color:${th.c};opacity:.10;direction:ltr;letter-spacing:3px}
-.frame{position:absolute;inset:26px;border:1px solid ${th.c}44;border-radius:22px}
-.cn{position:absolute;width:34px;height:34px;border:3px solid ${th.c}}
-.cn.a{left:20px;top:20px;border-right:0;border-bottom:0;border-radius:14px 0 0 0}.cn.b{right:20px;top:20px;border-left:0;border-bottom:0;border-radius:0 14px 0 0}
-.cn.c{left:20px;bottom:20px;border-right:0;border-top:0;border-radius:0 0 0 14px}.cn.d{right:20px;bottom:20px;border-left:0;border-top:0;border-radius:0 0 14px 0}
-.art{position:absolute;left:40px;top:70px}
-.col{position:absolute;right:76px;top:66px;bottom:64px;width:600px;display:flex;flex-direction:column}
+body{width:1280px;height:720px;font-family:${yekan().length ? 'Y,' : ''}V,sans-serif;color:${SURF.fg};position:relative;overflow:hidden;background:${SURF.bg};
+ background-image:linear-gradient(${th.c}09 1px,transparent 1px),linear-gradient(90deg,${th.c}09 1px,transparent 1px);background-size:40px 40px}
+/* chamfered frame: the border is the outer shape, the surface the inner one (same idea as the panel's cards) */
+.frame{position:absolute;left:36px;top:36px;right:36px;bottom:36px;background:${SURF.border};clip-path:polygon(28px 0,100% 0,100% calc(100% - 28px),calc(100% - 28px) 100%,0 100%,0 28px)}
+.frame i{position:absolute;inset:1px;background:${SURF.card};clip-path:polygon(27.4px 0,100% 0,100% calc(100% - 27.4px),calc(100% - 27.4px) 100%,0 100%,0 27.4px)}
+.cell{position:absolute;background:${SURF.border};clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
+.cell::before{content:'';position:absolute;inset:1px;background:${SURF.bg};clip-path:polygon(13.4px 0,100% 0,100% calc(100% - 13.4px),calc(100% - 13.4px) 100%,0 100%,0 13.4px)}
+.cell svg{position:absolute;inset:0;margin:auto}
+.hero{left:84px;top:84px;width:440px;height:352px}
+.hero::after{content:'';position:absolute;left:1px;top:1px;width:72px;height:3px;background:${th.c}}
+.hero .lab{position:absolute;left:22px;bottom:16px;z-index:2;font:500 15px M,monospace;color:${SURF.muted};direction:ltr;letter-spacing:.06em;text-transform:uppercase}
+.hero svg{z-index:1}
+.row3{position:absolute;left:84px;top:456px;display:flex;gap:16px}
+.cell.sm{position:relative;width:136px;height:136px}
+.col{position:absolute;right:84px;top:84px;bottom:84px;width:600px;display:flex;flex-direction:column}
 .top{display:flex;justify-content:space-between;align-items:center}
-.brand{display:flex;align-items:center;gap:14px;font-weight:800;font-size:32px}
-.mark{width:58px;height:58px;border:2.5px solid ${th.c};border-radius:14px;display:grid;place-items:center;box-shadow:0 0 22px ${th.c}55 inset,0 0 18px ${th.c}33}
-.tag{font:700 20px M,monospace;color:${th.c};direction:ltr;letter-spacing:1px;padding:7px 14px;border:1.5px solid ${th.c}66;border-radius:8px;background:${th.c}12}
-.tag b{opacity:.6}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
-h1{font-size:${h}px;line-height:1.28;font-weight:900;letter-spacing:-.2px}
-h1 em{font-style:normal;color:${th.c};text-shadow:0 0 28px ${th.c}99,0 0 6px ${th.c}66}
-p.sub{text-wrap:balance;font-size:28px;line-height:1.7;font-weight:500;color:#c9d6e6}
-.chips{display:flex;gap:12px;flex-wrap:nowrap}
-.chip{font-size:23px;font-weight:700;color:#eef6ff;padding:8px 16px;border-radius:10px;background:${th.c}14;border:1.5px solid ${th.c}55;white-space:nowrap}
-.chip i{font:700 22px M,monospace;color:${th.c};font-style:normal;margin:0 5px;opacity:.9}
-.row{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:16px;border-top:1px dashed ${th.c}44}
-.cta{white-space:nowrap;font-weight:900;font-size:29px;color:#05080d;background:${th.c};border-radius:12px;padding:11px 26px;box-shadow:0 0 30px ${th.c}77}
-.status{font:700 21px M,monospace;color:#9fb3c8;direction:ltr;display:flex;align-items:center;gap:10px}
-.status u{width:11px;height:11px;border-radius:50%;background:#4ade80;box-shadow:0 0 12px #4ade80;display:inline-block}
-</style><body><div class="bg"><div class="grid"></div><div class="bits">${bits}</div><div class="scan"></div></div>
-<div class="frame"></div><div class="cn a"></div><div class="cn b"></div><div class="cn c"></div><div class="cn d"></div>
-${art(s, th)}
+.brand{display:flex;align-items:center;gap:14px;font-weight:800;font-size:30px}
+.mark{width:52px;height:52px;display:grid;place-items:center;background:${SURF.bg};border:1px solid ${SURF.border};border-radius:8px}
+.tag{font:500 18px M,monospace;color:${th.c};direction:ltr;letter-spacing:.06em;text-transform:uppercase}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
+h1{font-size:${h}px;line-height:1.3;font-weight:800;text-wrap:balance}
+h1 em{font-style:normal;color:${th.c}}
+p.sub{text-wrap:balance;font-size:28px;line-height:1.7;font-weight:500;color:${SURF.muted}}
+.chips{display:flex;gap:10px;flex-wrap:nowrap}
+.chip{font-size:22px;font-weight:600;color:${SURF.fg};padding:7px 16px;border-radius:6px;border:1px solid ${SURF.border};background:${SURF.bg};white-space:nowrap}
+.row{display:flex;justify-content:space-between;align-items:center;margin-top:20px}
+.cta{white-space:nowrap;font-weight:800;font-size:28px;color:${SURF.bg};background:${th.c};padding:12px 30px;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}
+.handle{font:500 21px M,monospace;color:${SURF.muted};direction:ltr}
+</style><body><div class="frame"><i></i></div>
+<div class="cell hero"><svg width="352" height="352" viewBox="0 0 352 352">${glyph(s.icon, 176, 176, 232, 0.95, th.c)}</svg></div>
+<div class="row3">${extras}</div>
 <div class="col">
- <div class="top"><div class="brand"><div class="mark"><img src="${LOGO}" width="42" height="42"></div>پیچا</div><div class="tag"><b>&gt;</b> ${esc(s.tag || 'picha')}</div></div>
+ <div class="top"><div class="brand"><div class="mark"><img src="${LOGO}" width="34" height="34"></div>پیچا</div><div class="tag">${esc(s.tag || 'picha')}</div></div>
  <div class="mid"><h1>${title}</h1>${s.subtitle ? `<p class="sub">${esc(s.subtitle)}</p>` : ''}</div>
  ${badges ? `<div class="chips">${badges}</div>` : ''}
- <div class="row"><div class="status"><u></u>${esc(s.handle || '@pichanet_bot')}</div>${s.cta ? `<span class="cta">${esc(s.cta)} ←</span>` : ''}</div>
+ <div class="row"><span class="handle">${esc(s.handle || '@pichanet_bot')}</span>${s.cta ? `<span class="cta">${esc(s.cta)} ←</span>` : ''}</div>
 </div></body></html>`
 }
 
