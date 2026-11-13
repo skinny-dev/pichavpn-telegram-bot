@@ -8,10 +8,10 @@ export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const { name, url } = input || {}
   if (!name || !url) throw new EndpointError('name and url are required', { code: 'ARGS' })
-  let u
-  try { u = new URL(String(url)) } catch { throw new EndpointError('not a valid URL', { code: 'URL' }) }
-  if (u.protocol !== 'https:' || (u.port && u.port !== '443') || u.username || u.password) throw new EndpointError('only https on the default port (443), no credentials in the URL', { code: 'URL' })
-  const clean = u.origin + (u.pathname === '/' ? '' : u.pathname.replace(/\/+$/, ''))
+  // the isolate has no URL class: parse by hand — https://host[:443][/path], nothing else
+  const m = /^https:\/\/([a-z0-9]([a-z0-9.-]*[a-z0-9])?)(:443)?(\/[^?#\s@]*)?$/i.exec(String(url).trim())
+  if (!m) throw new EndpointError('only https://host[:443][/path] is accepted (no other port, no credentials)', { code: 'URL' })
+  const clean = 'https://' + m[1].toLowerCase() + (m[4] ? m[4].replace(/\/+$/, '') : '')
   const row = await one(sql`SELECT name_panel, url_panel FROM marzban_panel WHERE name_panel = ${String(name)}`)
   if (!row) throw new EndpointError('no panel with that name', { code: 'PANEL' })
   await run(sql`UPDATE marzban_panel SET url_panel = ${clean} WHERE name_panel = ${String(name)}`)

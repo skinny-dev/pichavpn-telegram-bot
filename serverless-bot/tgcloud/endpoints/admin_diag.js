@@ -6,7 +6,7 @@ import { one, all, sql, kvGet } from '../lib/db.js'
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const t0 = Date.now()
-  const out = { db_ms: {}, panels: [], cron: {} }
+  const out = { runtime: { URL: typeof URL, URLSearchParams: typeof URLSearchParams, AbortSignal: typeof AbortSignal, TextEncoder: typeof TextEncoder, atob: typeof atob }, db_ms: {}, panels: [], cron: {} }
   const q = async (label, f) => { const s = Date.now(); try { await f() ; out.db_ms[label] = Date.now() - s } catch (e) { out.db_ms[label] = 'ERR ' + String(e?.message ?? e).slice(0, 80) } }
   await q('one_query', () => one(sql`SELECT 1 AS x`))
   await q('ten_queries_in_a_row', async () => { for (let i = 0; i < 10; i++) await one(sql`SELECT 1 AS x`) })
@@ -16,8 +16,7 @@ export default async function (input, ctx) {
   let panels = []
   try { panels = await all(sql`SELECT name_panel, status, url_panel FROM marzban_panel`) } catch (e) { out.panels_error = String(e?.message ?? e).slice(0, 80) }
   for (const p of panels) {
-    let host = '?'
-    try { host = new URL(p.url_panel).host } catch { /* keep ? */ }
+    const host = (/^[a-z]+:\/\/([^/\s]+)/i.exec(String(p.url_panel)) || [])[1] ?? '?' // the isolate has no URL class
     const s = Date.now()
     let result
     try {

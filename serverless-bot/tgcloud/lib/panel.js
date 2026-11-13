@@ -8,13 +8,23 @@ const nowSec = () => Math.floor(Date.now() / 1000)
 export async function panelByName(name) { return one(sql`SELECT * FROM marzban_panel WHERE name_panel = ${name}`) }
 export async function panelByCode(code) { return one(sql`SELECT * FROM marzban_panel WHERE code_panel = ${code}`) }
 
+// the Serverless isolate may lack URL / URLSearchParams: use them when present, parse by hand otherwise
+const formEncode = (form) => (typeof URLSearchParams === 'function' ? new URLSearchParams(form).toString()
+  : Object.entries(form).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v ?? '').replace(/%20/g, '+')).join('&'))
+function urlParts(u) {
+  const s = String(u ?? '').trim()
+  if (typeof URL === 'function') { try { return new URL(s) } catch { return null } }
+  const m = /^([a-z][a-z0-9+.-]*):\/\/(?:[^/@?#]*@)?([^/:?#]+)(?::(\d+))?([^?#]*)(\?[^#]*)?/i.exec(s)
+  return m ? { protocol: m[1].toLowerCase() + ':', hostname: m[2].toLowerCase(), port: m[3] || '', pathname: m[4] || '/', search: m[5] || '' } : null
+}
+
 /** PHP CurlRequest: {status, body} or {error} — never throws */
 async function req(method, url, { token, json, form } = {}) {
   const headers = { accept: 'application/json' }
   let body
   if (token) headers.Authorization = 'Bearer ' + token
   if (json !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(json) }
-  if (form !== undefined) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; body = new URLSearchParams(form).toString() }
+  if (form !== undefined) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; body = formEncode(form) }
   try {
     const res = await fetch(url, { method, headers, body })
     return { status: res.status, body: await res.text() }
@@ -74,13 +84,10 @@ export function subLink(panel, nativeUrl, invoice, domain) {
 }
 export function nativeSubUrl(panel, native) {
   const base = String(panel.linksubx ?? '').trim()
-  let baseUrl = null
-  try { baseUrl = base ? new URL(base) : null } catch { baseUrl = null }
-  let admin = null
-  try { admin = new URL(panel.url_panel).hostname } catch { admin = null }
+  const baseUrl = base ? urlParts(base) : null
+  const admin = urlParts(panel.url_panel)?.hostname ?? null
   if (baseUrl && baseUrl.hostname && baseUrl.hostname !== admin) {
-    let u = null
-    try { u = new URL(native) } catch { u = null }
+    const u = urlParts(native)
     if (u && u.pathname) return `${baseUrl.protocol.replace(':', '') || 'https'}://${baseUrl.hostname}${baseUrl.port ? ':' + baseUrl.port : ''}${u.pathname}${u.search}`
   }
   return native
