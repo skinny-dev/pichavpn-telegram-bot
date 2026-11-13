@@ -1,4 +1,5 @@
 // Small PHP functions the ported code needs, with the same results.
+import { b64ToBytes, bytesToB64, utf8Decode } from './b64.js'
 import { phpFloat } from './fmt.js'
 
 /** sprintf with %s %d %f %u %%, %1$s positions */
@@ -51,16 +52,16 @@ export const J = (o) => JSON.stringify(o)
 /** base64_decode($s, true) as bytes, or false */
 export function b64decodeStrict(s) {
   if (typeof s !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(s)) return false
-  try { return Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0)) } catch { return false }
+  try { return b64ToBytes(s) } catch { return false }
 }
-export function b64encode(bytes) { let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin) }
+export function b64encode(bytes) { return bytesToB64(bytes) }
 /** isBase64() of function.php: decodes strictly and encodes back to the same string */
 export function isBase64(s) {
   if (typeof s !== 'string') return false
   const d = b64decodeStrict(s)
   return b64encode(d === false ? new Uint8Array(0) : d) === s
 }
-export const utf8 = (bytes) => new TextDecoder().decode(bytes)
+export const utf8 = (bytes) => utf8Decode(bytes)
 /** urldecode(): + is a space, bad % sequences stay as they are */
 export function urldecode(s) {
   s = String(s ?? '').replace(/\+/g, ' ')

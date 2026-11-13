@@ -1,4 +1,5 @@
 // referral_links.php (money math, overview) + the referral and admin routes of dashboard/api.php.
+import { bytesToB64 } from '../b64.js'
 import { qAll, qOne, qRun, qVal } from './qb.js'
 import { kvGet } from '../db.js'
 import { phpRound } from '../fmt.js'
@@ -14,7 +15,7 @@ export function normalizeCode(code) {
 async function generateCode() {
   for (let i = 0; i < 20; i++) {
     const b = crypto.getRandomValues(new Uint8Array(6))
-    const c = ('ad_' + btoa(String.fromCharCode(...b)).replace(/\+/g, 'x').replace(/\//g, 'y').replace(/=/g, '').slice(0, 6)).toLowerCase()
+    const c = ('ad_' + bytesToB64(b).replace(/\+/g, 'x').replace(/\//g, 'y').replace(/=/g, '').slice(0, 6)).toLowerCase()
     if (Number(await qVal('SELECT COUNT(*) FROM referral_links WHERE code = ?', [c])) === 0) return c
   }
   return 'ad_' + now()

@@ -1,4 +1,5 @@
 // Support inbox of the panel (support_* routes of dashboard/api.php).
+import { b64ToBytes } from '../b64.js'
 import { InputFile } from 'sdk'
 import { qAll, qOne, qRun, qVal } from './qb.js'
 import { fail, likeEscape, str, now } from './util.js'
@@ -88,7 +89,7 @@ async function deliver(uid, text, tracking, file) {
     return r && r.ok !== false && r !== false ? { ok: true, file: null } : { ok: false, error: String((r && r.description) || 'unknown') }
   }
   const fits = [...msg].length <= 1000
-  const bytes = Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0))
+  const bytes = b64ToBytes(file.data)
   const mime = file.mime
   let attempts = []
   if (['image/jpeg', 'image/png', 'image/webp'].includes(mime) && bytes.length <= 10 * 1024 * 1024) attempts.push(['sendPhoto', 'photo', 'photo'])

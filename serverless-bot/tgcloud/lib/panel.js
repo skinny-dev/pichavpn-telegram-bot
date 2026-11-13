@@ -1,5 +1,6 @@
 // PasarGuard / Marzban panels — port of panels/Api/Marzban.php, panels/Drivers/Marzban.php and ManagePanel (panels.php).
 // Results keep the PHP shapes: {status:'successful'|'Unsuccessful'|true|false, msg, …}.
+import { b64ToBytes, utf8Decode } from './b64.js'
 import { fetch } from 'sdk'
 import { one, run, sql } from './db.js'
 
@@ -102,8 +103,7 @@ async function outputLink(url) {
 const looksBase64 = (s) => typeof s === 'string' && s.length > 0 && /^[A-Za-z0-9+/=\r\n]+$/.test(s) && s.replace(/\s/g, '').length % 4 === 0
 function b64decode(s) {
   try {
-    const bin = atob(s.replace(/\s/g, ''))
-    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))
+    return utf8Decode(b64ToBytes(s))
   } catch { return s }
 }
 async function linksOf(subUrl, given) {
