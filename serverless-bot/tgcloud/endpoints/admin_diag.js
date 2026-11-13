@@ -6,7 +6,7 @@ import { one, all, sql, kvGet } from '../lib/db.js'
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const t0 = Date.now()
-  const out = { runtime: { URL: typeof URL, URLSearchParams: typeof URLSearchParams, AbortSignal: typeof AbortSignal, TextEncoder: typeof TextEncoder, atob: typeof atob }, db_ms: {}, panels: [], cron: {} }
+  const out = { runtime: { URL: typeof URL, URLSearchParams: typeof URLSearchParams, AbortSignal: typeof AbortSignal, setTimeout: typeof setTimeout, TextEncoder: typeof TextEncoder, atob: typeof atob }, db_ms: {}, panels: [], cron: {} }
   const q = async (label, f) => { const s = Date.now(); try { await f() ; out.db_ms[label] = Date.now() - s } catch (e) { out.db_ms[label] = 'ERR ' + String(e?.message ?? e).slice(0, 80) } }
   await q('one_query', () => one(sql`SELECT 1 AS x`))
   await q('ten_queries_in_a_row', async () => { for (let i = 0; i < 10; i++) await one(sql`SELECT 1 AS x`) })

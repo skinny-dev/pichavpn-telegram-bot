@@ -5,6 +5,7 @@ import { fetch } from 'sdk'
 import { one, run, sql, kvGet } from './db.js'
 import { telegram, sendmessage } from './tg.js'
 import { sprintf, numberFormat, intval } from './php.js'
+import { sleep, withTimeout, abortAfter } from './timer.js'
 
 const pay = async (name) => (await one(sql`SELECT ValuePay FROM PaySetting WHERE NamePay = ${name}`))?.ValuePay ?? null
 
@@ -24,19 +25,15 @@ export async function tetraCall(method, path, json = null, timeoutMs = 25000) {
   const headers = { Accept: 'application/json', 'X-API-KEY': key }
   const opts = { method, headers }
   if (json !== null) { headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(json) }
-  let timer
   try {
-    const res = await Promise.race([
-      fetch((await tetraBase()) + path, opts),
-      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), timeoutMs) }),
-    ])
+    const res = await withTimeout(fetch((await tetraBase()) + path, { ...opts, ...abortAfter(timeoutMs) }), timeoutMs)
     const text = await res.text()
     let data = null
     try { data = JSON.parse(text) } catch { data = null }
     return { http: res.status, data: data && typeof data === 'object' ? data : null, error: data && typeof data === 'object' ? '' : 'invalid json' }
   } catch (e) {
     return { http: 0, data: null, error: 'fetch: ' + String((e && e.message) || e) }
-  } finally { clearTimeout(timer) }
+  }
 }
 
 const LINK_ORDER = {
@@ -74,7 +71,7 @@ export async function createPayTetraminator(c, price, orderId) {
     }
     res = { error: r.error !== '' ? r.error : 'http ' + r.http, http_code: r.http, message: String(d.message ?? '') }
     if ([400, 401, 403].includes(r.http) || r.error === 'tetraminator_api_key not set') break
-    if (attempt < 2) { console.error('createPayTetraminator try', attempt, res.error); await new Promise((ok) => setTimeout(ok, 1000)) }
+    if (attempt < 2) { console.error('createPayTetraminator try', attempt, res.error); await sleep(1000) }
   }
   return res
 }

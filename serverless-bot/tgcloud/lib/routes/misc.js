@@ -1,5 +1,6 @@
 // index.php lines 5918–6652: referral page and membership gift, agents (extra volume for a panel user, panel,
 // custom name, request to become an agent), message to the admins, lucky wheel, price commands, renew list, apps, notes.
+import { sleep } from '../timer.js'
 import { one, all, run, sql, kvGet } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
 import { step, shop, tehranDate } from '../bot.js'
@@ -244,7 +245,7 @@ export const miscRoutes = [
     if (await recent()) { await sendmessage(c.from_id, W.alreadyParticipated, null, 'HTML'); return true }
     const dice = intval(S.Dice) === 1
     const r = await telegram('sendDice', { chat_id: c.from_id, emoji: dice ? '🎲' : '🎰' })
-    await new Promise((res) => setTimeout(res, dice ? 4000 : 2000))
+    await sleep(dice ? 4000 : 2000)
     const value = r && r.ok && r.result?.dice?.value !== undefined ? intval(r.result.dice.value) : null
     if (value === null) { await sendmessage(c.from_id, W.error || W.resultError, null, 'HTML'); return true }
     if (await recent()) { await sendmessage(c.from_id, W.alreadyParticipated, null, 'HTML'); return true }

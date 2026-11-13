@@ -174,7 +174,7 @@ export const payRoutes = [
       await deletemessage(c.from_id, c.message_id)
       await sendmessage(c.from_id, B.linkpayments, c.keyboard, 'HTML')
       const orderId = randomHex(5)
-      const p = await createPayVariza(c, amount, orderId)
+      const p = await createPayVariza(c, amount, orderId).catch((e) => ({ error: 'exception: ' + String((e && e.message) || e) }))
       if (!p.pay_url) {
         const err = p.error ?? JSON.stringify(p)
         const vp = varizaLimitReached(p) ? 1800 : gatewayOutageSeconds(p) // its own limit (30 min) or unreachable / 5xx (10 min)
@@ -201,7 +201,8 @@ export const payRoutes = [
       await deletemessage(c.from_id, c.message_id)
       await sendmessage(c.from_id, B.linkpayments, c.keyboard, 'HTML')
       const orderId = randomHex(5)
-      const p = await createPayTetraminator(c, amount, orderId)
+      // whatever goes wrong inside, the customer gets an answer (never stays on «creating the link»)
+      const p = await createPayTetraminator(c, amount, orderId).catch((e) => ({ http_code: 0, error: 'exception: ' + String((e && e.message) || e) }))
       if (!p.pay_url || !p.pay_id) {
         const err = p.error ?? JSON.stringify(p)
         const pauseFor = gatewayOutageSeconds(p)
