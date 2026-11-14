@@ -171,9 +171,47 @@ check('/care test C10 sends the sample to the admin', texts().some(([, p]) => p.
 calls.length = 0; await say('/care preview C10')
 check('/care preview C10', /پیش‌نمایش C10/.test(String(texts().at(-1)?.[1]?.text)))
 
+// ---- T1: the running test ends in 1 day / in an hour (20 min for a 1 h test)
+await kvSet('care:on:T1', '1')
+for (const u of [7101, 7102, 7103, 7104, 7105, 7106]) { await kvSet('care:last:' + u, String(Math.floor(Date.now() / 1000))); await kvSet('care:optout:' + u, '0'); await db.run(sql`DELETE FROM support_message WHERE iduser = ${String(u)}`); await db.run(sql`DELETE FROM invoice WHERE id_user = ${String(u)}`); await db.run(sql`DELETE FROM Payment_report WHERE id_user = ${String(u)}`); await db.run(sql`UPDATE user SET last_message_time = '0', User_Status = 'Active' WHERE id = ${String(u)}`) }
+const TT = base + 42 * DAY + 12 * 3600 // a test created at Saturday noon
+const longTest = async (uid, hours, created = TT) => { const id = ++inv; await db.run(sql`INSERT INTO invoice (id_invoice, id_user, username, Service_location, time_sell, name_product, price_product, Volume, Service_time, Status) VALUES (${String(id)}, ${String(uid)}, ${'u' + id}, 'x', ${String(created)}, ${TEST}, '0', '100', ${String(hours)}, 'active')`); return String(id) }
+const L = await longTest(7101, 48), S = await longTest(7102, 1), BOUGHT = await longTest(7103, 48)
+await invoice(7103, 0, 'سرویس 10 گیگ', 'active', TT)
+calls.length = 0
+r = await careRun(c, { at: TT + 10 * 3600 })
+check('T1: too early (10 h into a 48 h test): nothing', texts().length === 0)
+r = await careRun(c, { at: TT + 25 * 3600 })
+const d1 = texts().filter(([, p]) => p.chat_id === '7101')
+check('T1 «1 day before»: sent to the person with the running 48 h test, buy button first', d1.length === 1 && /یک روز دیگر تمام/.test(String(d1[0][1].text)) && JSON.parse(JSON.stringify(d1[0][1].reply_markup)).inline_keyboard[0][0].callback_data === 'buy', JSON.stringify(texts().map(([, p]) => [p.chat_id, p.text])))
+check('C6 is not sent while the long test is still running', !texts().some(([, p]) => /تست پیچا برای شما تمام شد/.test(String(p.text)) && p.chat_id === '7101'))
+check('T1: not to someone who already bought, nor for the 1 h test at that time', !texts().some(([, p]) => p.chat_id === '7103' || p.chat_id === '7102'))
+check('T1: not subject to the weekly cap (they had a care message today)', d1.length === 1)
+calls.length = 0
+r = await careRun(c, { at: TT + 26 * 3600 }); check('T1: once per touch', texts().length === 0)
+calls.length = 0
+r = await careRun(c, { at: TT + 47 * 3600 })
+check('T1 «1 hour before»: a second message for the same test', texts().filter(([, p]) => p.chat_id === '7101').length === 1 && /کمی دیگر تمام/.test(String(texts().find(([, p]) => p.chat_id === '7101')?.[1]?.text)))
+calls.length = 0
+r = await careRun(c, { at: TT + 40 * 60 })
+check('T1: a 1 h test is reminded 20 minutes before the end (not 1 day, not at once)', texts().filter(([, p]) => p.chat_id === '7102').length === 1, JSON.stringify(texts().map(([, p]) => p.chat_id)))
+// the night: no message even in the window
+const NIGHT = base + 50 * DAY + 3 * 3600
+const N = await longTest(7104, 1, NIGHT - 40 * 60)
+calls.length = 0; await careRun(c, { at: NIGHT })
+check('T1: not at night (03:00)', texts().filter(([, p]) => p.chat_id === '7104').length === 0)
+// the first-purchase gift is only promised when switched on
+await kvSet('care:firstgift_gb', '10')
+const G = await longTest(7105, 48)
+calls.length = 0; await careRun(c, { at: TT + 25 * 3600 })
+check('T1: the gift line appears only when care:firstgift_gb is set', /۱۰|10 گیگ هدیه/.test(String(texts().find(([, p]) => p.chat_id === '7105')?.[1]?.text)))
+await kvSet('care:firstgift_gb', '0')
+await cb(7101, 'caret1_stop_0')
+check('T1 «دیگر پیام نده» records a 60-day opt-out', Number(await kvGet('care:optout:7101')) > Date.now() / 1000 + 50 * DAY)
+
 // numbers for the admin
 const s = await careStats(c)
-check('stats: sent, answered and reasons', s.sent >= 3 && s.answered >= 2 && Object.keys(s.byHour).length >= 1 && s.reasons.slow === 1 && s.reasons.good === 1 && s.optouts === 1 && s.skipped.bought === 1, JSON.stringify(s))
+check('stats: sent, answered and reasons', s.sent >= 3 && s.answered >= 2 && Object.keys(s.byHour).length >= 1 && s.reasons.slow === 1 && s.reasons.good === 1 && s.optouts === 1 && s.skipped.bought >= 1, JSON.stringify(s))
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')
 process.exit(fails ? 1 : 0)

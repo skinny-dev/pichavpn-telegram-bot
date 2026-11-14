@@ -33,7 +33,7 @@ export const C10_KB = () => J({ inline_keyboard: [
 ] })
 
 /** rules shared by every case: inactive | optout | (case rule) | ticket | cap — null = may be written to */
-async function commonSkip(r, u, at, caseRule) {
+async function commonSkip(r, u, at, caseRule, noCap = false) {
   if (!u || u.User_Status !== 'Active') return 'inactive'
   if (intval(await kvGet('care:optout:' + r.id_user)) > at) return 'optout'
   const own = await caseRule()
@@ -41,17 +41,52 @@ async function commonSkip(r, u, at, caseRule) {
   // an open conversation with support: leave it alone
   if (await one(sql`SELECT 1 AS x FROM support_message WHERE iduser = ${String(r.id_user)} AND status != 'close' LIMIT 1`)) return 'ticket'
   // one care message per person per week
-  if (at - intval(await kvGet('care:last:' + r.id_user)) < 7 * DAY) return 'cap'
+  if (!noCap && at - intval(await kvGet('care:last:' + r.id_user)) < 7 * DAY) return 'cap'
   return null
 }
 const paidBefore = (r) => one(sql`SELECT 1 AS x FROM Payment_report WHERE id_user = ${String(r.id_user)} AND payment_Status = 'paid' LIMIT 1`)
 
+export const T1_TEXT = (name, ref, giftGb) => {
+  const d1 = /-d1$/.test(ref)
+  const gift = giftGb > 0 ? `\nبرای اولین خرید ${giftGb} گیگ هدیه هم داریم 🎁` : ''
+  return d1
+    ? `درود${name ? ' ' + esc(name) : ''} 🌿\n\nتست شما حدود یک روز دیگر تمام می‌شود. اگر اتصال برایتان خوب بوده، می‌توانید همین حالا سرویس را ادامه بدهید تا وقفه‌ای پیش نیاید.${gift}\nاگر مشکلی دارید همین‌جا بفرمایید.`
+    : `درود${name ? ' ' + esc(name) : ''} 🌿\n\nتست شما کمی دیگر تمام می‌شود. اگر اتصال خوب بود، برای ادامهٔ بدون وقفه سرویس بگیرید.${gift}`
+}
+export const T1_KB = () => J({ inline_keyboard: [
+  [{ text: '🛒 ادامه با خرید', callback_data: 'buy' }],
+  [{ text: '💬 مشکل دارم', callback_data: 'supportbtns' }, { text: '🔕 دیگر پیام نده', callback_data: 'caret1_stop_0' }],
+] })
+
 /** the cases: id, who is due (rows {id_user, ref}), the message, the person-level rule */
 const CASES = [
+  {
+    id: 'T1', live: true, noCap: true, // the test is still running: 1 day before the end and again shortly before (an hour; 20 min for a short test) — the person is mid-test, so no working-week window
+    rows: (c, at, lo, hi, limit) => all(sql`SELECT x.id_user AS id_user, x.ref AS ref FROM (
+        SELECT i.id_user AS id_user, i.id_invoice || '-d1' AS ref,
+               CAST(i.time_sell AS INTEGER) + CAST(i.Service_time AS REAL) * 3600 AS expiry, CAST(i.Service_time AS REAL) AS dh, 24 * 3600 AS lead, 6 * 3600 AS stop
+        FROM invoice i WHERE i.name_product = ${c.T.common.labels.testServiceName}
+        UNION ALL
+        SELECT i.id_user, i.id_invoice || '-h1', CAST(i.time_sell AS INTEGER) + CAST(i.Service_time AS REAL) * 3600, CAST(i.Service_time AS REAL),
+               CASE WHEN CAST(i.Service_time AS REAL) < 3 THEN 1200 ELSE 3600 END + 1500, 300
+        FROM invoice i WHERE i.name_product = ${c.T.common.labels.testServiceName}) x
+      WHERE x.dh > 0 AND (x.ref NOT LIKE '%-d1' OR x.dh >= 36)
+        AND x.expiry - x.lead <= ${at} + 0 AND ${at} + 0 <= x.expiry - x.stop
+        AND NOT EXISTS (SELECT 1 FROM kv k WHERE k.key = 'care:T1:' || x.id_user || ':' || x.ref)
+      ORDER BY x.expiry ASC LIMIT ${limit}`),
+    text: async (u, r) => T1_TEXT(nm(u), r.ref, intval(await kvGet('care:firstgift_gb'))), kb: () => T1_KB(),
+    rule: (c, r) => async () => {
+      if (await one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${String(r.id_user)} AND name_product != ${c.T.common.labels.testServiceName} AND Status != 'Unpaid' LIMIT 1`)) return 'bought'
+      if (await paidBefore(r)) return 'paid'
+      return null
+    },
+    converted: (c, uid, from) => one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${uid} AND name_product != ${c.T.common.labels.testServiceName} AND Status != 'Unpaid' AND CAST(time_sell AS INTEGER) BETWEEN ${from} AND ${from + 2 * DAY} LIMIT 1`),
+  },
   {
     id: 'C6', // test finished, not converted: test accounts 23 h – 6 days old
     rows: (c, at, lo, hi, limit) => all(sql`SELECT i.id_user AS id_user, i.id_invoice AS ref FROM invoice i
       WHERE i.name_product = ${c.T.common.labels.testServiceName} AND CAST(i.time_sell AS INTEGER) BETWEEN ${at - 6 * DAY} AND ${at - 23 * 3600}
+        AND CAST(i.time_sell AS INTEGER) + CAST(i.Service_time AS REAL) * 3600 <= ${at} + 0 -- «test finished» is only true when the test has really ended
         AND NOT EXISTS (SELECT 1 FROM kv k WHERE k.key = 'care:C6:' || i.id_user || ':' || i.id_invoice)
         AND ((CAST(i.time_sell AS INTEGER) + 12600) % 86400) / 3600.0 BETWEEN ${lo} + 0 AND ${hi} + 0
       ORDER BY CAST(i.time_sell AS INTEGER) ASC LIMIT ${limit}`),
@@ -81,16 +116,23 @@ const CASES = [
     converted: (c, uid, from) => one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${uid} AND CAST(time_sell AS INTEGER) BETWEEN ${from} AND ${from + 2 * DAY} LIMIT 1`), // took a test (or bought) within 48 h
   },
 ]
+//T1PLACE
 export const CASE_IDS = CASES.map((d) => d.id)
 const caseDef = (id) => CASES.find((d) => d.id === id)
 
 /** common gate: switched on, working week, sales-psychology hour, daily cap → {mode, hourNow, dayKey, maxDay, today} or {stop} */
-async function gate(id, at) {
+async function gate(id, at, live = false) {
   if (!(await careOn(id))) return { stop: { sent: 0, reason: 'off' } }
-  const slot = careTime(at, await loadSchedule())
-  if (!slot.ok) return { stop: { sent: 0, reason: 'quiet', why: slot.why } }
-  const mode = sendMode(id, at, await loadBands())
-  if (mode === 'none') return { stop: { sent: 0, reason: 'quiet', why: 'avoid_hours' } }
+  let mode = 'band'
+  if (live) {
+    const h = tehranParts(at).hour // a running test: any day, but not in the night
+    if (h < 8 || h >= 23) return { stop: { sent: 0, reason: 'quiet', why: 'night' } }
+  } else {
+    const slot = careTime(at, await loadSchedule())
+    if (!slot.ok) return { stop: { sent: 0, reason: 'quiet', why: slot.why } }
+    mode = sendMode(id, at, await loadBands())
+    if (mode === 'none') return { stop: { sent: 0, reason: 'quiet', why: 'avoid_hours' } }
+  }
   const dayKey = 'care:day:' + Math.floor((at + 12600) / DAY)
   const maxDay = intval(await kvGet('care:max_day')) || 60
   const today = intval(await kvGet(dayKey))
@@ -99,7 +141,7 @@ async function gate(id, at) {
 }
 
 async function runCase(c, def, at, BATCH) {
-  const g = await gate(def.id, at)
+  const g = await gate(def.id, at, !!def.live)
   if (g.stop) return g.stop
   let today = g.today
   // personal: only people whose own hour (the hour they took the test / registered) is now
@@ -111,16 +153,16 @@ async function runCase(c, def, at, BATCH) {
     const key = `care:${def.id}:${r.id_user}:${r.ref}`
     const skip = (why) => kvSet(key, JSON.stringify({ state: 'skipped', reason: why, at }))
     const u = await one(sql`SELECT * FROM user WHERE id = ${String(r.id_user)}`)
-    const why = await commonSkip(r, u, at, def.rule(c, r))
+    const why = await commonSkip(r, u, at, def.rule(c, r), !!def.noCap)
     if (why) { await skip(why); continue }
-    // writing to the bot right now: not the moment
-    if (at - intval(u.last_message_time) < 1800) continue
+    // writing to the bot right now: not the moment (a running test is exactly when they are here, so that case does not wait)
+    if (!def.live && at - intval(u.last_message_time) < 1800) continue
     try {
-      const res = await sendmessage(r.id_user, def.text(u), def.kb(r), 'HTML')
+      const res = await sendmessage(r.id_user, await def.text(u, r), def.kb(r), 'HTML')
       if (res && res.ok === false) { await skip('blocked'); continue }
     } catch { await skip('blocked'); continue }
     await kvSet(key, JSON.stringify({ state: 'sent', at, mode: g.mode }))
-    await kvSet('care:last:' + r.id_user, String(at))
+    if (!def.noCap) await kvSet('care:last:' + r.id_user, String(at))
     await kvSet(g.dayKey, String(++today))
     await bump(`care:n:${def.id}:sent`)
     sent++
@@ -130,14 +172,16 @@ async function runCase(c, def, at, BATCH) {
 
 /** one run (lazy cron, every ~10 min): at most BATCH messages over all cases, inside the working-week windows and the case's hours, never twice for the same case */
 export async function careRun(c, { at = Math.floor(Date.now() / 1000), BATCH = 4 } = {}) {
-  let sent = 0, first = null
+  let sent = 0
+  const stops = []
   for (const def of CASES) {
     const r = await runCase(c, def, at, BATCH - sent)
     sent += r.sent
-    if (!first && r.reason) first = r
+    if (r.reason) stops.push(r)
     if (sent >= BATCH) break
   }
-  return sent > 0 || !first ? { sent } : first
+  if (sent > 0) return { sent }
+  return stops.find((x) => x.reason !== 'off') || stops[0] || { sent: 0 } // the most informative reason (a case that is simply switched off says the least)
 }
 
 const GUIDE = {
@@ -148,6 +192,13 @@ const GUIDE = {
 const HELP_KB = J({ inline_keyboard: [[{ text: '💬 صحبت با پشتیبانی', callback_data: 'supportbtns' }], [{ text: '🔕 دیگر پیام نده', callback_data: 'care6_stop_0' }]] })
 
 export const careRoutes = [
+  async (c) => {
+    if (!/^caret1_stop_\d+$/.test(c.datain ?? '')) return false
+    await kvSet('care:optout:' + c.from_id, String(Math.floor(Date.now() / 1000) + 60 * DAY)); await bump('care:n:T1:optout')
+    await answerCallback(c.callback_query_id, 'باشه')
+    await Editmessagetext(c.from_id, c.message_id, 'باشه، دیگر پیامی ارسال نمی‌کنیم. اگر نیاز داشتید همین‌جا هستیم 🙏', null, 'HTML')
+    return true
+  },
   async (c) => {
     const m = /^care10_(no|stop)_(\d+)$/.exec(c.datain ?? '')
     if (!m) return false
@@ -212,7 +263,7 @@ export async function careStats(c, id = 'C6') {
     if (await def.converted(c, uid, intval(v.at))) { converted48++; bk.bought++ }
   }
   const n = async (k) => intval(await kvGet(`care:n:${id}:${k}`))
-  const reasons = id === 'C6' ? { good: await n('good'), slow: await n('slow'), fail: await n('fail'), net: await n('net') } : { no: await n('no') }
+  const reasons = id === 'T1' ? {} : id === 'C6' ? { good: await n('good'), slow: await n('slow'), fail: await n('fail'), net: await n('net') } : { no: await n('no') }
   return { id, on: await careOn(id), sent, answered, bought48: converted48, converted48, skipped, byHour, reasons, optouts: await n('optout') }
 }
 
@@ -228,8 +279,8 @@ export async function carePreview(c, id = 'C6', at = Math.floor(Date.now() / 100
     if (why) out.skip[why] = (out.skip[why] || 0) + 1
     else out.eligible++
   }
-  const slot = careTime(at, await loadSchedule())
-  const mode = sendMode(id, at, await loadBands())
+  const slot = def.live ? { ok: tehranParts(at).hour >= 8 && tehranParts(at).hour < 23, why: 'night' } : careTime(at, await loadSchedule())
+  const mode = def.live ? 'band' : sendMode(id, at, await loadBands())
   out.now = slot.ok ? (mode === 'none' ? 'پنجرهٔ بسته (ساعت پرهیز)' : mode === 'band' ? 'ساعت بهتر: همه' : 'فقط ساعت شخصی') : 'بسته (' + slot.why + ')'
   out.max_day = intval(await kvGet('care:max_day')) || 60
   return out

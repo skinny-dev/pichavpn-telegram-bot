@@ -16,7 +16,7 @@ export default async function (input, ctx) {
   await q('all_products', () => all(sql`SELECT * FROM product`))
   await q('all_texts', () => all(sql`SELECT * FROM texts`))
   let panels = []
-  try { panels = await all(sql`SELECT name_panel, status, url_panel FROM marzban_panel`) } catch (e) { out.panels_error = String(e?.message ?? e).slice(0, 80) }
+  try { panels = await all(sql`SELECT name_panel, status, url_panel, TestAccount, time_usertest, val_usertest FROM marzban_panel`) } catch (e) { out.panels_error = String(e?.message ?? e).slice(0, 80) }
   for (const p of panels) {
     const host = (/^[a-z]+:\/\/([^/\s]+)/i.exec(String(p.url_panel)) || [])[1] ?? '?' // the isolate has no URL class
     const s = Date.now()
@@ -26,7 +26,7 @@ export default async function (input, ctx) {
       const res = await fetch(String(p.url_panel).replace(/\/+$/, '') + '/api/system', { method: 'GET', ...opt })
       result = 'reachable: HTTP ' + res.status // any HTTP answer (even 401/404) means the network path works
     } catch (e) { result = 'NOT reachable: ' + String(e?.message ?? e).slice(0, 80) }
-    out.panels.push({ name: p.name_panel, status: p.status, host, result, ms: Date.now() - s })
+    out.panels.push({ name: p.name_panel, status: p.status, host, result, ms: Date.now() - s, test: { on: p.TestAccount === 'ONTestAccount', hours: Number(p.time_usertest) || 0, mb: Number(p.val_usertest) || 0 } })
   }
   for (const k of ['lock', 'payment_expire', 'tetraminator', 'relay', 'notifications', 'statusday', 'on_hold', 'alert_balance']) {
     try { out.cron[k] = (await kvGet('cron:' + k)) ?? null } catch { out.cron[k] = 'ERR' }
