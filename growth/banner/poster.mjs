@@ -131,6 +131,25 @@ p{font-size:30px;line-height:1.75;margin:14px 0 0;color:#dbe7f7;text-shadow:0 2p
 <div class="cat">${pichaCat({ eyes: s.eyes || 'happy', blush: !!s.blush, acc: s.acc || '', id: 'pd' })}</div>
 ${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="chips">${(s.chips || []).map((c) => `<span>${c}</span>`).join('')}</div></div><div class="cta">${s.cta} ←</div>`
   },
+
+  // E — your hero image: a PNG you designed (transparent cut-out or full picture) as the centrepiece, untouched (no tint); our frame, glow and Persian text around it
+  e: (s) => {
+    const uri = s.hero ? assetUri(s.hero) : ''
+    const th = { cyan: ['#5eead4', '#0e7490'], pink: ['#f472b6', '#be185d'], amber: ['#fbbf24', '#b45309'], violet: ['#a78bfa', '#6d28d9'], green: ['#4ade80', '#15803d'], red: ['#fb7185', '#be123c'] }[s.theme || 'cyan']
+    return `<style>
+body{width:1280px;height:720px;margin:0;font-family:V,sans-serif;position:relative;overflow:hidden;color:#fff;direction:ltr;background:radial-gradient(ellipse at 28% 52%,${th[1]}cc 0%,#0a1020 58%,#04060c 100%)}
+.glow{position:absolute;left:-40px;top:40px;width:640px;height:640px;border-radius:50%;background:radial-gradient(circle,${th[0]}55,${th[0]}00 66%)}
+.hero{position:absolute;left:30px;top:40px;width:600px;height:640px;display:flex;align-items:center;justify-content:center}
+.hero img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 18px 34px rgba(0,0,0,.5))}
+.brand{position:absolute;right:56px;top:40px;display:flex;align-items:center;gap:14px;font-weight:900;font-size:34px;direction:rtl}
+.txt{position:absolute;right:56px;top:170px;width:580px;direction:rtl;text-align:right}
+h1{font-size:92px;line-height:1.2;margin:0;font-weight:900}h1 em{font-style:normal;color:${th[0]};text-shadow:0 0 26px ${th[0]}88}
+p{font-size:30px;line-height:1.75;margin:14px 0 0;color:#cdd9ee}
+.chips{margin-top:20px;display:flex;gap:10px;direction:rtl}.chips span{border:1.5px solid ${th[0]};color:${th[0]};border-radius:10px;padding:6px 18px;font-size:23px;font-weight:700}
+.cta{position:absolute;right:56px;bottom:48px;background:${th[0]};color:#06100f;font-weight:900;font-size:34px;padding:16px 44px;border-radius:14px;direction:rtl;box-shadow:0 0 30px ${th[0]}66}
+</style><div class="glow"></div>${paws('#fff', 5)}<div class="hero">${uri ? `<img src="${uri}">` : ''}</div>
+${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="chips">${(s.chips || []).map((c) => `<span>${c}</span>`).join('')}</div></div><div class="cta">${s.cta} ←</div>`
+  },
   // C — constellation: the cat drawn as connected stars on deep blue, calm and elegant
   c: (s) => {
     // the logo's own outline as stars (640-unit logo space → scaled into the left half)
@@ -164,7 +183,12 @@ export async function renderPoster(style, spec, out) {
   fs.unlinkSync(f); await browser.close()
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (process.argv[1] === new URL(import.meta.url).pathname && process.argv[2] && /\.json$/.test(process.argv[2])) {
+  const specs = [].concat(JSON.parse(fs.readFileSync(process.argv[2], 'utf8')))
+  const out = process.argv[3] || 'poster.png'
+  for (const [i, sp] of specs.entries()) await renderPoster(sp.style || 'e', sp, specs.length > 1 ? out.replace(/(\.png)?$/, `-${i + 1}.png`) : out)
+  console.log('done')
+} else if (process.argv[1] === new URL(import.meta.url).pathname) {
   fs.mkdirSync(path.join(here, 'cats'), { recursive: true })
   const spec = { acc: 'hat', title: 'روز گربه‌ها <em>مبارک</em>', subtitle: '۲۲ فوریه؛ روز گربه‌ها. به همراهان چهارپای ما.', chips: ['روز گربه', '۲۲ فوریه'], cta: 'تست رایگان' }
   for (const st of ['a', 'b', 'c']) await renderPoster(st, spec, path.join(here, 'cats', `poster-${st}.png`))
