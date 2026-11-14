@@ -12,6 +12,8 @@ import { payRoutes } from './routes/pay.js'
 import { adminPayRoutes } from './admin/payments.js'
 import { adminRelayRoutes } from './admin/relay.js'
 import { adminGatewayRoutes } from './admin/gateways.js'
+import { adminCareRoutes } from './admin/care.js'
+import { careRoutes } from './care.js'
 import { adminMenuRoutes } from './admin/menu.js'
 import { starsRoutes } from './routes/stars.js'
 import { miscRoutes } from './routes/misc.js'
@@ -29,6 +31,7 @@ export const routes = [
   ...bulkRoutes,
   ...payRoutes,
   ...miscRoutes,
+  ...careRoutes,
   ...starsRoutes,
   ...lateRoutes,
 ]
@@ -37,6 +40,7 @@ export const routes = [
 export const adminRoutes = [
   ...adminRelayRoutes,
   ...adminGatewayRoutes,
+  ...adminCareRoutes,
   ...adminPayRoutes,
   ...adminMenuRoutes,
 ]

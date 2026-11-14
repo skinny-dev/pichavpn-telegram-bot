@@ -7,6 +7,7 @@ import { dataUser, removeUser, getUsers } from './panel.js'
 import { formatBytes } from './fmt.js'
 import { broadcastTick } from './broadcast.js'
 import { tetraReconcile, paychiReconcile } from './relay.js'
+import { careRun } from './care.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
@@ -191,6 +192,7 @@ const JOBS = [
   ['broadcast', 20, (c) => broadcastTick(c)],
   ['tetraminator', 30, tetraReconcile],
   ['paychi', 30, paychiReconcile],
+  ['care', 600, (c) => careRun(c)],
   ['notifications', 60, notifications],
   ['configtest', 120, configTest],
   ['payment_expire', 300, paymentExpire],
