@@ -9,7 +9,7 @@ const DAY = 86400
 const now = () => Math.floor(Date.now() / 1000)
 export const RULES = {
   maxPerTopic: 2,        // a lesson/prompt on one topic is told at most twice, ever
-  minGapDays: 21,        // and not twice within 3 weeks
+  minGapDays: 30,        // and not twice within a month
   ignoreWindowH: 48,     // a message without a tap for 48 h counts as «ignored»
   muteAfterIgnored: 2,   // two ignored messages on a topic with no tap ever → that topic is off …
   muteDays: 60,          // … for 60 days

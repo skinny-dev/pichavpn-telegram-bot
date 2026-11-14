@@ -20,10 +20,10 @@ const tip = { topic: 'ping_test', kind: 'tip' }, offer = { topic: 'test_invite',
 const u1 = '7501'
 check('a new person may get a lesson', (await M.memAllow(u1, tip, T0)).ok)
 await M.memSent(u1, tip, T0)
-check('the same lesson is not repeated within 3 weeks', (await M.memAllow(u1, tip, T0 + 10 * DAY)).why === 'too_soon')
-check('after 3 weeks it may be told a second time', (await M.memAllow(u1, tip, T0 + 22 * DAY)).ok)
+check('the same lesson is not repeated within a month', (await M.memAllow(u1, tip, T0 + 10 * DAY)).why === 'too_soon')
+check('after a month it may be told a second time', (await M.memAllow(u1, tip, T0 + 31 * DAY)).ok)
 await M.memClick(u1, 'other_topic', T0 + 1) // an unrelated tap does not matter
-await M.memSent(u1, tip, T0 + 22 * DAY)
+await M.memSent(u1, tip, T0 + 31 * DAY)
 check('a lesson is never told a third time', (await M.memAllow(u1, tip, T0 + 60 * DAY)).why === 'told_enough' || (await M.memAllow(u1, tip, T0 + 60 * DAY)).why === 'muted')
 
 // 2) a tap means «they know it»: no more lessons on that topic, but actions stay available
