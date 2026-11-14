@@ -14,12 +14,16 @@ import { adminRelayRoutes } from './admin/relay.js'
 import { adminGatewayRoutes } from './admin/gateways.js'
 import { adminCareRoutes } from './admin/care.js'
 import { careRoutes } from './care.js'
+import { fitRoutes, adminFitRoutes } from './fit.js'
+import { pulseRoutes } from './pulse.js'
+import { adminPulseRoutes } from './admin/pulse.js'
 import { adminMenuRoutes } from './admin/menu.js'
 import { starsRoutes } from './routes/stars.js'
 import { miscRoutes } from './routes/misc.js'
 import { lateRoutes } from './routes/late.js'
 
 export const routes = [
+  ...pulseRoutes, // first: it only counts a pulse click and then lets the normal route handle the real action
   ...start,
   ...services,
   ...config,
@@ -32,6 +36,7 @@ export const routes = [
   ...payRoutes,
   ...miscRoutes,
   ...careRoutes,
+  ...fitRoutes,
   ...starsRoutes,
   ...lateRoutes,
 ]
@@ -41,6 +46,8 @@ export const adminRoutes = [
   ...adminRelayRoutes,
   ...adminGatewayRoutes,
   ...adminCareRoutes,
+  ...adminFitRoutes,
+  ...adminPulseRoutes,
   ...adminPayRoutes,
   ...adminMenuRoutes,
 ]

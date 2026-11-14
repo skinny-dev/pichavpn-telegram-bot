@@ -9,6 +9,7 @@ import { kvGet } from './db.js'
 import { routes, adminRoutes } from './routes.js'
 import { pullRelay } from './relay.js'
 import { cronTick } from './cron.js'
+import { showFitMenu } from './fit.js'
 import { promoAutoEnd } from './panelapi/promo.js'
 
 /** one update, like one webhook request to index.php */
@@ -168,6 +169,7 @@ async function main(c) {
   // /start <code>
   if (c.text.includes('/start ') && user.step !== 'gettextSystemMessage') {
     const affiliatesid = c.text.split(' ')[1]
+    if (affiliatesid === 'fit') { await showFitMenu(c); await step(c, 'home'); return } // channel / message button: «best server for my use»
     if (!['start', 'usertest', '/start', 'buy', 'help'].includes(affiliatesid)) {
       if (!/^\d+$/.test(affiliatesid ?? '') && (await referralCampaignAttach(c.from_id, affiliatesid)) !== null) {
         await sendStartMessage(c, c.from_id, c.keyboard)

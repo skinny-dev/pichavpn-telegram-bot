@@ -36,6 +36,12 @@ export async function loadSchedule() {
   return { windows, offdays: extra }
 }
 
+/** a public holiday or an administrator's day off (Tehran date of `at`) */
+export function isOffDay(at, offdays = []) {
+  const p = tehranParts(at)
+  return FIXED_OFFDAYS.includes(p.jmd) || offdays.includes(p.jmd) || offdays.includes(p.jymd)
+}
+
 /** {ok:true} or {ok:false, why:'holiday'|'closed_day'|'outside_hours'} */
 export function careTime(at, { windows, offdays }) {
   const p = tehranParts(at)

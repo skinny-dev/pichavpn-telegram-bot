@@ -162,6 +162,7 @@ async function runCase(c, def, at, BATCH) {
       if (res && res.ok === false) { await skip('blocked'); continue }
     } catch { await skip('blocked'); continue }
     await kvSet(key, JSON.stringify({ state: 'sent', at, mode: g.mode }))
+    await kvSet(`care:sentto:${Math.floor((at + 12600) / DAY)}:${r.id_user}`, '1') // the daily pulse yields to a care message the same day
     if (!def.noCap) await kvSet('care:last:' + r.id_user, String(at))
     await kvSet(g.dayKey, String(++today))
     await bump(`care:n:${def.id}:sent`)

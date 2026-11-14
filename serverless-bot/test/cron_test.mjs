@@ -19,7 +19,7 @@ const { handleUpdate } = await import('../tgcloud/lib/bot.js')
 const tick = async (job) => {
   await db.run(sql`DELETE FROM kv WHERE key LIKE 'cron:%'`)
   // every other job ran just now: only `job` is due
-  for (const j of ['broadcast', 'tetraminator', 'paychi', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent', 'care']) if (j !== job) await db.run(sql`INSERT INTO kv (key, value, updated_at) VALUES (${'cron:' + j}, ${String(Math.floor(Date.now() / 1000))}, 0)`)
+  for (const j of ['broadcast', 'tetraminator', 'paychi', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent', 'care', 'pulse']) if (j !== job) await db.run(sql`INSERT INTO kv (key, value, updated_at) VALUES (${'cron:' + j}, ${String(Math.floor(Date.now() / 1000))}, 0)`)
   calls.length = 0
   await handleUpdate({ update_id: 1, message: { message_id: 1, from: { id: 1002, first_name: 'S', username: 'sara', is_bot: false }, chat: { id: 1002, type: 'private' }, date: 1, text: '/start' } })
 }
