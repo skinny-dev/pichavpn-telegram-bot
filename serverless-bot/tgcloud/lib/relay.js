@@ -9,6 +9,7 @@ import { directPayment } from './directpay.js'
 import { smsProcessText } from './sms.js'
 import { tetraSettle, tetraAfterPaid } from './tetraminator.js'
 import { paychiSettle, paychiAfterPaid } from './paychi.js'
+import { storeProbe } from './servers.js'
 import { sprintf, numberFormat, intval } from './php.js'
 import { hmacSha256Hex } from './hash.js'
 
@@ -191,7 +192,7 @@ export async function pullRelay(c, force = false) {
     after = intval(ev.seq)
     await kvSet('relay:after', String(after))
     try {
-      const r = ev.type === 'variza' ? await onVariza(c, ev) : ev.type === 'sms' ? await onSms(c, ev) : ev.type === 'tetraminator' ? await onTetraminator(c, ev) : ev.type === 'paychi' ? await onPaychi(c, ev) : 'unknown'
+      const r = ev.type === 'variza' ? await onVariza(c, ev) : ev.type === 'sms' ? await onSms(c, ev) : ev.type === 'tetraminator' ? await onTetraminator(c, ev) : ev.type === 'paychi' ? await onPaychi(c, ev) : ev.type === 'probe' ? ((await storeProbe(ev.body)) ? 'stored' : 'bad probe') : 'unknown'
       console.log('relay', ev.seq, ev.type, r)
     } catch (e) {
       console.error('relay event', ev.seq, e)

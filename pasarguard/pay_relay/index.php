@@ -135,6 +135,26 @@ if (in_array($path, ['/sms', '/sms_webhook.php', '/payment/sms_webhook.php'], tr
 
 // the bot asks the relay to create a Variza payment: Variza may refuse foreign servers, and this server can reach it
 // through the SSH tunnel to the Iranian server (VARIZA_PROXY in the settings, made by install.sh with an Iranian IP)
+// an exit server reports which services it can reach (tools/probe_exit.sh): queued for the bot like the payment events; authenticated by the relay key
+if ($path === '/probe') {
+    if (RELAY_KEY === '' || !hash_equals(RELAY_KEY, headerValue('X-Relay-Key'))) {
+        reply(401, ['ok' => false]);
+    }
+    $in = json_decode($raw, true);
+    if (!is_array($in) || !is_string($in['country'] ?? null) || !preg_match('/^[A-Z]{2}$/', $in['country']) || !is_array($in['results'] ?? null) || count($in['results']) > 20) {
+        reply(400, ['ok' => false, 'error' => 'bad probe']);
+    }
+    $clean = [];
+    foreach ($in['results'] as $svc => $val) {
+        if (is_string($svc) && preg_match('/^[a-z0-9_]{2,20}$/', $svc) && is_string($val) && preg_match('/^(ok|blocked|down|other)$/', $val)) {
+            $clean[$svc] = $val;
+        }
+    }
+    $node = is_string($in['node'] ?? null) && preg_match('/^[A-Za-z0-9_.-]{1,40}$/', $in['node']) ? $in['node'] : '';
+    withQueue(['type' => 'probe', 'body' => json_encode(['country' => $in['country'], 'node' => $node, 'results' => $clean]), 'post' => [], 'query' => [], 'headers' => []]);
+    reply(200, ['ok' => true, 'status' => 'queued']);
+}
+
 if ($path === '/variza_create') {
     if (RELAY_KEY === '' || !hash_equals(RELAY_KEY, headerValue('X-Relay-Key'))) {
         reply(401, ['ok' => false]);

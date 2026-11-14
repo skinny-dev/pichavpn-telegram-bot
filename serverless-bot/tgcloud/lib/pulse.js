@@ -7,6 +7,7 @@ import { one, all, run, sql, kvGet, kvSet } from './db.js'
 import { telegram, sendmessage, Editmessagetext, answerCallback } from './tg.js'
 import { J, intval } from './php.js'
 import { tehranParts, loadSchedule, isOffDay } from './schedule.js'
+import { memAllow, memSent, memClick, memTired, memStats } from './memory.js'
 
 const DAY = 86400
 const parse = (s) => { try { return JSON.parse(s) } catch { return null } }
@@ -21,24 +22,24 @@ const ACTIONS = {
   good: ['👍 خوب', 'pulse_vote_good'], ok: ['🙂 معمولی', 'pulse_vote_ok'], bad: ['👎 بد', 'pulse_vote_bad'],
 }
 export const PULSE_LIBRARY = [
-  { id: 'm1', slot: 'morning', text: 'درود، صبح بخیر ☀️\nنکتهٔ امروز: اگر برای کار از VPN استفاده می‌کنید، قبل از شروع روی سرورها «تست پینگ» بزنید و به سروری وصل شوید که پینگ پایین‌تر دارد.', btns: ['learn', 'support'] },
-  { id: 'm2', slot: 'morning', text: 'درود 🌿\nیک یادآوری کوتاه: اگر اتصال‌تان کند شد، اول اشتراک را داخل برنامه «به‌روزرسانی» کنید؛ بیشتر وقت‌ها مشکل همین است.', btns: ['learn', 'support'] },
-  { id: 'm3', slot: 'morning', text: 'درود، صبح‌تان بخیر ☀️\nاگر جایی مشکل دارید همین‌جا بنویسید تا بررسی کنیم.', btns: ['support', 'services'] },
-  { id: 'm4', slot: 'morning', text: 'درود ☀️\nمی‌دانستید تاریخ انقضا و حجم باقی‌ماندهٔ سرویس‌تان را از «سرویس‌های من» می‌بینید؟ یک نگاه بیندازید.', btns: ['services'] },
-  { id: 'm5', slot: 'morning', text: 'درود، یک نکتهٔ امنیتی:\nما هرگز رمز یا کد تأیید از شما نمی‌خواهیم. فقط از همین ربات رسمی خرید کنید.', btns: ['official', 'support'] },
-  { id: 'm6', slot: 'morning', text: 'درود 🌿\nاگر امروز سرور اصلی خوب کار نکرد، به «تانل» وصل شوید؛ روی بعضی اپراتورها بهتر است.', btns: ['learn', 'support'] },
-  { id: 'n1', slot: 'noon', text: 'یک دقیقه یاد بگیرید 💡\nبرنامهٔ Happ و v2rayTun از پیشنهادی‌ترین‌هاست؛ اگر با یکی مشکل داشتید، دیگری را امتحان کنید.', btns: ['learn'] },
-  { id: 'n2', slot: 'noon', text: 'درود 💡\nترفند: اگر وصل هستید ولی صفحه‌ای باز نمی‌شود، سرور دیگری را امتحان کنید؛ گاهی مشکل از مسیر یک سرور است نه اینترنت شما.', btns: ['learn', 'support'] },
-  { id: 'n3', slot: 'noon', text: 'یک دقیقه یاد بگیرید 💡\nبرای بهترین سرور برای کارتان (هوش مصنوعی، یوتیوب، اینستاگرام …) از دکمهٔ زیر استفاده کنید.', btns: ['fit', 'support'] },
-  { id: 'n4', slot: 'noon', text: 'درود 🌿\nسؤالی دربارهٔ اتصال دارید؟ همین‌جا بپرسید؛ معمولاً مشکل با یک توضیح کوتاه حل می‌شود.', btns: ['support'] },
-  { id: 'n5', slot: 'noon', text: 'نکتهٔ شبکه 📶\nکیفیت روی هر اپراتور فرق می‌کند. اگر روی اینترنت خانه خوب بود ولی موبایل نه، سرورها را با تست پینگ مقایسه کنید.', btns: ['learn'] },
-  { id: 'n6', slot: 'noon', text: 'درود 💡\nقبل از تمدید هم می‌توانید سرویس را از «سرویس‌های من» ببینید و بدون وقفه ادامه دهید.', btns: ['renew', 'services'], seg: 'hasservice' },
-  { id: 'e1', slot: 'night', text: 'درود، شب بخیر 🌙\nاگر امشب برای شبکه‌های اجتماعی یا تماشا وصل می‌شوید و کند بود، سرور دیگری را امتحان کنید؛ ما کنارتان هستیم.', btns: ['support', 'learn'] },
-  { id: 'e2', slot: 'night', text: 'درود 🌿\nنظر شما برای ما مهم است: اتصال‌تان این هفته چطور بود؟', btns: ['good', 'ok', 'bad'] },
-  { id: 'e3', slot: 'night', text: 'شب بخیر 🌙\nبرای بهترین سرور برای یوتیوب، اینستاگرام یا هوش مصنوعی، از دکمهٔ زیر انتخاب کنید.', btns: ['fit', 'support'] },
-  { id: 'e4', slot: 'night', text: 'شب بخیر 🌙\nربات رسمی پیچا فقط یک آدرس دارد. اگر کسی از طرف ما رمز یا کد خواست، گزارش دهید.', btns: ['official', 'report'] },
-  { id: 'e5', slot: 'night', text: 'درود 🌿\nموجودی کیف پول‌تان برای تمدید آماده است؛ اگر لازم شد با یک دکمه تمدید کنید.', btns: ['renew', 'wallet'], seg: 'wallet' },
-  { id: 'e6', slot: 'night', type: 'offer', text: 'درود، شب بخیر 🌙\nاگر هنوز اتصال را امتحان نکرده‌اید، تست رایگان همین‌جاست؛ چند دقیقه بیشتر طول نمی‌کشد.', btns: ['test', 'support'], seg: 'untested' },
+  { id: 'm1', topic: 'ping_test', kind: 'tip', slot: 'morning', text: 'درود، صبح بخیر ☀️\nنکتهٔ امروز: اگر برای کار از VPN استفاده می‌کنید، قبل از شروع روی سرورها «تست پینگ» بزنید و به سروری وصل شوید که پینگ پایین‌تر دارد.', btns: ['learn', 'support'] },
+  { id: 'm2', topic: 'update_sub', kind: 'tip', slot: 'morning', text: 'درود 🌿\nیک یادآوری کوتاه: اگر اتصال‌تان کند شد، اول اشتراک را داخل برنامه «به‌روزرسانی» کنید؛ بیشتر وقت‌ها مشکل همین است.', btns: ['learn', 'support'] },
+  { id: 'm3', topic: 'checkin', kind: 'action', slot: 'morning', text: 'درود، صبح‌تان بخیر ☀️\nاگر جایی مشکل دارید همین‌جا بنویسید تا بررسی کنیم.', btns: ['support', 'services'] },
+  { id: 'm4', topic: 'services_view', kind: 'tip', slot: 'morning', text: 'درود ☀️\nمی‌دانستید تاریخ انقضا و حجم باقی‌ماندهٔ سرویس‌تان را از «سرویس‌های من» می‌بینید؟ یک نگاه بیندازید.', btns: ['services'] },
+  { id: 'm5', topic: 'security', kind: 'tip', slot: 'morning', text: 'درود، یک نکتهٔ امنیتی:\nما هرگز رمز یا کد تأیید از شما نمی‌خواهیم. فقط از همین ربات رسمی خرید کنید.', btns: ['official', 'support'] },
+  { id: 'm6', topic: 'server_switch', kind: 'tip', slot: 'morning', text: 'درود 🌿\nاگر امروز سرور اصلی خوب کار نکرد، به «تانل» وصل شوید؛ روی بعضی اپراتورها بهتر است.', btns: ['learn', 'support'] },
+  { id: 'n1', topic: 'app_choice', kind: 'tip', slot: 'noon', text: 'یک دقیقه یاد بگیرید 💡\nبرنامهٔ Happ و v2rayTun از پیشنهادی‌ترین‌هاست؛ اگر با یکی مشکل داشتید، دیگری را امتحان کنید.', btns: ['learn'] },
+  { id: 'n2', topic: 'server_switch', kind: 'tip', slot: 'noon', text: 'درود 💡\nترفند: اگر وصل هستید ولی صفحه‌ای باز نمی‌شود، سرور دیگری را امتحان کنید؛ گاهی مشکل از مسیر یک سرور است نه اینترنت شما.', btns: ['learn', 'support'] },
+  { id: 'n3', topic: 'fit', kind: 'action', slot: 'noon', text: 'یک دقیقه یاد بگیرید 💡\nبرای بهترین سرور برای کارتان (هوش مصنوعی، یوتیوب، اینستاگرام …) از دکمهٔ زیر استفاده کنید.', btns: ['fit', 'support'] },
+  { id: 'n4', topic: 'ask_support', kind: 'action', slot: 'noon', text: 'درود 🌿\nسؤالی دربارهٔ اتصال دارید؟ همین‌جا بپرسید؛ معمولاً مشکل با یک توضیح کوتاه حل می‌شود.', btns: ['support'] },
+  { id: 'n5', topic: 'ping_test', kind: 'tip', slot: 'noon', text: 'نکتهٔ شبکه 📶\nکیفیت روی هر اپراتور فرق می‌کند. اگر روی اینترنت خانه خوب بود ولی موبایل نه، سرورها را با تست پینگ مقایسه کنید.', btns: ['learn'] },
+  { id: 'n6', topic: 'renew_prep', kind: 'action', slot: 'noon', text: 'درود 💡\nقبل از تمدید هم می‌توانید سرویس را از «سرویس‌های من» ببینید و بدون وقفه ادامه دهید.', btns: ['renew', 'services'], seg: 'hasservice' },
+  { id: 'e1', topic: 'checkin', kind: 'action', slot: 'night', text: 'درود، شب بخیر 🌙\nاگر امشب برای شبکه‌های اجتماعی یا تماشا وصل می‌شوید و کند بود، سرور دیگری را امتحان کنید؛ ما کنارتان هستیم.', btns: ['support', 'learn'] },
+  { id: 'e2', topic: 'vote', kind: 'action', slot: 'night', text: 'درود 🌿\nنظر شما برای ما مهم است: اتصال‌تان این هفته چطور بود؟', btns: ['good', 'ok', 'bad'] },
+  { id: 'e3', topic: 'fit', kind: 'action', slot: 'night', text: 'شب بخیر 🌙\nبرای بهترین سرور برای یوتیوب، اینستاگرام یا هوش مصنوعی، از دکمهٔ زیر انتخاب کنید.', btns: ['fit', 'support'] },
+  { id: 'e4', topic: 'security', kind: 'tip', slot: 'night', text: 'شب بخیر 🌙\nربات رسمی پیچا فقط یک آدرس دارد. اگر کسی از طرف ما رمز یا کد خواست، گزارش دهید.', btns: ['official', 'report'] },
+  { id: 'e5', topic: 'renew_prep', kind: 'action', slot: 'night', text: 'درود 🌿\nموجودی کیف پول‌تان برای تمدید آماده است؛ اگر لازم شد با یک دکمه تمدید کنید.', btns: ['renew', 'wallet'], seg: 'wallet' },
+  { id: 'e6', topic: 'test_invite', kind: 'offer', slot: 'night', type: 'offer', text: 'درود، شب بخیر 🌙\nاگر هنوز اتصال را امتحان نکرده‌اید، تست رایگان همین‌جاست؛ چند دقیقه بیشتر طول نمی‌کشد.', btns: ['test', 'support'], seg: 'untested' },
 ]
 const byId = Object.fromEntries(PULSE_LIBRARY.map((i) => [i.id, i]))
 
@@ -74,12 +75,13 @@ async function segmentOk(item, u) {
 /** the message for this user and slot: the administrator's «today» inputs first (morning), then the next unseen library item */
 async function chooseItem(slot, u, today, at) {
   if (slot === 'morning' && today) {
-    if (today.update) return { id: 'x_update', slot, text: 'درود 🌿\nبرای اتصال بهتر، لطفاً اشتراک‌تان را داخل برنامه «به‌روزرسانی» کنید؛ تنظیمات سرورها تازه شده است.', btns: ['learn', 'support'] }
-    if (today.best) return { id: 'x_best', slot, text: `درود ☀️\nپیشنهاد امروز: ${String(today.best).slice(0, 200)}\nاگر روی اینترنت شما خوب نبود، از پشتیبانی کمک بگیرید.`, btns: ['fit', 'support'] }
-    if (today.status) return { id: 'x_status', slot, text: `درود، صبح‌تان بخیر ☀️\nوضعیت امروز: ${String(today.status).slice(0, 300)}`, btns: ['support', 'services'] }
+    if (today.update) return { id: 'x_update', topic: 'update_sub', kind: 'action', slot, text: 'درود 🌿\nبرای اتصال بهتر، لطفاً اشتراک‌تان را داخل برنامه «به‌روزرسانی» کنید؛ تنظیمات سرورها تازه شده است.', btns: ['learn', 'support'] }
+    if (today.best) return { id: 'x_best', topic: 'best_today', kind: 'action', slot, text: `درود ☀️\nپیشنهاد امروز: ${String(today.best).slice(0, 200)}\nاگر روی اینترنت شما خوب نبود، از پشتیبانی کمک بگیرید.`, btns: ['fit', 'support'] }
+    if (today.status) return { id: 'x_status', topic: 'status_today', kind: 'action', slot, text: `درود، صبح‌تان بخیر ☀️\nوضعیت امروز: ${String(today.status).slice(0, 300)}`, btns: ['support', 'services'] }
   }
   const seen = parse(await kvGet('pulse:seen:' + u.id)) || []
-  const pool = PULSE_LIBRARY.filter((i) => i.slot === slot)
+  const pool = []
+  for (const i of PULSE_LIBRARY) if (i.slot === slot && (await memAllow(u.id, i, at)).ok) pool.push(i) // what we already told this person (or what they ignored) is not told again
   const lastOffer = seen.slice(-4).some((id) => byId[id]?.type === 'offer')
   const fresh = []
   for (const i of pool) {
@@ -126,7 +128,8 @@ export async function pulseTick(c, { at = Math.floor(Date.now() / 1000), BATCH =
   for (const u of rows) {
     if (sent + blocked >= BATCH) break
     const own = (() => { const h = u.h, lm = intval(u.lm); return slot === 'morning' ? (h < 11.5 || lm === 0) : slot === 'noon' ? (h >= 11.5 && h < 16) : h >= 16 })()
-    const freq = await kvGet('pulse:freq:' + u.id)
+    let freq = await kvGet('pulse:freq:' + u.id)
+    if (!freq && (await memTired(u.id, at))) { await kvSet('pulse:freq:' + u.id, 'weekly'); freq = 'weekly' } // five ignored in a row: quieter, without asking
     if (freq === 'weekly' && !(tehranParts(at).dow === 'sat' && slot === 'morning')) { await kvSet(`pulse:s:${day}:${slot}:${u.id}`, 's'); continue }
     // at most 3 a day; a person's non-own slot only when engaged (already in the query) and they have had fewer than 3 today
     let todays = 0
@@ -145,6 +148,7 @@ export async function pulseTick(c, { at = Math.floor(Date.now() / 1000), BATCH =
       continue
     }
     sent++
+    await memSent(u.id, item, at)
     const seen = parse(await kvGet('pulse:seen:' + u.id)) || []
     seen.push(item.id)
     await kvSet('pulse:seen:' + u.id, JSON.stringify(seen.slice(-30)))
@@ -171,11 +175,14 @@ export const pulseRoutes = [
       // engagement counts, then the ordinary route of the bot handles the real action
       await kvSet('pulse:eng:' + c.from_id, String(Math.floor(Date.now() / 1000)))
       await kvSet(`pulse:n:click:${m[2]}`, String(intval(await kvGet(`pulse:n:click:${m[2]}`)) + 1))
+      const it = byId[m[2]]
+      if (it) await memClick(c.from_id, it.topic)
       c.datain = ACTIONS[m[1]][1]
       return false
     }
     if (m && ['good', 'ok', 'bad'].includes(m[1])) {
       await kvSet('pulse:eng:' + c.from_id, String(Math.floor(Date.now() / 1000)))
+      if (byId.e2) await memClick(c.from_id, 'vote')
       await kvSet(`pulse:n:vote:${m[1]}`, String(intval(await kvGet(`pulse:n:vote:${m[1]}`)) + 1))
       await answerCallback(c.callback_query_id, 'سپاسگزاریم 🌿')
       await Editmessagetext(c.from_id, c.message_id, 'سپاسگزاریم که نظرتان را گفتید 🌿', null, 'HTML')

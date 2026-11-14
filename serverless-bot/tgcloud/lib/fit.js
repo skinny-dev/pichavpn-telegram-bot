@@ -4,6 +4,8 @@
 import { kvGet, kvSet, kvDel } from './db.js'
 import { sendmessage, Editmessagetext, answerCallback } from './tg.js'
 import { J, intval } from './php.js'
+import { memClick } from './memory.js'
+import { recommendText, rankFor, recordFeedback, catalogGet, USE_SERVICES, syncHosts } from './servers.js'
 
 export const FIT = {
   ai: '🤖 هوش مصنوعی (Claude، ChatGPT …)',
@@ -30,14 +32,33 @@ export async function showFitMenu(c, edit = false) {
 
 export const fitRoutes = [
   async (c) => {
+    const f = /^fitfb_(ai|yt|ig|msg|work|game|stream|other)_(ok|bad)$/.exec(c.datain ?? '')
+    if (!f) return false
+    const rawLast = await kvGet('fit:last:' + c.from_id)
+    let l = null; try { l = JSON.parse(rawLast) } catch { l = null }
+    if (l && l.use === f[1]) await recordFeedback(l.use, l.country, l.kind, f[2] === 'ok')
+    await answerCallback(c.callback_query_id, 'سپاسگزاریم 🌿')
+    if (f[2] === 'ok') { await Editmessagetext(c.from_id, c.message_id, 'خوشحالیم 🌿 نظر شما به بهتر شدن پیشنهادها کمک می‌کند.', J({ inline_keyboard: [[{ text: '↩️ کار دیگر', callback_data: 'fit_menu' }]] }), 'HTML'); return true }
+    const next = (await rankFor(f[1])).filter((x) => x.score > 0 && !(l && x.country === l.country && x.kind === l.kind))[0]
+    const text = next ? `باشه، این را امتحان کنید: «${esc(next.name)}».\nاگر آن هم جواب نداد، با پشتیبانی صحبت کنید.` : 'سپاسگزاریم که گفتید. برای پیدا کردن بهترین سرور، با پشتیبانی صحبت کنید؛ بگویید از کدام اپراتور و برنامه استفاده می‌کنید.'
+    await Editmessagetext(c.from_id, c.message_id, text, J({ inline_keyboard: [[{ text: '💬 صحبت با پشتیبانی', callback_data: 'supportbtns' }], [{ text: '↩️ کار دیگر', callback_data: 'fit_menu' }]] }), 'HTML')
+    return true
+  },
+  async (c) => {
     if (c.datain === 'fit_menu') { await answerCallback(c.callback_query_id, ''); await showFitMenu(c, true); return true }
     const m = /^fit_(ai|yt|ig|msg|work|game|stream|other)$/.exec(c.datain ?? '')
     if (!m) return false
     const key = m[1]
     await kvSet('care:n:fit:' + key, String(intval(await kvGet('care:n:fit:' + key)) + 1))
+    await memClick(c.from_id, 'fit') // they used it: a tap, not an ignored message
     await answerCallback(c.callback_query_id, '')
-    const rec = String((await kvGet('fit:' + key)) ?? '').trim()
-    const kb = J({ inline_keyboard: [[{ text: '💬 صحبت با پشتیبانی', callback_data: 'supportbtns' }], [{ text: '↩️ کار دیگر', callback_data: 'fit_menu' }]] })
+    const manual = String((await kvGet('fit:' + key)) ?? '').trim()
+    const auto = manual ? null : await recommendText(key) // the system's own choice (probes + customers' feedback), when the administrator wrote nothing
+    const rec = manual || auto || ''
+    if (auto) { const top = (await rankFor(key)).find((x) => x.score > 0); if (top) await kvSet('fit:last:' + c.from_id, JSON.stringify({ use: key, country: top.country, kind: top.kind })) }
+    const rows = [[{ text: '💬 صحبت با پشتیبانی', callback_data: 'supportbtns' }], [{ text: '↩️ کار دیگر', callback_data: 'fit_menu' }]]
+    if (auto) rows.unshift([{ text: '✅ جواب داد', callback_data: 'fitfb_' + key + '_ok' }, { text: '❌ جواب نداد', callback_data: 'fitfb_' + key + '_bad' }])
+    const kb = J({ inline_keyboard: rows })
     const text = rec
       ? `${esc(FIT[key])}\n\n${esc(rec)}\n\nاگر روی اینترنت شما خوب نبود، پشتیبانی کمک می‌کند بهترین سرور را برای اپراتورتان پیدا کنید.`
       : `${esc(FIT[key])}\n\nبهترین سرور به اپراتور و شبکهٔ شما بستگی دارد. برای راهنمایی دقیق با پشتیبانی صحبت کنید؛ بگویید از کدام اپراتور و برنامه استفاده می‌کنید.`
@@ -50,6 +71,24 @@ export const fitRoutes = [
  *                                           /fit ai <text>   set the recommendation for «ai»
  *                                           /fit ai off      clear */
 export const adminFitRoutes = [
+  async (c) => {
+    if (c.adminRow?.rule !== 'administrator') return false
+    const t = String(c.text ?? '').trim()
+    if (t === '/servers sync') { const n = await syncHosts(); await sendmessage(c.from_id, n ? `✅ ${n} سرور از پنل خوانده شد.` : '⚠️ فهرست سرور از پنل خوانده نشد (پنل پاسخ نداد یا آدرس hosts موجود نیست).', null, 'HTML'); return true }
+    if (t !== '/servers') return false
+    const cat = await catalogGet()
+    const lines = []
+    for (const s of cat) lines.push(`${s.kind === 'tunnel' ? '🛤' : '☁️'} ${esc(s.name)} (${s.country})${s.security === 'none' ? ' ⚠️ بدون رمزگذاری' : ''}`)
+    const probes = []
+    for (const cc of [...new Set(cat.map((s) => s.country))]) {
+      let p = null; try { p = JSON.parse(await kvGet('servers:probe:' + cc)) } catch { p = null }
+      probes.push(`${cc}: ${p ? Object.entries(p.results || {}).map(([k, v]) => `${k} ${v === 'ok' ? '✅' : v === 'blocked' ? '⛔️' : '❌'}`).join(' ') + ` · ${Math.round((Date.now() / 1000 - p.at) / 3600)} ساعت پیش` : 'بدون آزمون'}`)
+    }
+    const best = []
+    for (const u of Object.keys(USE_SERVICES)) { const r = (await rankFor(u)).filter((x) => x.score > 0)[0]; if (r) best.push(`${u}: ${esc(r.name)} (${r.score})`) }
+    await sendmessage(c.from_id, ['🖧 <b>فهرست سرورها</b> (از پنل)', lines.join('\n') || '— (هنوز همگام‌سازی نشده: /servers sync)', '', '<b>آزمون خودکار هر کشور</b>', probes.join('\n') || '—', '', '<b>انتخاب سیستم برای هر کار</b>', best.join('\n') || 'هنوز دادهٔ کافی نیست (آزمون یا نظر کاربران لازم است)'].join('\n'), null, 'HTML')
+    return true
+  },
   async (c) => {
     if (c.adminRow?.rule !== 'administrator') return false
     const t = String(c.text ?? '').trim()

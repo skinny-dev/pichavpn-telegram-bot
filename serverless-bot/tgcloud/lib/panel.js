@@ -366,6 +366,15 @@ export async function createUserFor(panelName, codeProduct, usernameC, cfg, { do
 }
 
 /** getusers($location, $status): the panel's users with a status (on_hold …) */
+/** the PasarGuard host list (remarks, ports, security …) of one panel: [] when the panel does not answer or has no such endpoint */
+export async function getHosts(panelName) {
+  const panel = await panelByName(panelName)
+  if (!panel) return []
+  const r = await authed(panel, 'GET', '/api/hosts')
+  const d = parse(r && r.body)
+  return Array.isArray(d) ? d : d && Array.isArray(d.hosts) ? d.hosts : []
+}
+
 export async function getUsers(panelName, status, limit = 200) {
   const panel = await panelByName(panelName)
   if (!panel) return { users: [] }

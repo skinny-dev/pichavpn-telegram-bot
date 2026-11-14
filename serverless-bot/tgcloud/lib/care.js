@@ -9,6 +9,7 @@ import { one, all, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage, Editmessagetext, answerCallback } from './tg.js'
 import { J, intval } from './php.js'
 import { loadSchedule, careTime, loadBands, sendMode, tehranParts } from './schedule.js'
+import { memAllow, memSent } from './memory.js'
 
 const DAY = 86400
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -61,7 +62,7 @@ export const T1_KB = () => J({ inline_keyboard: [
 /** the cases: id, who is due (rows {id_user, ref}), the message, the person-level rule */
 const CASES = [
   {
-    id: 'T1', live: true, noCap: true, // the test is still running: 1 day before the end and again shortly before (an hour; 20 min for a short test) — the person is mid-test, so no working-week window
+    id: 'T1', topic: 'test_ending', live: true, noCap: true, // the test is still running: 1 day before the end and again shortly before (an hour; 20 min for a short test) — the person is mid-test, so no working-week window
     rows: (c, at, lo, hi, limit) => all(sql`SELECT x.id_user AS id_user, x.ref AS ref FROM (
         SELECT i.id_user AS id_user, i.id_invoice || '-d1' AS ref,
                CAST(i.time_sell AS INTEGER) + CAST(i.Service_time AS REAL) * 3600 AS expiry, CAST(i.Service_time AS REAL) AS dh, 24 * 3600 AS lead, 6 * 3600 AS stop
@@ -83,7 +84,7 @@ const CASES = [
     converted: (c, uid, from) => one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${uid} AND name_product != ${c.T.common.labels.testServiceName} AND Status != 'Unpaid' AND CAST(time_sell AS INTEGER) BETWEEN ${from} AND ${from + 2 * DAY} LIMIT 1`),
   },
   {
-    id: 'C6', // test finished, not converted: test accounts 23 h – 6 days old
+    id: 'C6', topic: 'test_followup', // test finished, not converted: test accounts 23 h – 6 days old
     rows: (c, at, lo, hi, limit) => all(sql`SELECT i.id_user AS id_user, i.id_invoice AS ref FROM invoice i
       WHERE i.name_product = ${c.T.common.labels.testServiceName} AND CAST(i.time_sell AS INTEGER) BETWEEN ${at - 6 * DAY} AND ${at - 23 * 3600}
         AND CAST(i.time_sell AS INTEGER) + CAST(i.Service_time AS REAL) * 3600 <= ${at} + 0 -- «test finished» is only true when the test has really ended
@@ -100,7 +101,7 @@ const CASES = [
     converted: (c, uid, from) => one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${uid} AND name_product != ${c.T.common.labels.testServiceName} AND Status != 'Unpaid' AND CAST(time_sell AS INTEGER) BETWEEN ${from} AND ${from + 2 * DAY} LIMIT 1`),
   },
   {
-    id: 'C10', // never took a test: registered 24 – 72 h ago, no invoice of any kind
+    id: 'C10', topic: 'test_invite', // never took a test: registered 24 – 72 h ago, no invoice of any kind
     rows: (c, at, lo, hi, limit) => all(sql`SELECT u.id AS id_user, '0' AS ref FROM user u
       WHERE CAST(u.register AS INTEGER) BETWEEN ${at - 3 * DAY} AND ${at - DAY} AND u.User_Status = 'Active'
         AND NOT EXISTS (SELECT 1 FROM invoice i WHERE i.id_user = u.id)
@@ -155,6 +156,7 @@ async function runCase(c, def, at, BATCH) {
     const u = await one(sql`SELECT * FROM user WHERE id = ${String(r.id_user)}`)
     const why = await commonSkip(r, u, at, def.rule(c, r), !!def.noCap)
     if (why) { await skip(why); continue }
+    if (def.id === 'C10') { const mem = await memAllow(r.id_user, { topic: def.topic, kind: 'care' }, at); if (!mem.ok) { await skip('memory_' + mem.why); continue } } // the pulse may already have told them about the free test
     // writing to the bot right now: not the moment (a running test is exactly when they are here, so that case does not wait)
     if (!def.live && at - intval(u.last_message_time) < 1800) continue
     try {
@@ -162,6 +164,7 @@ async function runCase(c, def, at, BATCH) {
       if (res && res.ok === false) { await skip('blocked'); continue }
     } catch { await skip('blocked'); continue }
     await kvSet(key, JSON.stringify({ state: 'sent', at, mode: g.mode }))
+    await memSent(r.id_user, { topic: def.topic, kind: 'care' }, at)
     await kvSet(`care:sentto:${Math.floor((at + 12600) / DAY)}:${r.id_user}`, '1') // the daily pulse yields to a care message the same day
     if (!def.noCap) await kvSet('care:last:' + r.id_user, String(at))
     await kvSet(g.dayKey, String(++today))

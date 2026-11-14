@@ -127,7 +127,7 @@ try {
   st.txs.tx_RC1 = { id: 'tx_RC1', status: 'paid', amount: 600002, requested_amount: 600000, order_id: 'rec1' }
   await readyUser('7004'); await db.run(sql`UPDATE user SET step = 'home' WHERE id = '7004'`)
   await db.run(sql`DELETE FROM kv WHERE key = 'cron:off'`)
-  for (const j of ['broadcast', 'tetraminator', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent', 'care', 'pulse']) await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (${'cron:' + j}, ${String(now)}, 0)`)
+  for (const j of ['broadcast', 'tetraminator', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent', 'care', 'pulse', 'servers']) await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (${'cron:' + j}, ${String(now)}, 0)`)
   await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('cron:paychi', '0', 0), ('cron:lock', '0', 0)`)
   await msgU(7004, '/start')
   check('cron: an open order Paychi reports paid is credited without any webhook', (await status('rec1')) === 'paid' && (await bal('7004')) === 60000, `${await status('rec1')} ${await bal('7004')}`)

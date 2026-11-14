@@ -193,7 +193,7 @@ try {
   await order('rec1', '7004', '60000', 'payRC1', 'Unpaid', 'tetraminator', 120); await ctl('pay_id=payRC1&status=paid&amount=60000')
   await db.run(sql`UPDATE user SET roll_Status = 1, joinchannel = 'active', User_Status = 'Active', step = 'home', Balance = '0' WHERE id = '7004'`)
   await db.run(sql`DELETE FROM kv WHERE key = 'cron:off'`)
-  for (const j of ['broadcast', 'paychi', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent', 'care', 'pulse']) await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (${'cron:' + j}, ${String(now)}, 0)`)
+  for (const j of ['broadcast', 'paychi', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent', 'care', 'pulse', 'servers']) await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (${'cron:' + j}, ${String(now)}, 0)`)
   await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('cron:tetraminator', '0', 0), ('cron:lock', '0', 0)`)
   await msgU(7004, '/start')
   check('cron: an open order the gateway reports paid is credited without any callback', (await status('rec1')) === 'paid' && (await bal('7004')) === 60000, `${await status('rec1')} ${await bal('7004')}`)

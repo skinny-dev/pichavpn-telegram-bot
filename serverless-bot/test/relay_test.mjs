@@ -41,6 +41,10 @@ try {
   check('pull without the key is refused', (await fetch('http://127.0.0.1:8140/pull')).status === 401)
   check('variza_create without the key is refused', (await post('/variza_create', '{}')).status === 401)
 
+  const probe = (body, key = KEY) => post('/probe', JSON.stringify(body), key ? { 'X-Relay-Key': key } : {})
+  check('/probe without the key is refused', (await probe({ country: 'FI', results: { claude: 'ok' } }, '')).status === 401)
+  check('/probe with a bad country is refused', (await probe({ country: 'Finland', results: {} })).status === 400)
+  check('/probe from an exit server is queued', (await probe({ country: 'FI', node: 'fi-1', results: { claude: 'ok', youtube: 'blocked', evil: 'x<script>' } })).status === 200)
   const vc = (api_url) => post('/variza_create', JSON.stringify({ token: 't', payload: { amount: 1000 }, api_url }), { 'X-Relay-Key': KEY })
   for (const bad of ['http://paychi.example.com/api', 'https://user:pw@paychi.example.com/api', 'https://paychi.example.com:8000/api', 'https://paychi.example.com/api?x=1', 'javascript:alert(1)', 'https://127.0.0.1 evil/api'])
     check('variza_create refuses an unsafe api_url: ' + bad, (await vc(bad)).status === 400)
