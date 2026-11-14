@@ -13,8 +13,8 @@ const { careRun, careStats } = await import('../tgcloud/lib/care.js')
 const c = await systemContext()
 const TEST = c.T.common.labels.testServiceName
 const DAY = 86400
-// a Tehran noon today (inside the 09–22 window) and a Tehran 23:30
-const base = Math.floor((Math.floor(Date.now() / 1000) + 12600) / DAY) * DAY - 12600
+// a Saturday noon (inside the working window) and the same day 23:30
+const base = Date.UTC(2026, 10, 14, 0, 0, 0) / 1000 - 12600 // Saturday 14 Nov 2026 00:00 Tehran (a fixed working day)
 const NOON = base + 12 * 3600, LATE = base + 23.5 * 3600
 const kvGet = async (k) => (await db.get(sql`SELECT value FROM kv WHERE key = ${k}`))?.value ?? null
 const kvSet = (k, v) => db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (${k}, ${v}, 0)`)
@@ -34,6 +34,14 @@ await kvSet('care:on:C6', '1')
 // quiet hours
 r = await careRun(c, { at: LATE })
 check('quiet hours (after 22:00 Tehran): nothing is sent and nothing is recorded', r.sent === 0 && r.reason === 'quiet' && (await kvGet('care:C6:7101:' + a1)) === null)
+
+// the working week: Friday and a holiday are closed, Thursday afternoon is closed, Thursday morning is open
+const FRI = base - DAY + 12 * 3600, THU_PM = base - 2 * DAY + 16 * 3600, THU_AM = base - 2 * DAY + 11 * 3600, NOWRUZ = Date.UTC(2027, 2, 21, 8, 30) / 1000
+for (const [name, at, why] of [['Friday', FRI, 'closed_day'], ['Thursday after 14:00', THU_PM, 'outside_hours'], ['Nowruz', NOWRUZ, 'holiday']]) {
+  r = await careRun(c, { at })
+  check(`schedule: ${name} sends nothing (${why})`, r.sent === 0 && r.why === why, JSON.stringify(r))
+}
+check('schedule: nothing was recorded by the closed windows', (await kvGet('care:C6:7101:' + a1)) === null)
 
 // rules: bought / ticket / too young / non-test are skipped; a plain test account is asked
 const bought = await invoice(7102, 30)

@@ -8,9 +8,9 @@
 import { one, all, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage, Editmessagetext, answerCallback } from './tg.js'
 import { J, intval } from './php.js'
+import { loadSchedule, careTime } from './schedule.js'
 
 const DAY = 86400
-const tehranHour = (t) => Math.floor(((t + 12600) % DAY) / 3600)
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const parse = (s) => { try { return JSON.parse(s) } catch { return null } }
 export const careOn = async (id) => (await kvGet('care:on:' + id)) === '1'
@@ -23,11 +23,11 @@ const C6_KB = (inv) => J({ inline_keyboard: [
   [{ text: '🔕 دیگر پیام نده', callback_data: 'care6_stop_' + inv }],
 ] })
 
-/** one run (lazy cron, every ~10 min): at most BATCH messages, only 09:00–22:00 Tehran, never twice for the same case */
+/** one run (lazy cron, every ~10 min): at most BATCH messages, only inside the working-week windows (schedule.js), never twice for the same case */
 export async function careRun(c, { at = Math.floor(Date.now() / 1000), BATCH = 4 } = {}) {
   if (!(await careOn('C6'))) return { sent: 0, reason: 'off' }
-  const h = tehranHour(at)
-  if (h < 9 || h >= 22) return { sent: 0, reason: 'quiet' }
+  const slot = careTime(at, await loadSchedule())
+  if (!slot.ok) return { sent: 0, reason: 'quiet', why: slot.why }
   const T = c.T
   const dayKey = 'care:day:' + Math.floor((at + 12600) / DAY)
   const maxDay = intval(await kvGet('care:max_day')) || 60
