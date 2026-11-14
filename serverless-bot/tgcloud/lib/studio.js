@@ -114,7 +114,12 @@ export const occasionsBetween = (fromIso, toIso) => OCCASIONS.filter((o) => o.da
 export const postsGet = async () => parse(await kvGet('studio:posts'), [])
 export const postsSet = (list) => kvSet('studio:posts', JSON.stringify(list))
 export const libGet = async () => parse(await kvGet('studio:lib'), {})
-export const settingsGet = async () => ({ live: (await kvGet('studio:live')) === '1', channel: String((await kvGet('studio:channel')) ?? ''), bot: String((await kvGet('config:usernamebot')) ?? '').replace(/^@+/, '') })
+export const MODES = ['sim', 'test', 'live'] // sim: only the administrators · test: the TEST channel · live: the real channel
+export async function settingsGet() {
+  let mode = String((await kvGet('studio:mode')) ?? '')
+  if (!MODES.includes(mode)) mode = (await kvGet('studio:live')) === '1' ? 'live' : 'sim' // the first version had a live switch
+  return { mode, live: mode === 'live', channel: String((await kvGet('studio:channel')) ?? ''), testChannel: String((await kvGet('studio:test_channel')) ?? ''), bot: String((await kvGet('config:usernamebot')) ?? '').replace(/^@+/, '') }
+}
 
 export function normalize(p, old = {}) {
   const cta = (Array.isArray(p.cta) ? p.cta : []).map((b) => ({ key: String(b.key), ...(b.url ? { url: String(b.url) } : {}), ...(b.label ? { label: String(b.label).slice(0, 40) } : {}), ...(b.code ? { code: String(b.code).slice(0, 40) } : {}) }))
@@ -123,7 +128,7 @@ export function normalize(p, old = {}) {
     title: String(p.title ?? old.title ?? '').slice(0, 80), kind: KINDS[p.kind] ? p.kind : old.kind || 'tip', occasion: String(p.occasion ?? old.occasion ?? ''),
     text: String(p.text ?? old.text ?? ''), image: String(p.image ?? old.image ?? ''), cta,
     audience: p.audience === 'admins' ? 'admins' : 'channel', when: parseInt(p.when ?? old.when) || 0,
-    status: ['draft', 'scheduled', 'sent', 'simulated', 'cancelled'].includes(p.status) ? p.status : old.status || 'draft',
+    status: ['draft', 'scheduled', 'sent', 'tested', 'simulated', 'cancelled'].includes(p.status) ? p.status : old.status || 'draft',
     auto: !!(p.auto ?? old.auto), note: String(p.note ?? old.note ?? '').slice(0, 200), offerEnds: parseInt(p.offerEnds ?? old.offerEnds) || 0, created: old.created || now(),
   }
 }
@@ -173,10 +178,11 @@ export async function studioTick() {
   if (!due) return { sent: 0 }
   const s = await settingsGet()
   if (lint(due).errors.length) { due.status = 'draft'; due.note = 'بازگشت به پیش‌نویس: ' + lint(due).errors[0]; await postsSet(list); return { sent: 0 } }
-  if (s.live && due.audience === 'channel' && s.channel) {
-    const r = await deliver(due, [s.channel], { preview: false })
-    due.status = r.sent.every((x) => x.ok) ? 'sent' : 'draft'
-    if (due.status === 'draft') due.note = 'ارسال به کانال ناموفق بود؛ ربات ادمین کانال است؟'
+  const target = due.audience !== 'channel' ? '' : s.mode === 'live' ? s.channel : s.mode === 'test' ? s.testChannel : ''
+  if (target) {
+    const r = await deliver(due, [target], { preview: false })
+    due.status = r.sent.every((x) => x.ok) ? (s.mode === 'live' ? 'sent' : 'tested') : 'draft'
+    if (due.status === 'draft') due.note = 'ارسال به کانال ناموفق بود؛ ربات ادمین کانال است و اجازهٔ ارسال دارد؟'
   } else {
     await deliver(due, await adminIds(), { preview: true })
     due.status = 'simulated'

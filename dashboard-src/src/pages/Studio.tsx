@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -19,18 +18,20 @@ interface Lint { errors: string[]; warnings: string[] }
 interface Post { id: string; title: string; kind: string; occasion: string; text: string; image: string; cta: Cta[]; audience: 'channel' | 'admins'; when: number; status: string; auto: boolean; note: string; offerEnds: number; lint: Lint; day: string }
 interface Occ { id: string; date: string; jy: number; jm: number; jd: number; kind: string; title: string; note: string }
 interface CtaDef { label: string; group: string; ready: boolean; copy?: boolean; custom?: boolean }
-interface State { now: number; settings: { live: boolean; channel: string; bot: string }; lib: string[]; occasions: Occ[]; kinds: Record<string, string>; cta: Record<string, CtaDef>; defaultCta: Record<string, string[]>; posts: Post[] }
+interface State { now: number; settings: { mode: 'sim' | 'test' | 'live'; live: boolean; channel: string; testChannel: string; bot: string }; lib: string[]; occasions: Occ[]; kinds: Record<string, string>; cta: Record<string, CtaDef>; defaultCta: Record<string, string[]>; posts: Post[] }
 
 const MONTH = ['', 'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
 const fa = (s: string | number) => String(s).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d])
 const STATUS: Record<string, { label: string; tone: 'default' | 'secondary' | 'success' | 'destructive' | 'warning' }> = {
   draft: { label: 'پیش‌نویس', tone: 'secondary' }, scheduled: { label: 'زمان‌بندی‌شده', tone: 'warning' }, simulated: { label: 'شبیه‌سازی شد', tone: 'default' },
-  sent: { label: 'ارسال شد', tone: 'success' }, cancelled: { label: 'لغو', tone: 'destructive' },
+  sent: { label: 'ارسال شد', tone: 'success' }, tested: { label: 'در کانال تست', tone: 'default' }, cancelled: { label: 'لغو', tone: 'destructive' },
 }
 const OFFSET = 12600 // Tehran, no daylight saving
 const toLocal = (t: number) => { const d = new Date((t + OFFSET) * 1000); return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) } }
 const fromLocal = (date: string, time: string) => (date ? Math.floor(Date.parse(`${date}T${time || '10:00'}:00Z`) / 1000) - OFFSET : 0)
 const jalaliOf = (t: number) => new Intl.DateTimeFormat('fa-IR-u-ca-persian', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(new Date(t * 1000))
+const MODE: Record<string, string> = { sim: 'شبیه‌سازی', test: 'تست (کانال تست)', live: 'زنده' }
+const MODE_HELP: Record<string, string> = { sim: 'هیچ‌چیز به کانال نمی‌رود؛ پست‌ها فقط برای ادمین‌ها فرستاده می‌شود.', test: 'پست‌های تأییدشده فقط به کانال تست می‌روند.', live: 'پست‌های تأییدشده به کانال اصلی می‌روند.' }
 const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : 'ناموفق بود')
 
 /** the Telegram HTML subset only: everything else is escaped */
@@ -141,7 +142,7 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
           <Button onClick={() => save.mutate('scheduled')} disabled={save.isPending}><Check className="size-4" /> تأیید و زمان‌بندی</Button>
           {p.id && <Button variant="ghost" onClick={() => confirm('این پست حذف شود؟') && del.mutate()}><Trash2 className="size-4" /></Button>}
         </div>
-        <div className="text-xs text-muted-foreground">{st.settings.live ? '⚠️ حالت زنده: پست‌های تأییدشده به کانال می‌روند.' : '🧪 حالت شبیه‌سازی: هیچ‌چیز به کانال یا مشتری نمی‌رود؛ فقط برای ادمین‌ها فرستاده می‌شود.'}</div>
+        <div className="text-xs text-muted-foreground">{st.settings.mode === 'live' ? '⚠️ حالت زنده: ' : st.settings.mode === 'test' ? '🧪 حالت تست: ' : '🧪 حالت شبیه‌سازی: '}{MODE_HELP[st.settings.mode]}</div>
       </div>
     </div>
   )
@@ -200,21 +201,26 @@ function Queue({ st, onOpen }: { st: State; onOpen: (p: Post) => void }) {
 function Settings({ st }: { st: State }) {
   const qc = useQueryClient()
   const [channel, setChannel] = useState(st.settings.channel)
+  const [testChannel, setTestChannel] = useState(st.settings.testChannel)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
   const after = () => qc.invalidateQueries({ queryKey: ['studio'] })
-  const live = useMutation({ mutationFn: (v: boolean) => api('studio_settings', { body: { live: v } }), onSuccess: after, onError: err })
-  const ch = useMutation({ mutationFn: () => api('studio_settings', { body: { channel } }), onSuccess: () => { toast.success('ذخیره شد'); after() }, onError: err })
+  const mode = useMutation({ mutationFn: (m: string) => api('studio_settings', { body: { mode: m } }), onSuccess: after, onError: err })
+  const ch = useMutation({ mutationFn: () => api('studio_settings', { body: { channel, testChannel } }), onSuccess: () => { toast.success('ذخیره شد'); after() }, onError: err })
   const libSet = useMutation({ mutationFn: () => api('studio_lib_set', { body: { name, value } }), onSuccess: () => { setName(''); setValue(''); after() }, onError: err })
   const libDel = useMutation({ mutationFn: (n: string) => api('studio_lib_delete', { body: { name: n } }), onSuccess: after, onError: err })
   return (
     <div className="space-y-4">
-      <Card><CardHeader><CardTitle className="text-base">ارسال زنده</CardTitle></CardHeader><CardContent className="space-y-2 text-sm">
-        <div className="flex items-center gap-3"><Switch checked={st.settings.live} onCheckedChange={(v) => (!v || confirm('پست‌های تأییدشده به کانال می‌روند. ادامه؟')) && live.mutate(v)} data-testid="live" />
-          <span>{st.settings.live ? 'زنده: پست‌های تأییدشده به کانال می‌روند' : 'شبیه‌سازی: هیچ‌چیز به کانال یا مشتری نمی‌رود'}</span></div>
-        <div className="text-xs text-muted-foreground">در شبیه‌سازی هر پست زمان‌بندی‌شده فقط برای ادمین‌ها فرستاده می‌شود (با برچسب شبیه‌سازی).</div>
-        <div><Label>کانال (@name یا شناسهٔ عددی)</Label><div className="flex gap-2"><Input dir="ltr" value={channel} onChange={(e) => setChannel(e.target.value)} /><Button onClick={() => ch.mutate()}>ذخیره</Button></div>
-          <div className="mt-1 text-xs text-muted-foreground">ربات باید ادمین کانال باشد.</div></div>
+      <Card><CardHeader><CardTitle className="text-base">حالت ارسال</CardTitle></CardHeader><CardContent className="space-y-3 text-sm">
+        <Select value={st.settings.mode} onValueChange={(m) => (m !== 'live' || confirm('پست‌های تأییدشده به کانال اصلی می‌روند. ادامه؟')) && mode.mutate(m)}>
+          <SelectTrigger data-testid="mode"><SelectValue /></SelectTrigger>
+          <SelectContent>{Object.entries(MODE).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+        </Select>
+        <div className="text-xs text-muted-foreground">{MODE_HELP[st.settings.mode]}</div>
+        <div><Label>کانال تست (@name یا شناسهٔ عددی)</Label><Input dir="ltr" value={testChannel} onChange={(e) => setTestChannel(e.target.value)} /></div>
+        <div><Label>کانال اصلی</Label><Input dir="ltr" value={channel} onChange={(e) => setChannel(e.target.value)} /></div>
+        <Button onClick={() => ch.mutate()}>ذخیره کانال‌ها</Button>
+        <div className="text-xs text-muted-foreground">ربات باید در هر دو کانال ادمین باشد و اجازهٔ ارسال پیام داشته باشد.</div>
       </CardContent></Card>
       <Card><CardHeader><CardTitle className="text-base">کتابخانهٔ تصویر</CardTitle></CardHeader><CardContent className="space-y-2 text-sm">
         <div className="text-xs text-muted-foreground">نام لاتین + file_id تلگرام (تصویر را برای ربات بفرستید) یا لینک https.</div>
@@ -236,7 +242,7 @@ export default function Studio() {
   return (
     <div className="space-y-3" dir="rtl">
       <div className="flex items-center justify-between"><h1 className="text-lg font-bold">استودیو محتوا</h1>
-        <Badge variant={data.settings.live ? 'warning' : 'default'}>{data.settings.live ? 'زنده' : 'شبیه‌سازی'}</Badge></div>
+        <Badge variant={data.settings.mode === 'live' ? 'warning' : 'default'}>{MODE[data.settings.mode]}</Badge></div>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList><TabsTrigger value="calendar">تقویم</TabsTrigger><TabsTrigger value="post">پست</TabsTrigger><TabsTrigger value="queue">صف</TabsTrigger><TabsTrigger value="settings">تنظیمات</TabsTrigger></TabsList>
         <TabsContent value="calendar"><Calendar st={data} onOpen={open} onSeed={() => seed.mutate()} seeding={seed.isPending} /></TabsContent>

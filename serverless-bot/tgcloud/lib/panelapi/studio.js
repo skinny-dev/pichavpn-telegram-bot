@@ -1,7 +1,7 @@
 // Studio routes of the Mini App (studio_*): calendar, posts, test sends, settings. See lib/studio.js and docs/STUDIO.md.
 import { kvSet } from '../db.js'
 import { fail, str } from './util.js'
-import { KINDS, CTA, DEFAULT_CTA, lint, normalize, postsGet, postsSet, libGet, settingsGet, occasionsBetween, seedDrafts, sendTest, tehranParts } from '../studio.js'
+import { MODES, KINDS, CTA, DEFAULT_CTA, lint, normalize, postsGet, postsSet, libGet, settingsGet, occasionsBetween, seedDrafts, sendTest, tehranParts } from '../studio.js'
 
 const iso = (t) => new Date(t * 1000).toISOString().slice(0, 10)
 const day = 86400
@@ -52,8 +52,16 @@ export async function route(name, q, body, admin) {
     }
     case 'studio_seed': { const n = await seedDrafts(str(body.from) || iso(Date.now() / 1000), str(body.to) || iso(Date.now() / 1000 + 120 * day)); return { ok: true, created: n } }
     case 'studio_settings': {
-      if ('live' in body) await kvSet('studio:live', body.live ? '1' : '0')
-      if ('channel' in body) { const c = str(body.channel).trim(); if (c && !/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,})$/.test(c)) fail('نام کانال (@name) یا شناسهٔ عددی (‎-100…) نامعتبر است', 400); await kvSet('studio:channel', c) }
+      const chan = (v) => { const c = str(v).trim(); if (c && !/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,})$/.test(c)) fail('نام کانال (@name) یا شناسهٔ عددی (‎-100…) نامعتبر است', 400); return c }
+      const cur = await settingsGet()
+      const channel = 'channel' in body ? chan(body.channel) : cur.channel, testChannel = 'testChannel' in body ? chan(body.testChannel) : cur.testChannel
+      if (channel && channel === testChannel) fail('کانال تست باید غیر از کانال اصلی باشد', 409)
+      let mode = cur.mode
+      if ('mode' in body) mode = MODES.includes(body.mode) ? body.mode : fail('حالت نامعتبر', 400)
+      else if ('live' in body) mode = body.live ? 'live' : 'sim'
+      if (mode === 'live' && !channel) fail('اول کانال اصلی را ثبت کنید', 409)
+      if (mode === 'test' && !testChannel) fail('اول کانال تست را ثبت کنید', 409)
+      await kvSet('studio:channel', channel); await kvSet('studio:test_channel', testChannel); await kvSet('studio:mode', mode)
       return { ok: true, settings: await settingsGet() }
     }
     case 'studio_lib_set': { const n = str(body.name).trim(), v = str(body.value).trim(); if (!/^[A-Za-z0-9_-]{1,40}$/.test(n) || !v) fail('نام (لاتین) و مقدار (file_id یا لینک https) لازم است', 400); const lib = await libGet(); lib[n] = v; await kvSet('studio:lib', JSON.stringify(lib)); return { ok: true } }

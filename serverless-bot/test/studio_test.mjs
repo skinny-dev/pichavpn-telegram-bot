@@ -78,12 +78,22 @@ check('a test send goes to the composing administrator', test.sent.length === 1 
 
 // 7) going live is a separate, explicit switch and needs a channel
 check('the channel name is validated', (await call('studio_settings', { channel: 'not a channel' })).status === 400)
-await call('studio_settings', { live: true, channel: '@pichanet_chan' })
+await call('studio_settings', { channel: '' })
+check('live without a channel is refused', (await call('studio_settings', { mode: 'live' })).status === 409)
+check('test without a test channel is refused', (await call('studio_settings', { mode: 'test' })).status === 409)
+check('the test channel must differ from the real one', (await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_chan' })).status === 409)
+// TEST mode: the test channel gets it, the real channel does not
+await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_test', mode: 'test' })
+await call('studio_save', { id: 'tst1', title: 'تست', kind: 'tip', text: 'درود. نکته.', cta: [{ key: 'test' }], audience: 'channel', when: Math.floor(Date.now() / 1000) - 5, status: 'scheduled' })
+calls.length = 0
+const t3 = await S.studioTick()
+check('test mode posts to the test channel only', t3.mode === 'tested' && JSON.stringify(calls).includes('@pichanet_test') && !JSON.stringify(calls).includes('@pichanet_chan'), JSON.stringify(t3))
+await call('studio_settings', { mode: 'live' })
 await call('studio_save', { id: 'live1', title: 'زنده', kind: 'tip', text: 'درود. نکته.', cta: [{ key: 'test' }], audience: 'channel', when: Math.floor(Date.now() / 1000) - 5, status: 'scheduled' })
 calls.length = 0
 const t2 = await S.studioTick()
 check('only when live is on does a post go to the channel', t2.mode === 'sent' && JSON.stringify(calls).includes('@pichanet_chan') && !/شبیه‌سازی/.test(JSON.stringify(calls)), JSON.stringify(t2))
-await call('studio_settings', { live: false })
+await call('studio_settings', { mode: 'sim' })
 
 // 8) import from a Claude session: always drafts
 const imp = (await call('studio_import', { posts: [{ id: 'imp1', title: 'خبر', kind: 'news', text: 'درود. خبر.', cta: [{ key: 'test' }], status: 'scheduled' }] })).body

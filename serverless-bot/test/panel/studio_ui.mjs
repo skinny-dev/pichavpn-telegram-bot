@@ -73,7 +73,7 @@ await page.getByRole('button', { name: /آزمایشی برای خودم/ }).cli
 check('the test send reached only the composing administrator', botCalls.length === 1 && String(botCalls[0][1].chat_id) === TG && /شبیه‌سازی/.test(JSON.stringify(botCalls[0][1])), JSON.stringify(botCalls.map((c) => c[1].chat_id)))
 await page.getByRole('button', { name: 'ذخیره پیش‌نویس' }).click(); await page.waitForTimeout(700)
 await page.getByRole('tab', { name: 'تنظیمات' }).click(); await page.waitForTimeout(300)
-check('settings show the simulation switch off', (await page.getByTestId('live').getAttribute('data-state')) === 'unchecked')
+check('settings show the mode (simulation by default) and the test channel field', (await page.getByTestId('mode').innerText()).includes('شبیه‌سازی') && (await page.innerText('body')).includes('کانال تست'))
 if (shots) await page.screenshot({ path: path.join(shots, 'studio_settings.png'), fullPage: true })
 const ov = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 check('no horizontal overflow', ov <= 0, String(ov))
