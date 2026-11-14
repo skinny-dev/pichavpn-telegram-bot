@@ -8,6 +8,7 @@ import { telegram, sendmessage, Editmessagetext, answerCallback } from './tg.js'
 import { J, intval } from './php.js'
 import { tehranParts, loadSchedule, isOffDay } from './schedule.js'
 import { memAllow, memSent, memClick, memTired, memStats } from './memory.js'
+import { esc, quote, richOrPlain } from './tgfmt.js'
 
 const DAY = 86400
 const parse = (s) => { try { return JSON.parse(s) } catch { return null } }
@@ -43,6 +44,12 @@ export const PULSE_LIBRARY = [
 ]
 const byId = Object.fromEntries(PULSE_LIBRARY.map((i) => [i.id, i]))
 
+/** DM text in HTML: the greeting stays a line, a lesson (tip) sits in a quote block so it reads as «the tip»; falls back to plain text if Telegram refuses the markup */
+const render = (item) => {
+  const lines = String(item.text).split('\n')
+  if (item.kind !== 'tip' || lines.length < 2) return esc(item.text)
+  return esc(lines[0]) + '\n' + quote(lines.slice(1).join('\n'))
+}
 const kb = (item, uid) => {
   const rows = [item.btns.filter((a) => ACTIONS[a]).map((a) => ({ text: ACTIONS[a][0], callback_data: `pu_${a}_${item.id}` }))]
   rows.push([{ text: '🔔 تعداد پیام', callback_data: 'pu_freq_menu' }])
@@ -140,11 +147,11 @@ export async function pulseTick(c, { at = Math.floor(Date.now() / 1000), BATCH =
     const item = await chooseItem(slot, u, today, at)
     if (!item) { await kvSet(`pulse:s:${day}:${slot}:${u.id}`, 's'); continue }
     let res
-    try { res = await telegram('sendmessage', { chat_id: u.id, text: item.text, parse_mode: 'HTML', disable_notification: true, reply_markup: kb(item, u.id) }) } catch { res = { ok: false } }
+    try { res = await richOrPlain((p) => telegram('sendmessage', p), { chat_id: u.id, text: render(item), disable_notification: true, reply_markup: kb(item, u.id) }) } catch { res = { ok: false } }
     await kvSet(`pulse:s:${day}:${slot}:${u.id}`, 's')
     if (res && res.ok === false) {
-      blocked++
-      if (Number(res.error_code) === 403) await kvSet('pulse:freq:' + u.id, 'off') // blocked the bot: never again
+      if (Number(res.error_code) === 403) { blocked++; await kvSet('pulse:freq:' + u.id, 'off') } // blocked the bot: never again (only this counts as a block)
+      else await kvSet(`pulse:n:${day}:failed`, String(intval(await kvGet(`pulse:n:${day}:failed`)) + 1)) // any other error is not the customer's doing
       continue
     }
     sent++
@@ -223,5 +230,5 @@ export async function pulseStats(at = Math.floor(Date.now() / 1000)) {
 export async function pulseTest(c, slot) {
   const items = PULSE_LIBRARY.filter((i) => i.slot === slot)
   const item = items[(dayKey(Math.floor(Date.now() / 1000))) % items.length]
-  await telegram('sendmessage', { chat_id: c.from_id, text: item.text, parse_mode: 'HTML', disable_notification: true, reply_markup: kb(item, c.from_id) })
+  await richOrPlain((p) => telegram('sendmessage', p), { chat_id: c.from_id, text: render(item), disable_notification: true, reply_markup: kb(item, c.from_id) })
 }
