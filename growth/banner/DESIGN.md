@@ -26,3 +26,19 @@
 - عنوان ۲ تا ۵ کلمه.
 - فونت: **یکان‌بخ** به‌محض اینکه فایل‌هایش در `../brand/fonts/` (نام شامل `yekan` و وزن مثل `Bold`) بیاید خودکار؛ تا آن موقع Vazirmatn. برچسب‌های لاتین: JetBrains Mono.
 - لوگو: `../brand/picha-logo.png` (شفاف) داخل قاب کوچک بالا-راست.
+
+## صحنه‌های گربه‌ای (کدی، اورجینال)
+`scene: "cat"` (سر گربه با چشم‌های نئونی و سبیل با گره‌های مداری) · `paw` (جای پنجه) · `catphone` (گوشی با گوش گربه) · `catmoon` (هلال ماه با گربه). برای روزهای گربه، آموزش، جمعهٔ گربهٔ سیاه و پست‌های برند. نمونه‌ها: `cats/` و مشخصات در `/tmp`… (بسازید از `samples.json` الگو بگیرید).
+
+## عکس شاخص دلخواه (هوش مصنوعی یا استوک)
+فیلد `art: "نام-فایل.png"` تصویر را از `growth/brand/assets/` می‌خواند و **داخل شش‌ضلعی به‌صورت دو‌رنگ (duotone) با رنگ تأکید** می‌گذارد؛ پس هر عکسی با HUD هماهنگ می‌شود. پوشهٔ `assets/` **در گیت نیست** (فایل استوک را در ریپوی عمومی پخش نمی‌کنیم؛ فقط بنر نهایی).
+- **Magnific/Freepik:** بدون حساب و مجوز نمی‌شود دانلود کرد؛ مجوز رایگان معمولاً **ذکر نام** می‌خواهد و مجوز پولی بدون ذکر. شما دانلود کنید، فایل را در `assets/` بگذارید و مجوز هر فایل را نگه دارید.
+- **ChatGPT (رایگان):** تصویر تولید کنید، با **پس‌زمینهٔ مشکی** و بدون متن؛ متن فارسی را خود ما روی بنر می‌گذاریم (مدل‌های تصویری فارسی را خراب می‌نویسند). مجوز استفادهٔ تجاری را در شرایط فعلی OpenAI چک کنید.
+قالب دستور (انگلیسی بهتر جواب می‌دهد، همیشه یکی باشد تا سبک ثابت بماند):
+```
+Minimal neon line-art illustration of {subject}, centered, thin glowing outlines,
+solid pure black background, no text, no letters, no watermark, flat vector look,
+futuristic HUD / cyber style, square 1:1, 1024x1024
+```
+`{subject}` نمونه: `a black cat head with glowing eyes` · `a cat sitting on a crescent moon` · `a cat paw print made of circuit lines` · `a cat holding a shield` · `a cat and a smartphone`.
+بعد در مشخصات بنر: `{ "art": "cat-moon.png", "theme": "violet", ... }`.

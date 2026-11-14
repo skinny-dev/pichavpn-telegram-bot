@@ -40,12 +40,51 @@ const yekan = () => {
   return fs.readdirSync(dir).filter((f) => /yekan/i.test(f) && /\.(woff2?|ttf|otf)$/i.test(f)).map((f) => ({ f, w: (WEIGHTS.find(([re]) => re.test(f)) || [0, 400])[1], fmt: /woff2$/i.test(f) ? 'woff2' : /woff$/i.test(f) ? 'woff' : /otf$/i.test(f) ? 'opentype' : 'truetype' }))
 }
 export const hasYekan = () => yekan().length > 0
+// a hero picture supplied by the owner (e.g. a licensed vector): growth/brand/assets/<file>  (git-ignored: stock files must not be redistributed in a public repo).
+// Drawn inside the hexagon as a duotone in the accent colour, so any image reads as part of the HUD.
+const assetUri = (file) => {
+  const f = path.join(here, '../brand/assets', path.basename(String(file)))
+  if (!fs.existsSync(f)) return ''
+  const ext = path.extname(f).toLowerCase().slice(1)
+  const mime = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[ext]
+  return mime ? `data:${mime};base64,${fs.readFileSync(f).toString('base64')}` : ''
+}
+const rgb01 = (h) => [1, 3, 5].map((i) => (parseInt(h.slice(i, i + 2), 16) / 255).toFixed(3))
 const hash = (s) => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
 
 
 // ---- content-matched illustrations (drawn in the accent colour; each sits inside the hexagon, around (cx, cy))
 const SC = {
-  phone: (th, s, cx, cy) => `
+  // ---- the brand's own animal (Pichā = cat): original HUD drawings, no stock art
+  cat: (th, s, cx, cy) => {
+    const eye = (sx) => `<path d="M${sx * 58} -8Q${sx * 38} -28 ${sx * 18} -8Q${sx * 38} 10 ${sx * 58} -8Z" fill="${th.c}" fill-opacity=".28" stroke="${th.c}" stroke-width="3"/><ellipse cx="${sx * 38}" cy="-9" rx="4.5" ry="12" fill="${th.c}"/>`
+    const whisk = (sx) => `<path d="M${sx * 52} 30L${sx * 138} 12M${sx * 54} 42L${sx * 142} 44M${sx * 50} 54L${sx * 130} 76" stroke="${th.c}" stroke-opacity=".75" stroke-width="2.5" stroke-linecap="round"/><circle cx="${sx * 138}" cy="12" r="3.5" fill="${th.c}"/><circle cx="${sx * 142}" cy="44" r="3.5" fill="${th.c}"/><circle cx="${sx * 130}" cy="76" r="3.5" fill="${th.c}"/>`
+    return `<g transform="translate(${cx} ${cy + 6})" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M-88 -108L-42 -62Q0 -76 42 -62L88 -108L98 -22Q102 42 58 80Q0 116 -58 80Q-102 42 -98 -22Z" fill="${th.p}" stroke="${th.c}" stroke-width="4"/>
+    <path d="M-76 -86L-47 -62L-80 -52ZM76 -86L47 -62L80 -52Z" fill="${th.c}" fill-opacity=".3" stroke="${th.c}" stroke-opacity=".7" stroke-width="2"/>
+    <path d="M-14 -54v10M0 -56v14M14 -54v10" stroke="${th.c}" stroke-opacity=".6" stroke-width="3"/>
+    ${eye(-1)}${eye(1)}
+    <path d="M-9 22H9L0 33Z" fill="${th.c}" stroke="${th.c}" stroke-width="2"/>
+    <path d="M0 33V44M0 44Q-12 56 -26 46M0 44Q12 56 26 46" fill="none" stroke="${th.c}" stroke-width="3"/>
+    ${whisk(-1)}${whisk(1)}
+    <path d="M-70 30h12l8 8h10M70 30h-12l-8 8h-10" fill="none" stroke="${th.c}" stroke-opacity=".5" stroke-width="2"/>
+    </g>`
+  },
+  paw: (th, s, cx, cy) => `<g transform="translate(${cx} ${cy + 18})" stroke-linejoin="round">
+    <path d="M-36 34Q-56 8 -28 -4Q0 -16 28 -4Q56 8 36 34Q22 54 0 46Q-22 54 -36 34Z" fill="${th.p}" stroke="${th.c}" stroke-width="4"/>
+    <ellipse cx="-64" cy="-26" rx="15" ry="22" transform="rotate(-24 -64 -26)" fill="${th.p}" stroke="${th.c}" stroke-width="4"/>
+    <ellipse cx="-24" cy="-62" rx="15" ry="24" transform="rotate(-8 -24 -62)" fill="${th.p}" stroke="${th.c}" stroke-width="4"/>
+    <ellipse cx="24" cy="-62" rx="15" ry="24" transform="rotate(8 24 -62)" fill="${th.p}" stroke="${th.c}" stroke-width="4"/>
+    <ellipse cx="64" cy="-26" rx="15" ry="22" transform="rotate(24 64 -26)" fill="${th.p}" stroke="${th.c}" stroke-width="4"/>
+    <path d="M-16 24Q0 12 16 24" fill="none" stroke="${th.c}" stroke-opacity=".6" stroke-width="3" stroke-linecap="round"/></g>`,
+  catphone: (th, s, cx, cy) => SC.phone(th, s, cx, cy + 8) + `<g stroke="${th.c}" stroke-linejoin="round">
+    <path d="M${cx - 62} ${cy - 108}L${cx - 40} ${cy - 150}L${cx - 14} ${cy - 112}Z" fill="${th.p}" stroke-width="3.5"/><path d="M${cx + 62} ${cy - 108}L${cx + 40} ${cy - 150}L${cx + 14} ${cy - 112}Z" fill="${th.p}" stroke-width="3.5"/>
+    <path d="M${cx - 52} ${cy - 118}L${cx - 40} ${cy - 138}L${cx - 26} ${cy - 119}ZM${cx + 52} ${cy - 118}L${cx + 40} ${cy - 138}L${cx + 26} ${cy - 119}Z" fill="${th.c}" fill-opacity=".35" stroke="none"/></g>`,
+  catmoon: (th, s, cx, cy) => `<g>
+    <defs><mask id="moonmask"><rect x="${cx - 160}" y="${cy - 160}" width="320" height="320" fill="#fff"/><circle cx="${cx + 52}" cy="${cy - 30}" r="84" fill="#000"/></mask></defs>
+    <circle cx="${cx - 6}" cy="${cy + 20}" r="104" fill="${th.c}" fill-opacity=".2" stroke="${th.c}" stroke-width="4" mask="url(#moonmask)"/>
+    <g transform="translate(${cx - 40} ${cy - 74})" stroke-linejoin="round"><path d="M-40 6L-26 -34L-8 -8Q0 -10 8 -8L26 -34L40 6Q44 34 0 40Q-44 34 -40 6Z" fill="${th.p}" stroke="${th.c}" stroke-width="3.5"/><ellipse cx="-16" cy="6" rx="6" ry="10" fill="${th.c}"/><ellipse cx="16" cy="6" rx="6" ry="10" fill="${th.c}"/></g>
+    <circle cx="${cx + 70}" cy="${cy + 40}" r="5" fill="${th.c}"/><circle cx="${cx + 96}" cy="${cy - 10}" r="3.5" fill="${th.c}" fill-opacity=".7"/><circle cx="${cx + 54}" cy="${cy - 20}" r="2.5" fill="${th.c}" fill-opacity=".6"/></g>`,  phone: (th, s, cx, cy) => `
     <rect x="${cx - 66}" y="${cy - 118}" width="132" height="236" rx="24" fill="${th.p}" stroke="${th.c}" stroke-width="3.5"/>
     <rect x="${cx - 22}" y="${cy - 106}" width="44" height="7" rx="3.5" fill="${th.c}" fill-opacity=".5"/>
     <circle cx="${cx}" cy="${cy - 26}" r="36" fill="${th.c}" fill-opacity=".12" stroke="${th.c}" stroke-width="3.5"/>
@@ -116,7 +155,8 @@ ${ticks}
 <circle cx="${cx}" cy="${cy}" r="176" fill="none" stroke="${th.c}" stroke-opacity=".18" stroke-width="1.5"/>
 ${s.scene === 'calendar' ? '' : `<polygon points="${hex(158)}" fill="${th.p3}" stroke="${th.c}" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round"/>
 <polygon points="${hex(128)}" fill="none" stroke="${th.c}" stroke-opacity=".28" stroke-width="1.5" stroke-linejoin="round"/>`}
-<g filter="url(#neon)">${SC[s.scene] ? SC[s.scene](th, s, cx, cy) : glyph(s.icon, cx, cy, 168, 1.15, th.c)}</g>
+${(() => { const uri = s.art ? assetUri(s.art) : ''; if (!uri) return ''; const [r0, g0, b0] = rgb01(BG), [r1, g1, b1] = rgb01(th.c); return `<defs><filter id="duo" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values=".33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="${r0} ${r1}"/><feFuncG type="table" tableValues="${g0} ${g1}"/><feFuncB type="table" tableValues="${b0} ${b1}"/></feComponentTransfer></filter><clipPath id="hexclip"><polygon points="${hex(150)}"/></clipPath></defs><g clip-path="url(#hexclip)"><image href="${uri}" x="${cx - 150}" y="${cy - 150}" width="300" height="300" preserveAspectRatio="xMidYMid slice" filter="url(#duo)" opacity=".92"/></g>` })()}
+${s.art && assetUri(s.art) ? '' : `<g filter="url(#neon)">${SC[s.scene] ? SC[s.scene](th, s, cx, cy) : glyph(s.icon, cx, cy, 168, 1.15, th.c)}</g>`}
 ${orbit}
 <g font-family="M,monospace" font-size="15" fill="${th.c}" fill-opacity=".7" direction="ltr"><text x="${cx - 232}" y="${cy + 262}">SIG // ${esc(String(s.tag || 'PICHA').toUpperCase())}</text><text x="${cx + 92}" y="${cy + 262}">${String(hash(s.title) % 9000 + 1000)}</text></g>
 </svg>`

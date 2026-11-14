@@ -8,3 +8,4 @@ backup*
 storage/sms_webhook.log
 storage/pending_watch.json
 growth/calendar/out/
+growth/brand/assets/
