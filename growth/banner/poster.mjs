@@ -156,22 +156,24 @@ ${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="
   //   spec: { style:'f', layout:'wide-r'|'story'|'square', bg:'file.png', hero?:'file.png', cat?:{eyes,acc}, theme, title, subtitle, chips, cta, handle }
   f: (s) => {
     const L = LAYOUTS[s.layout || 'wide-r'], uri = s.bg ? assetUri(s.bg) : '', hero = s.hero ? assetUri(s.hero) : ''
-    const th = { cyan: ['#5eead4', '#0e7490'], pink: ['#f472b6', '#be185d'], amber: ['#fbbf24', '#b45309'], violet: ['#a78bfa', '#6d28d9'], green: ['#4ade80', '#15803d'], red: ['#fb7185', '#be123c'] }[s.theme || 'cyan']
+    const y2k = s.theme === 'y2k' // Y2K glossy palette: sky blue #42BCE8, pearl white #FAFCFD, lavender pink #E2A7E9 on pure black; hero objects are blended with «screen» (their black becomes transparent)
+    const th = y2k ? ['#42BCE8', '#0a2a40'] : { cyan: ['#5eead4', '#0e7490'], pink: ['#f472b6', '#be185d'], amber: ['#fbbf24', '#b45309'], violet: ['#a78bfa', '#6d28d9'], green: ['#4ade80', '#15803d'], red: ['#fb7185', '#be123c'] }[s.theme || 'cyan']
     const k = L.w >= 1280 ? 1 : L.h > L.w ? 1.2 : 0.95 // type scale per layout
     const box = (z, extra = '') => { const r = L[z]; return r ? `position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;${extra}` : 'display:none' }
     const dir = L.h > L.w ? 'center' : 'right'
     return `<style>
 body{width:${L.w}px;height:${L.h}px;margin:0;font-family:V,sans-serif;position:relative;overflow:hidden;color:#fff;direction:ltr;background:#05080d}
-.bg{position:absolute;inset:0;background:${uri ? `url('${uri}') center/cover` : `radial-gradient(ellipse at 30% 45%,${th[1]},#060b18 70%)`}}
-.shade{position:absolute;inset:0;background:${L.h > L.w ? 'linear-gradient(180deg,rgba(5,8,13,.55),rgba(5,8,13,.25) 40%,rgba(5,8,13,.7) 100%)' : 'linear-gradient(90deg,rgba(5,8,13,.1),rgba(5,8,13,.5) 45%,rgba(5,8,13,.78))'}}
+.bg{position:absolute;inset:0;background:${uri ? `url('${uri}') center/cover` : y2k ? '#000' : `radial-gradient(ellipse at 30% 45%,${th[1]},#060b18 70%)`}}
+.glow{${box('hero', 'border-radius:50%;background:radial-gradient(circle,#42BCE833,#42BCE800 68%);transform:scale(1.35)')}}
+.shade{position:absolute;inset:0;background:${y2k ? 'transparent' : L.h > L.w ? 'linear-gradient(180deg,rgba(5,8,13,.55),rgba(5,8,13,.25) 40%,rgba(5,8,13,.7) 100%)' : 'linear-gradient(90deg,rgba(5,8,13,.1),rgba(5,8,13,.5) 45%,rgba(5,8,13,.78))'}}
 .logo{${box('logo', 'display:flex;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-end') + ';direction:rtl;font-weight:900;font-size:' + 34 * k + 'px;gap:14px')}}
 .handle{${box('handle', 'font:700 ' + 22 * k + 'px M,monospace;opacity:.85;direction:ltr;display:flex;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-start'))}}
-.title{${box('title', 'direction:rtl;text-align:' + dir + ';font-size:' + 92 * k + 'px;line-height:1.2;font-weight:900;text-shadow:0 4px 24px rgba(0,0,0,.65);overflow:hidden')}} .title em{font-style:normal;color:${th[0]};text-shadow:0 0 26px ${th[0]}88}
+.title{${box('title', (y2k ? 'color:#FAFCFD;' : '') + 'direction:rtl;text-align:' + dir + ';font-size:' + 92 * k + 'px;line-height:1.2;font-weight:900;text-shadow:0 4px 24px rgba(0,0,0,.65);overflow:hidden')}} .title em{font-style:normal;color:${th[0]};text-shadow:0 0 26px ${th[0]}88}
 .sub{${box('subtitle', 'direction:rtl;text-align:' + dir + ';font-size:' + 30 * k + 'px;line-height:1.7;color:#dbe7f7;text-shadow:0 2px 12px rgba(0,0,0,.65);overflow:hidden')}}
-.chips{${box('chips', 'direction:rtl;display:flex;gap:10px;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-start'))}} .chips span{border:1.5px solid ${th[0]};color:${th[0]};border-radius:10px;padding:5px 18px;font-size:${23 * k}px;font-weight:700;background:rgba(5,8,13,.45)}
-.cta{${box('cta', 'display:flex;align-items:center;justify-content:center;background:' + th[0] + ';color:#06100f;font-weight:900;font-size:' + 34 * k + 'px;border-radius:16px;direction:rtl;box-shadow:0 0 30px ' + th[0] + '66')}}
-.hero{${box('hero', 'display:flex;align-items:center;justify-content:center')}} .hero img,.hero svg{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 18px 34px rgba(0,0,0,.55))}
-</style><div class="bg"></div><div class="shade"></div>
+.chips{${box('chips', 'direction:rtl;display:flex;gap:10px;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-start'))}} .chips span{border:1.5px solid ${y2k ? '#E2A7E9' : th[0]};color:${y2k ? '#E2A7E9' : th[0]};border-radius:10px;padding:5px 18px;font-size:${23 * k}px;font-weight:700;background:rgba(5,8,13,.45)}
+.cta{${box('cta', 'display:flex;align-items:center;justify-content:center;background:' + th[0] + ';color:#06100f;font-weight:900;font-size:' + 34 * k + 'px;border-radius:16px;direction:rtl;box-shadow:0 0 30px ' + th[0] + '66' + (y2k ? ';background:linear-gradient(90deg,#42BCE8,#E2A7E9)' : ''))}}
+.hero{${box('hero', 'display:flex;align-items:center;justify-content:center')}} .hero img,.hero svg{max-width:100%;max-height:100%;object-fit:contain;${y2k && s.blend !== false ? 'mix-blend-mode:screen;' : 'filter:drop-shadow(0 18px 34px rgba(0,0,0,.55));'}}
+</style><div class="bg"></div><div class="shade"></div>${y2k ? '<div class="glow"></div>' : ''}
 <div class="hero">${hero ? `<img src="${hero}">` : s.cat ? pichaCat({ eyes: s.cat.eyes || 'happy', acc: s.cat.acc || '', blush: !!s.cat.blush, id: 'pf' }) : ''}</div>
 <div class="logo"><img src="${LOGO}" width="${54 * k}" height="${54 * k}" style="border-radius:12px"><span>پیچا</span></div><div class="handle">${s.handle === false ? '' : (s.handle || '@pichanet_bot')}</div>
 <div class="title">${s.title}</div><div class="sub">${s.subtitle || ''}</div><div class="chips">${(s.chips || []).map((c) => `<span>${c}</span>`).join('')}</div><div class="cta">${s.cta} ←</div>`
