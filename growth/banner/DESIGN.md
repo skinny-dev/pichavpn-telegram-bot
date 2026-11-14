@@ -63,3 +63,7 @@ node poster.mjs spec.json out.png      # spec: {style:"e", hero:"نام-فایل
 - **مشخصات:** PNG، ترجیحاً **شفاف (cut-out)** و حداقل ۱۰۰۰ پیکسل در بلندترین ضلع؛ یا تصویر کامل. بدون متن داخل عکس (فارسی را ما می‌نویسیم). سوژه وسط، با کمی حاشیه؛ بدون سایهٔ سفید سخت.
 - نام فایل: `مناسبت-موضوع.png` مثل `cat-day.png`، `yalda.png`.
 - ابعاد خروجی ۱۲۸۰×۷۲۰ (کانال) و در صورت نیاز ۱۰۸۰×۱۹۲۰ (استوری).
+
+## سبک F: پس‌زمینهٔ شما + جاهای ثابت (`layouts.mjs`)
+`{ "style": "f", "layout": "wide-r|story|square", "bg": "فایل.png", "cat": {"eyes":"happy","acc":"hat"} یا "hero": "فایل.png", "theme": "...", "title": "...", "subtitle": "...", "chips": [...], "cta": "..." }`
+جای لوگو، تیتر، زیرعنوان، نشان‌ها، دکمه و قهرمان در `layouts.mjs` است (منبع واحد برای رندر و راهنما). راهنمای تصویری هر قالب: `layouts/guide-*.png` (با `node layouts-guide.mjs`). پرامپت sci-fi: `docs/BACKGROUND_PROMPTS.md`.

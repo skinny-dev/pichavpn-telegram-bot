@@ -17,6 +17,7 @@ const assetUri = (file) => {
   const mime = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[path.extname(f).toLowerCase().slice(1)]
   return mime ? `data:${mime};base64,${fs.readFileSync(f).toString('base64')}` : ''
 }
+import { LAYOUTS } from './layouts.mjs'
 const LOGO = 'data:image/png;base64,' + fs.readFileSync(path.join(here, '../brand/picha-logo.png')).toString('base64')
 
 // the mascot: big glossy eyes, pink inner ears, ω mouth, blush, whiskers. `fur` = [light, dark] of the brand cyan-blue.
@@ -150,6 +151,31 @@ p{font-size:30px;line-height:1.75;margin:14px 0 0;color:#cdd9ee}
 </style><div class="glow"></div>${paws('#fff', 5)}<div class="hero">${uri ? `<img src="${uri}">` : ''}</div>
 ${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="chips">${(s.chips || []).map((c) => `<span>${c}</span>`).join('')}</div></div><div class="cta">${s.cta} ←</div>`
   },
+
+  // F — your background + fixed zones (layouts.mjs): the background is yours (ChatGPT/any); the zones for logo, title, subtitle, chips, button and hero are ours.
+  //   spec: { style:'f', layout:'wide-r'|'story'|'square', bg:'file.png', hero?:'file.png', cat?:{eyes,acc}, theme, title, subtitle, chips, cta, handle }
+  f: (s) => {
+    const L = LAYOUTS[s.layout || 'wide-r'], uri = s.bg ? assetUri(s.bg) : '', hero = s.hero ? assetUri(s.hero) : ''
+    const th = { cyan: ['#5eead4', '#0e7490'], pink: ['#f472b6', '#be185d'], amber: ['#fbbf24', '#b45309'], violet: ['#a78bfa', '#6d28d9'], green: ['#4ade80', '#15803d'], red: ['#fb7185', '#be123c'] }[s.theme || 'cyan']
+    const k = L.w >= 1280 ? 1 : L.h > L.w ? 1.2 : 0.95 // type scale per layout
+    const box = (z, extra = '') => { const r = L[z]; return r ? `position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;${extra}` : 'display:none' }
+    const dir = L.h > L.w ? 'center' : 'right'
+    return `<style>
+body{width:${L.w}px;height:${L.h}px;margin:0;font-family:V,sans-serif;position:relative;overflow:hidden;color:#fff;direction:ltr;background:#05080d}
+.bg{position:absolute;inset:0;background:${uri ? `url('${uri}') center/cover` : `radial-gradient(ellipse at 30% 45%,${th[1]},#060b18 70%)`}}
+.shade{position:absolute;inset:0;background:${L.h > L.w ? 'linear-gradient(180deg,rgba(5,8,13,.55),rgba(5,8,13,.25) 40%,rgba(5,8,13,.7) 100%)' : 'linear-gradient(90deg,rgba(5,8,13,.1),rgba(5,8,13,.5) 45%,rgba(5,8,13,.78))'}}
+.logo{${box('logo', 'display:flex;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-end') + ';direction:rtl;font-weight:900;font-size:' + 34 * k + 'px;gap:14px')}}
+.handle{${box('handle', 'font:700 ' + 22 * k + 'px M,monospace;opacity:.85;direction:ltr;display:flex;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-start'))}}
+.title{${box('title', 'direction:rtl;text-align:' + dir + ';font-size:' + 92 * k + 'px;line-height:1.2;font-weight:900;text-shadow:0 4px 24px rgba(0,0,0,.65);overflow:hidden')}} .title em{font-style:normal;color:${th[0]};text-shadow:0 0 26px ${th[0]}88}
+.sub{${box('subtitle', 'direction:rtl;text-align:' + dir + ';font-size:' + 30 * k + 'px;line-height:1.7;color:#dbe7f7;text-shadow:0 2px 12px rgba(0,0,0,.65);overflow:hidden')}}
+.chips{${box('chips', 'direction:rtl;display:flex;gap:10px;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-start'))}} .chips span{border:1.5px solid ${th[0]};color:${th[0]};border-radius:10px;padding:5px 18px;font-size:${23 * k}px;font-weight:700;background:rgba(5,8,13,.45)}
+.cta{${box('cta', 'display:flex;align-items:center;justify-content:center;background:' + th[0] + ';color:#06100f;font-weight:900;font-size:' + 34 * k + 'px;border-radius:16px;direction:rtl;box-shadow:0 0 30px ' + th[0] + '66')}}
+.hero{${box('hero', 'display:flex;align-items:center;justify-content:center')}} .hero img,.hero svg{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 18px 34px rgba(0,0,0,.55))}
+</style><div class="bg"></div><div class="shade"></div>
+<div class="hero">${hero ? `<img src="${hero}">` : s.cat ? pichaCat({ eyes: s.cat.eyes || 'happy', acc: s.cat.acc || '', blush: !!s.cat.blush, id: 'pf' }) : ''}</div>
+<div class="logo"><img src="${LOGO}" width="${54 * k}" height="${54 * k}" style="border-radius:12px"><span>پیچا</span></div><div class="handle">${s.handle === false ? '' : (s.handle || '@pichanet_bot')}</div>
+<div class="title">${s.title}</div><div class="sub">${s.subtitle || ''}</div><div class="chips">${(s.chips || []).map((c) => `<span>${c}</span>`).join('')}</div><div class="cta">${s.cta} ←</div>`
+  },
   // C — constellation: the cat drawn as connected stars on deep blue, calm and elegant
   c: (s) => {
     // the logo's own outline as stars (640-unit logo space → scaled into the left half)
@@ -175,7 +201,8 @@ ${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="
 
 export async function renderPoster(style, spec, out) {
   const browser = await chromium.launch()
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
+  const dim = spec.layout && LAYOUTS[spec.layout] ? LAYOUTS[spec.layout] : { w: 1280, h: 720 }
+  const page = await browser.newPage({ viewport: { width: dim.w, height: dim.h } })
   const f = path.join(here, `.tmp-poster-${process.pid}.html`)
   fs.writeFileSync(f, `<!doctype html><meta charset="utf-8"><style>${FONT}*{box-sizing:border-box}html{background:#05080d;overflow:hidden}</style>${STYLES[style](spec)}`)
   await page.goto('file://' + f); await page.evaluate(() => document.fonts.ready)
