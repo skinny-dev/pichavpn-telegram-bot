@@ -5,7 +5,7 @@ import { ManageProvider } from '@/components/manage'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, BadgePercent, BarChart3, Banknote, Headset, LayoutDashboard, LogOut, Megaphone, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, BadgePercent, CalendarDays, BarChart3, Banknote, Headset, LayoutDashboard, LogOut, Megaphone, Menu, Moon, Package, Receipt, ShieldCheck, ShoppingCart, Sun, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,7 @@ const ALL_ITEMS: Item[] = [
   { to: '/support', label: 'پشتیبانی', icon: Headset },
   { to: '/pending', label: 'پرداخت‌های معلق', icon: AlertTriangle, short: 'معلق' },
   { to: '/stats', label: 'آمار', icon: BarChart3 },
+  { to: '/studio', label: 'استودیو محتوا', icon: CalendarDays, short: 'استودیو' },
   { to: '/users', label: 'کاربران', icon: Users },
   { to: '/orders', label: 'سفارشات', icon: ShoppingCart },
   { to: '/products', label: 'محصولات', icon: Package },

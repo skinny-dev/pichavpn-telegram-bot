@@ -45,5 +45,7 @@ Object.assign(extra.exact, {
   mg_user: (r, q) => manage.user(q),
   mg_user_action: (r, q, b, admin) => manage.userAction(b, admin),
 })
+import * as studio from './studio.js'
+extra.prefix.push(['studio_', studio.route])
 import { route as finRoute } from './finance/routes.js'
 extra.prefix.push(['fin_', finRoute])
