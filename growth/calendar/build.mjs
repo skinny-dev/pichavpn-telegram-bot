@@ -75,10 +75,10 @@ const occRows = occasions.flatMap((o) => [1405, 1406].map((jy) => { const g = oc
 // ---------- banners
 const require = createRequire('/opt/pw-browsers/')
 const { chromium } = (() => { try { return require('playwright') } catch { return createRequire(import.meta.url)('playwright') } })()
-const SUB = { celebration: 'از طرف تیم پیچا', culture: 'یادی از بزرگان فرهنگ ایران', tech: 'نکته‌ی امروز از پیچا', profession: 'تبریک به همکاران این حرفه' }
+const SUB = { celebration: 'از طرف تیم پیچا', culture: 'یادی از بزرگان فرهنگ ایران', tech: 'نکته‌ی امروز از پیچا', profession: 'تبریک به همکاران این حرفه', cat: 'از طرف گربه‌های پیچا 🐾' }
 const jobs = [
   ...days.map((e) => ({ file: `d${pad(e.day + 1)}-${e.spec.tag}.png`, label: `${fa(pad(e.j[1]))}/${fa(pad(e.j[2]))} ${e.wd} · ${e.type}`, spec: { ...e.spec, title: e.title, cta: e.cta } })),
-  ...occasions.map((o) => { const g = occDate(o, 1405), j = g2j(...g); return { file: `occ-${o.id}.png`, label: `مناسبت · ${o.title}`, spec: { ...o.spec, scene: 'calendar', date: [fa(j[2]), MONTH[j[1]]], title: o.title.replace(/^(.*?)(\s|$)/, '[[$1]]$2'), subtitle: SUB[o.kind], badges: [o.kind === 'celebration' ? 'تبریک' : o.kind === 'culture' ? 'فرهنگ' : 'فناوری'], handle: '@pichanet_bot' } } }),
+  ...occasions.map((o) => { const g = occDate(o, 1405), j = g2j(...g); return { file: `occ-${o.id}.png`, label: `مناسبت · ${o.title}`, spec: { ...o.spec, scene: 'calendar', date: [fa(j[2]), MONTH[j[1]]], title: o.title.replace(/^(.*?)(\s|$)/, '[[$1]]$2'), subtitle: o.cat || SUB[o.kind], badges: [o.kind === 'celebration' ? 'تبریک' : o.kind === 'culture' ? 'فرهنگ' : o.kind === 'cat' ? 'روز گربه' : o.kind === 'profession' ? 'روز حرفه' : 'فناوری'], handle: '@pichanet_bot' } } }),
   { file: 'news-template.png', label: 'خبر روز (قالب)', spec: { ...NEWS_SLOT.spec, title: '[[عنوان خبر]] از منبع تأییدشده', subtitle: 'خلاصه‌ی دو خطی با کلمات خودمان؛ لینک منبع زیر پست.', badges: ['منبع: ...'] } },
 ]
 if (!errors.length) {
@@ -128,7 +128,7 @@ L.push('## ۵. اخبار', '', '**هدف:** مرجع خبر اینترنت و �
   '**قاعده‌ها:**', '- فقط از منبعی که `check-feeds.mjs` روی همان سرور خوانده و شما `ok` کرده‌اید.', '- همیشه نام منبع + لینک؛ حداکثر ۱۲ کلمه نقل مستقیم؛ کپی متن کامل ممنوع.', '- خبر سیاسی، امنیتی و حادثه‌ای خودکار منتشر نمی‌شود (فهرست ممنوع در `growth/news/filters.json`).', '- روزی یک خبر؛ جمعه‌ها خلاصه‌ی ۵ تیتر؛ اگر خبر مناسبی نبود، پستی ساخته نمی‌شود.', '- خبرهایی که به قطعی/فیلتر مربوط‌اند علاوه بر کانال، به شما هشدار می‌دهند تا پست وضعیت یا آموزش بسازید.', '',
   '**فایل‌ها:** `growth/news/sources.json` (منابع)، `filters.json` (موضوع)، `check-feeds.mjs` (تست دریافت). فعلاً فقط یک منبع **تأییدنشده** (زومیت) در فهرست است؛ کانال‌ها و سایت‌های مورد نظر را شما بدهید.', '')
 L.push('## ۶. مناسبت‌ها (فقط شمسی/فرهنگی و روزهای جهانی)', '', 'تاریخ‌ها از تقویم شمسی ثابت‌اند؛ پیش از هر سال با تقویم رسمی تطبیق دهید. «جشن» با کمپین واقعی پیشنهاد می‌گیرد؛ «فرهنگ» هرگز پیشنهاد ندارد؛ «فناوری» محتوای مفید است.', '', '| شمسی ۱۴۰۵ | میلادی | شمسی ۱۴۰۶ | میلادی | مناسبت | نوع | یادداشت |', '|---|---|---|---|---|---|---|')
-const kinds = { celebration: 'جشن', culture: 'فرهنگ', tech: 'فناوری/امنیت', profession: 'روز حرفه' }
+const kinds = { celebration: 'جشن', culture: 'فرهنگ', tech: 'فناوری/امنیت', profession: 'روز حرفه', cat: 'روز گربه' }
 for (const o of occasions) {
   const a = occRows.find((r) => r.o === o && r.jy === 1405), b = occRows.find((r) => r.o === o && r.jy === 1406)
   L.push(`| ${fmtJ(a.j)} | ${fmtG(a.g)} | ${fmtJ(b.j)} | ${fmtG(b.g)} | ${o.title} | ${kinds[o.kind]} | ${o.note} |`)
