@@ -143,7 +143,16 @@ if ($path === '/variza_create') {
     if (!is_array($in) || !is_string($in['token'] ?? null) || !is_array($in['payload'] ?? null)) {
         reply(400, ['ok' => false, 'error' => 'bad request']);
     }
-    $ch = curl_init('https://variza.ir/api/v1/pay');
+    // the API address can be another Variza-compatible service (Paychi Variz: https://<host>/api/compat/variza/v1); https on 443 only, no credentials in the URL
+    $base = 'https://variza.ir/api/v1';
+    if (isset($in['api_url'])) {
+        $u = rtrim((string) $in['api_url'], '/');
+        if (!preg_match('#^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:443)?(/[A-Za-z0-9._~/-]*)?$#', $u)) {
+            reply(400, ['ok' => false, 'error' => 'bad api_url']);
+        }
+        $base = $u;
+    }
+    $ch = curl_init($base . '/pay');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_CUSTOMREQUEST => 'POST',
         CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', 'Authorization: Bearer ' . $in['token']],

@@ -41,6 +41,10 @@ try {
   check('pull without the key is refused', (await fetch('http://127.0.0.1:8140/pull')).status === 401)
   check('variza_create without the key is refused', (await post('/variza_create', '{}')).status === 401)
 
+  const vc = (api_url) => post('/variza_create', JSON.stringify({ token: 't', payload: { amount: 1000 }, api_url }), { 'X-Relay-Key': KEY })
+  for (const bad of ['http://paychi.example.com/api', 'https://user:pw@paychi.example.com/api', 'https://paychi.example.com:8000/api', 'https://paychi.example.com/api?x=1', 'javascript:alert(1)', 'https://127.0.0.1 evil/api'])
+    check('variza_create refuses an unsafe api_url: ' + bad, (await vc(bad)).status === 400)
+
   const { handleUpdate } = await import('../tgcloud/lib/bot.js')
   await handleUpdate({ update_id: 1, message: { message_id: 1, from: { id: 1001, first_name: 'Ali', username: 'ali', is_bot: false }, chat: { id: 1001, type: 'private' }, date: 1, text: '/start' } })
   const bal = async (id) => Number((await db.get(sql`SELECT Balance FROM user WHERE id = ${id}`)).Balance)

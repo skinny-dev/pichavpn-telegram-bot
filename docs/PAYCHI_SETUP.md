@@ -39,3 +39,13 @@ cd serverless-bot && node tools/setpay.mjs paychi
 
 ## اگر کار کرد و خواستید Variza خاموش شود
 `node tools/setpay.mjs variza off` (برگشت: `variza on`).
+
+---
+## تصمیم فعلی: فعلاً واریزا؛ پی‌چی-واریز یک پروژهٔ جداست
+- درگاه جداگانهٔ «پی‌چی» در ربات **خاموش** بماند (دکمهٔ «💳 درگاه‌های کارت به کارت» یا `node tools/setpay.mjs paychi off`). کد و تنظیمش می‌ماند.
+- وقتی پی‌چی-واریز کامل کار کرد، به‌جای دکمهٔ جدید **آدرس API واریزا** را به آن بدهید؛ جریان همان واریزاست و مشتری هیچ تغییری نمی‌بیند:
+  1. ریلهٔ جدید روی 🟥 نصب باشد (پشتیبانی از `api_url` دارد).
+  2. `node tools/setpay.mjs variza url https://<پی‌چی>/api/compat/variza/v1`
+  3. `node tools/setpay.mjs variza keys` ← توکن = کلید API پی‌چی، secret = کلید امضای وب‌هوک پی‌چی (ورودی مخفی).
+  4. در داشبورد پی‌چی: آدرس وب‌هوک `https://pay.theownlypwcha.top/variza` و فرمت «سازگار با واریزا».
+  5. برگشت به واریزا: `node tools/setpay.mjs variza url` (بدون آدرس) و `variza keys` با توکن واریزا.

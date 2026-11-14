@@ -68,17 +68,20 @@ async function createPayVariza(c, price, orderId) {
   const relay = String((await kvGet('config:pay_relay_url')) || '').replace(/\/+$/, '')
   const back = relay ? `${relay}/variza_return.php?order=${orderId}` : `https://${c.domain}/payment/variza.php?order=${orderId}`
   const payload = { amount: intval(price), return_url: back, title: 'Mirza order ' + orderId, expires_in: '1h' }
+  // the API address: Variza itself, or a compatible service (Paychi Variz: https://<host>/api/compat/variza/v1) — admin sets `variza_api_url`
+  const apiRaw = String((await pay('variza_api_url')) ?? '').trim().replace(/\/+$/, '')
+  const custom = /^https:\/\//.test(apiRaw) && apiRaw !== 'https://variza.ir/api/v1' ? apiRaw : ''
   try {
     let status, raw
     const key = String((await kvGet('config:pay_relay_key')) || '')
     if (relay && key) {
       // through the relay: it can reach Variza from inside Iran (Variza may refuse foreign servers)
-      const res = await fetch(`${relay}/variza_create`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Relay-Key': key }, body: JSON.stringify({ token, payload }) })
+      const res = await fetch(`${relay}/variza_create`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Relay-Key': key }, body: JSON.stringify({ token, payload, ...(custom ? { api_url: custom } : {}) }) })
       const r = JSON.parse(await res.text())
       if (!r || !r.ok) return { error: 'relay: ' + (r?.error ?? res.status) }
       status = intval(r.http_code); raw = String(r.body ?? '')
     } else {
-      const res = await fetch('https://variza.ir/api/v1/pay', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) })
+      const res = await fetch((custom || 'https://variza.ir/api/v1') + '/pay', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) })
       status = res.status; raw = await res.text()
     }
     let d = null

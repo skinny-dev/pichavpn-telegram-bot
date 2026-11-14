@@ -12,9 +12,12 @@ const RULES = {
   minbalancepaychi: (v) => /^\d{1,9}$/.test(String(v)),
   maxbalancepaychi: (v) => /^\d{1,9}$/.test(String(v)),
   chashbackpaychi: (v) => /^\d{1,2}$/.test(String(v)),
+  variza_api_url: (v) => /^https:\/\/[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:443)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(String(v).trim().replace(/\/+$/, '')),
+  variza_api_token: TEXT(8, /^[A-Za-z0-9_.-]+$/),
+  variza_webhook_secret: TEXT(8, /^[\x21-\x7e]+$/),
   variza_status: (v) => ['onvariza', 'offvariza'].includes(v),
 }
-const SECRET = new Set(['paychi_api_key', 'paychi_webhook_secret'])
+const SECRET = new Set(['paychi_api_key', 'paychi_webhook_secret', 'variza_api_token', 'variza_webhook_secret'])
 
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
@@ -29,7 +32,7 @@ export default async function (input, ctx) {
       if (!RULES[name]) throw new EndpointError('setting not allowed: ' + name, { code: 'NAME' })
       if (!RULES[name](value)) throw new EndpointError('bad value for ' + name + (SECRET.has(name) ? '' : ''), { code: 'VALUE' })
       let v = String(value).trim()
-      if (name === 'paychi_base_url') v = v.replace(/\/+$/, '')
+      if (name === 'paychi_base_url' || name === 'variza_api_url') v = v.replace(/\/+$/, '')
       await run(sql`DELETE FROM PaySetting WHERE NamePay = ${name}`)
       await run(sql`INSERT INTO PaySetting (NamePay, ValuePay) VALUES (${name}, ${v})`)
       done.push(name)

@@ -2,6 +2,8 @@
 //   node tools/setpay.mjs paychi          ask for the address + API key (+ webhook secret), save, and switch Paychi ON
 //   node tools/setpay.mjs paychi off|on   hide / show the Paychi button
 //   node tools/setpay.mjs variza off|on   hide / show the Variza button (nothing is deleted)
+//   node tools/setpay.mjs variza keys   token + webhook secret (hidden prompts)
+//   node tools/setpay.mjs variza url [https://<paychi>/api/compat/variza/v1]   Variza's API address (no argument = back to variza.ir)
 //   node tools/setpay.mjs status          what is set (secrets shown as set / not set)
 import { spawnSync } from 'node:child_process'
 
@@ -33,7 +35,13 @@ function call(payload) {
 
 const [, , cmd, arg] = process.argv
 if (cmd === 'status') call({})
-else if (cmd === 'variza' && ['on', 'off'].includes(arg)) call({ set: { variza_status: arg === 'on' ? 'onvariza' : 'offvariza' } })
+else if (cmd === 'variza' && arg === 'url') call({ set: { variza_api_url: (process.argv[4] || 'https://variza.ir/api/v1') } })
+else if (cmd === 'variza' && arg === 'keys') {
+  const token = await ask('Variza (or Paychi Variz) API token (hidden): ', true)
+  const secret = await ask('Webhook signing secret (hidden): ', true)
+  if (token && secret) call({ set: { variza_api_token: token, variza_webhook_secret: secret } })
+  else console.log('nothing changed (both are needed)')
+} else if (cmd === 'variza' && ['on', 'off'].includes(arg)) call({ set: { variza_status: arg === 'on' ? 'onvariza' : 'offvariza' } })
 else if (cmd === 'paychi' && ['on', 'off'].includes(arg)) call({ set: { paychi_status: arg === 'on' ? 'onpaychi' : 'offpaychi' } })
 else if (cmd === 'paychi') {
   const rawBase = await ask('Paychi address (https://…, port 443): ')
@@ -43,4 +51,4 @@ else if (cmd === 'paychi') {
   const set = { paychi_base_url: base, paychi_api_key: key }
   if (secret) set.paychi_webhook_secret = secret
   if (call({ set })) { console.log('saved; switching Paychi on…'); call({ set: { paychi_status: 'onpaychi' } }) }
-} else console.log('usage: node tools/setpay.mjs paychi | paychi on|off | variza on|off | status')
+} else console.log('usage: node tools/setpay.mjs paychi | paychi on|off | variza on|off | variza url [URL] | variza keys | status')
