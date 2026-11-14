@@ -2,7 +2,7 @@
 import { kvGet, kvSet } from '../db.js'
 import { loadSchedule, describeSchedule, loadBands, DAY_NAMES } from '../schedule.js'
 import { sendmessage } from '../tg.js'
-import { careStats } from '../care.js'
+import { careStats, carePreview, C6_TEXT, C6_KB, TEST_INV } from '../care.js'
 
 const num = (v) => { const x = Number(v); return Number.isFinite(x) && x >= 0 && x <= 24 ? x : null }
 
@@ -28,6 +28,17 @@ export const adminCareRoutes = [
       if (!r) { await sendmessage(c.from_id, 'ساعت‌ها نامعتبر است (مثال: 13-15 یا off).', null, 'HTML'); return true }
       await kvSet('care:avoid', JSON.stringify(r))
       await sendmessage(c.from_id, '✅ ثبت شد.\n\n' + describeSchedule(await loadSchedule(), await loadBands()), null, 'HTML'); return true
+    }
+    if (/^\/care test$/.test(t)) {
+      await sendmessage(c.from_id, '🧪 نمونهٔ پیام C6 (فقط برای شما؛ پاسخ‌ها ثبت نمی‌شوند):', null, 'HTML')
+      await sendmessage(c.from_id, C6_TEXT(c.first_name ?? ''), C6_KB(TEST_INV), 'HTML')
+      return true
+    }
+    if (/^\/care preview$/.test(t)) {
+      const p = await carePreview(c)
+      const skip = Object.entries(p.skip).map(([k, v]) => `${k}: ${v}`).join('، ') || '—'
+      await sendmessage(c.from_id, ['👀 <b>پیش‌نمایش C6 (چیزی ارسال یا ثبت نمی‌شود)</b>', `منتظر بررسی: ${p.waiting} · مجاز برای پیام: <b>${p.eligible}</b>`, `ردشده‌ها: ${skip}`, `الان: ${p.now}`, `سقف روزانه: ${p.max_day}`].join('\n'), null, 'HTML')
+      return true
     }
     if (/^\/care hours$/.test(t)) {
       const st = await careStats(c)
@@ -66,7 +77,7 @@ export const adminCareRoutes = [
     const skipped = Object.entries(s.skipped).map(([k, v]) => `${k}: ${v}`).join('، ') || '—'
     await sendmessage(c.from_id, [
       '🤝 <b>مراقبت از مشتری — تست‌گیرندهٔ بی‌خرید (C6)</b>',
-      `وضعیت: ${s.on ? '🟢 روشن' : '⚫️ خاموش'}  (/care on C6 · /care off C6 · /care schedule)`,
+      `وضعیت: ${s.on ? '🟢 روشن' : '⚫️ خاموش'}  (/care on C6 · /care off C6 · /care schedule · /care test · /care preview)`,
       `ارسال‌شده: ${s.sent} · پاسخ داده‌اند: ${s.answered} · خرید تا ۴۸ ساعت بعد: ${s.bought48}`,
       `پاسخ‌ها: 👍 ${s.reasons.good} · 🐢 کند ${s.reasons.slow} · ❌ وصل نشد ${s.reasons.fail} · 📶 اینترنت ${s.reasons.net}`,
       `«دیگر پیام نده»: ${s.optouts}`,

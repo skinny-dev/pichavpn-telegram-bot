@@ -126,6 +126,24 @@ calls.length = 0
 r = await careRun(c, { at: H(10.5) })
 check('inside a band (10–12): everyone due may be written to', r.sent === 2 && texts().map(([, p]) => p.chat_id).sort().join() === '7101,7104', JSON.stringify(texts().map(([, p]) => p.chat_id)))
 
+// preview and the admin's sample message
+await db.run(sql`INSERT OR IGNORE INTO admin (id_admin, rule) VALUES ('5550001', 'administrator')`)
+await db.run(sql`UPDATE user SET roll_Status = 1, joinchannel = 'active', User_Status = 'Active', step = 'home' WHERE id = '5550001'`)
+const say = (text) => handleUpdate({ update_id: Math.floor(Math.random() * 1e9), message: { message_id: 1, from: { id: 5550001, first_name: 'Admin', is_bot: false }, chat: { id: 5550001, type: 'private' }, date: 1, text } })
+const sent0 = (await careStats(c)).sent
+calls.length = 0
+await say('/care test')
+const sample = texts().find(([, p]) => /care6_good_999999999/.test(JSON.stringify(p.reply_markup ?? {})))
+check('/care test: the admin gets the real message with working buttons', !!sample && sample[1].chat_id === '5550001' && /^درود/.test(String(sample[1].text)))
+calls.length = 0
+await cb(5550001, 'care6_slow_999999999')
+check('/care test: answering shows the guidance but records nothing', calls.some(([m]) => /editmessagetext/i.test(m)) && (await kvGet('care:C6:5550001:999999999')) === null && (await careStats(c)).reasons.slow === 1 && (await careStats(c)).sent === sent0)
+const wait = await invoice(7105, 30, TEST, 'active', SAT + 3600)
+calls.length = 0
+await say('/care preview')
+check('/care preview: counts and the reasons, sends nothing to customers', /پیش‌نمایش C6/.test(String(texts().at(-1)?.[1]?.text)) && /مجاز برای پیام/.test(String(texts().at(-1)?.[1]?.text)) && texts().every(([, p]) => p.chat_id === '5550001'), String(texts().at(-1)?.[1]?.text))
+check('/care preview: nothing was recorded for the waiting case', (await kvGet(`care:C6:7105:${wait}`)) === null)
+
 // numbers for the admin
 const s = await careStats(c)
 check('stats: sent, answered and reasons', s.sent >= 3 && s.answered >= 2 && Object.keys(s.byHour).length >= 1 && s.reasons.slow === 1 && s.reasons.good === 1 && s.optouts === 1 && s.skipped.bought === 1, JSON.stringify(s))

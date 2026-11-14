@@ -17,11 +17,25 @@ export const careOn = async (id) => (await kvGet('care:on:' + id)) === '1'
 const bump = async (key) => kvSet(key, String(intval(await kvGet(key)) + 1))
 
 export const C6_TEXT = (name) => `درود${name ? ' ' + esc(name) : ''} 🌿\n\nتست پیچا برای شما تمام شد؛ سپاسگزاریم که امتحان کردید.\nاتصال و سرعتش چطور بود؟ اگر چیزی راضی‌تان نکرد بفرمایید تا درستش کنیم.`
-const C6_KB = (inv) => J({ inline_keyboard: [
+export const C6_KB = (inv) => J({ inline_keyboard: [
   [{ text: '👍 خوب بود', callback_data: 'care6_good_' + inv }, { text: '🐢 کند بود', callback_data: 'care6_slow_' + inv }],
   [{ text: '❌ وصل نمی‌شد', callback_data: 'care6_fail_' + inv }, { text: '📶 روی اینترنت من خوب نبود', callback_data: 'care6_net_' + inv }],
   [{ text: '🔕 دیگر پیام نده', callback_data: 'care6_stop_' + inv }],
 ] })
+
+/** why a person must not get the C6 message now (null = may be written to): inactive | optout | bought | paid | ticket | cap */
+async function whySkip(T, r, u, at) {
+  if (!u || u.User_Status !== 'Active') return 'inactive'
+  if (intval(await kvGet('care:optout:' + r.id_user)) > at) return 'optout'
+  // somebody who already bought (or paid lately) is not asked why they did not
+  if (await one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${String(r.id_user)} AND name_product != ${T.common.labels.testServiceName} AND Status != 'Unpaid' LIMIT 1`)) return 'bought'
+  if (await one(sql`SELECT 1 AS x FROM Payment_report WHERE id_user = ${String(r.id_user)} AND payment_Status = 'paid' LIMIT 1`)) return 'paid'
+  // an open conversation with support: leave it alone
+  if (await one(sql`SELECT 1 AS x FROM support_message WHERE iduser = ${String(r.id_user)} AND status != 'close' LIMIT 1`)) return 'ticket'
+  // one care message per person per week
+  if (at - intval(await kvGet('care:last:' + r.id_user)) < 7 * DAY) return 'cap'
+  return null
+}
 
 /** one run (lazy cron, every ~10 min): at most BATCH messages, only inside the working-week windows (schedule.js), never twice for the same case */
 export async function careRun(c, { at = Math.floor(Date.now() / 1000), BATCH = 4 } = {}) {
@@ -49,18 +63,8 @@ export async function careRun(c, { at = Math.floor(Date.now() / 1000), BATCH = 4
     const key = `care:C6:${r.id_user}:${r.id_invoice}`
     const skip = (why) => kvSet(key, JSON.stringify({ state: 'skipped', reason: why, at }))
     const u = await one(sql`SELECT * FROM user WHERE id = ${String(r.id_user)}`)
-    if (!u || u.User_Status !== 'Active') { await skip('inactive'); continue }
-    if (intval(await kvGet('care:optout:' + r.id_user)) > at) { await skip('optout'); continue }
-    // somebody who already bought (or paid lately) is not asked why they did not
-    const bought = await one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${String(r.id_user)} AND name_product != ${T.common.labels.testServiceName} AND Status != 'Unpaid' LIMIT 1`)
-    if (bought) { await skip('bought'); continue }
-    const paid = await one(sql`SELECT 1 AS x FROM Payment_report WHERE id_user = ${String(r.id_user)} AND payment_Status = 'paid' LIMIT 1`)
-    if (paid) { await skip('paid'); continue }
-    // an open conversation with support, or one in the last day: leave it alone
-    const ticket = await one(sql`SELECT 1 AS x FROM support_message WHERE iduser = ${String(r.id_user)} AND status != 'close' LIMIT 1`)
-    if (ticket) { await skip('ticket'); continue }
-    // one care message per person per week
-    if (at - intval(await kvGet('care:last:' + r.id_user)) < 7 * DAY) { await skip('cap'); continue }
+    const why = await whySkip(T, r, u, at)
+    if (why) { await skip(why); continue }
     // writing to the bot right now: not the moment
     if (at - intval(u.last_message_time) < 1800) continue
     try {
@@ -88,9 +92,11 @@ export const careRoutes = [
     const m = /^care6_(good|slow|fail|net|stop)_(\d+)$/.exec(c.datain ?? '')
     if (!m) return false
     const [, reason, inv] = m
+    const sample = inv === TEST_INV
     const at = Math.floor(Date.now() / 1000)
     const key = `care:C6:${c.from_id}:${inv}`
     const cur = parse(await kvGet(key))
+    if (reason === 'stop' && sample) { await answerCallback(c.callback_query_id, 'نمونه: چیزی ثبت نشد'); return true }
     if (reason === 'stop') {
       await kvSet('care:optout:' + c.from_id, String(at + 60 * DAY))
       await bump('care:n:C6:optout')
@@ -98,9 +104,8 @@ export const careRoutes = [
       await Editmessagetext(c.from_id, c.message_id, 'باشه، دیگر پیامی ارسال نمی‌کنیم. اگر نیاز داشتید همین‌جا هستیم 🙏', null, 'HTML')
       return true
     }
-    if (cur && cur.state === 'answered') { await answerCallback(c.callback_query_id, 'سپاسگزاریم، پاسخ شما ثبت شده است'); return true }
-    await kvSet(key, JSON.stringify({ ...(cur || {}), state: 'answered', reason, answered_at: at }))
-    await bump('care:n:C6:' + reason)
+    if (!sample && cur && cur.state === 'answered') { await answerCallback(c.callback_query_id, 'سپاسگزاریم، پاسخ شما ثبت شده است'); return true }
+    if (!sample) { await kvSet(key, JSON.stringify({ ...(cur || {}), state: 'answered', reason, answered_at: at })); await bump('care:n:C6:' + reason) }
     await answerCallback(c.callback_query_id, 'سپاسگزاریم')
     if (reason === 'good') {
       await Editmessagetext(c.from_id, c.message_id, 'خوشحالیم 🌿 اگر دوست دارید همین سرویس را ادامه بدهید، پلن‌ها همین‌جاست:', J({ inline_keyboard: [[{ text: '🛒 خرید سرویس', callback_data: 'buy' }], [{ text: '🔕 دیگر پیام نده', callback_data: 'care6_stop_0' }]] }), 'HTML')
@@ -130,4 +135,26 @@ export async function careStats(c) {
   }
   const n = async (k) => intval(await kvGet('care:n:C6:' + k))
   return { on: await careOn('C6'), sent, answered, bought48, skipped, byHour, reasons: { good: await n('good'), slow: await n('slow'), fail: await n('fail'), net: await n('net') }, optouts: await n('optout') }
+}
+
+export const TEST_INV = '999999999' // a sample message to the administrator: answers are shown but nothing is recorded
+
+/** what a run would do right now, without sending or recording anything */
+export async function carePreview(c, at = Math.floor(Date.now() / 1000)) {
+  const T = c.T
+  const rows = await all(sql`SELECT i.id_invoice, i.id_user, i.time_sell FROM invoice i
+    WHERE i.name_product = ${T.common.labels.testServiceName} AND CAST(i.time_sell AS INTEGER) BETWEEN ${at - 6 * DAY} AND ${at - 23 * 3600}
+      AND NOT EXISTS (SELECT 1 FROM kv k WHERE k.key = 'care:C6:' || i.id_user || ':' || i.id_invoice)
+    ORDER BY CAST(i.time_sell AS INTEGER) ASC LIMIT 400`)
+  const out = { waiting: rows.length, eligible: 0, skip: {} }
+  for (const r of rows) {
+    const why = await whySkip(T, r, await one(sql`SELECT * FROM user WHERE id = ${String(r.id_user)}`), at)
+    if (why) out.skip[why] = (out.skip[why] || 0) + 1
+    else out.eligible++
+  }
+  const slot = careTime(at, await loadSchedule())
+  const mode = sendMode('C6', at, await loadBands())
+  out.now = slot.ok ? (mode === 'none' ? 'پنجرهٔ بسته (ساعت پرهیز)' : mode === 'band' ? 'ساعت بهتر: همه' : 'فقط ساعت شخصی') : 'بسته (' + slot.why + ')'
+  out.max_day = intval(await kvGet('care:max_day')) || 60
+  return out
 }
