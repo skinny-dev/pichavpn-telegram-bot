@@ -144,6 +144,33 @@ await say('/care preview')
 check('/care preview: counts and the reasons, sends nothing to customers', /پیش‌نمایش C6/.test(String(texts().at(-1)?.[1]?.text)) && /مجاز برای پیام/.test(String(texts().at(-1)?.[1]?.text)) && texts().every(([, p]) => p.chat_id === '5550001'), String(texts().at(-1)?.[1]?.text))
 check('/care preview: nothing was recorded for the waiting case', (await kvGet(`care:C6:7105:${wait}`)) === null)
 
+// ---- C10: registered 24–72 h ago, never took a test
+await kvSet('care:on:C10', '1'); await kvSet('care:bands', JSON.stringify({ C6: [[10, 12]], C10: [[0, 24]] })); await kvSet('care:avoid', '[]')
+const AT = base + 35 * DAY + 19 * 3600 // a Saturday evening
+for (const u of [7101, 7102, 7103, 7104, 7105, 7106]) { await kvSet('care:last:' + u, '0'); await kvSet('care:optout:' + u, '0'); await db.run(sql`DELETE FROM support_message WHERE iduser = ${String(u)}`); await db.run(sql`DELETE FROM invoice WHERE id_user = ${String(u)}`); await db.run(sql`DELETE FROM Payment_report WHERE id_user = ${String(u)}`) }
+const reg = (u, hoursAgo) => db.run(sql`UPDATE user SET register = ${String(AT - hoursAgo * 3600)}, User_Status = 'Active', last_message_time = '0' WHERE id = ${String(u)}`)
+await reg(7101, 30); await reg(7102, 30); await reg(7103, 30); await reg(7104, 10); await reg(7105, 100); await reg(7106, 30)
+await invoice(7102, 20, TEST, 'active', AT)     // already tested
+await db.run(sql`INSERT INTO Payment_report (id_user, id_order, time, price, payment_Status, Payment_Method) VALUES ('7106', 'pp1', '2026/01/01 00:00:00', '1000', 'paid', 'x')`)
+await db.run(sql`INSERT INTO support_message (Tracking, idsupport, iduser, name_departman, text, result, time, status) VALUES ('T2', '0', '7103', 'x', 'hi', '', '2026-01-01 00:00:00', 'Unseen')`)
+calls.length = 0
+r = await careRun(c, { at: AT })
+const to = texts().map(([, p]) => p.chat_id)
+check('C10: only the person who registered 24–72 h ago and never tested is written to', r.sent === 1 && to.join() === '7101', JSON.stringify({ r, to }))
+const t10 = texts()[0]?.[1]
+check('C10 message: «درود», helps first, free test button, a way out', /^درود/.test(String(t10?.text)) && !/سلام|تخفیف|آخرین/.test(String(t10?.text)) && JSON.stringify(t10?.reply_markup).includes('usertestbtn') && JSON.stringify(t10?.reply_markup).includes('care10_stop_0'))
+check('C10: paid / ticket are skipped; tested, too-new and too-old are never candidates', (await kvGet('care:C10:7102:0')) === null && JSON.parse(await kvGet('care:C10:7106:0')).reason === 'paid' && JSON.parse(await kvGet('care:C10:7103:0')).reason === 'ticket' && (await kvGet('care:C10:7104:0')) === null && (await kvGet('care:C10:7105:0')) === null)
+calls.length = 0; r = await careRun(c, { at: AT + 3600 })
+check('C10: once per person', texts().length === 0)
+await cb(7101, 'care10_no_0')
+check('C10 «not now»: recorded, nothing for 30 days', JSON.parse(await kvGet('care:C10:7101:0')).reason === 'no' && Number(await kvGet('care:optout:7101')) > Date.now() / 1000 + 25 * DAY)
+const s10 = await careStats(c, 'C10')
+check('C10 stats', s10.sent === 1 && s10.answered === 1 && s10.reasons.no === 1 && s10.skipped.paid === 1 && s10.skipped.ticket === 1)
+calls.length = 0; await say('/care test C10')
+check('/care test C10 sends the sample to the admin', texts().some(([, p]) => p.chat_id === '5550001' && /هنوز اتصال آزمایشی/.test(String(p.text))))
+calls.length = 0; await say('/care preview C10')
+check('/care preview C10', /پیش‌نمایش C10/.test(String(texts().at(-1)?.[1]?.text)))
+
 // numbers for the admin
 const s = await careStats(c)
 check('stats: sent, answered and reasons', s.sent >= 3 && s.answered >= 2 && Object.keys(s.byHour).length >= 1 && s.reasons.slow === 1 && s.reasons.good === 1 && s.optouts === 1 && s.skipped.bought === 1, JSON.stringify(s))

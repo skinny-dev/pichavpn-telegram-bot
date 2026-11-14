@@ -14,7 +14,7 @@ export const FIXED_OFFDAYS = ['01/01', '01/02', '01/03', '01/04', '01/12', '01/1
 //  C6 test follow-up: the customer used the test the day before; they think about connection quality when they next use it — late morning (work
 //     starts, VPN needed for work/email) or early evening (social media peak, after work). Never over lunch (13–15), when attention is lowest.
 //  A message goes in the person's own hour too (±45 min of the hour they started their test) — that is when they use the internet.
-export const DEFAULT_BANDS = { C6: [[10, 12], [18.5, 20.5]] }
+export const DEFAULT_BANDS = { C6: [[10, 12], [18.5, 20.5]], C10: [[18.5, 20.5]] }
 export const DEFAULT_AVOID = [[13, 15]]
 const parse = (s) => { try { return JSON.parse(s) } catch { return null } }
 
@@ -61,4 +61,4 @@ export function sendMode(caseId, at, { bands, avoid }) {
 }
 
 export const describeSchedule = ({ windows, offdays }, bandsCfg = null) =>
-  DAY_NAMES.map((d) => `${DAY_FA[d]}: ${windows[d] ? `${windows[d][0]}–${windows[d][1]}` : 'تعطیل'}`).join('\n') + `\nتعطیلی ثابت: نوروز، ۱۲ و ۱۳ فروردین، ۱۴ و ۱۵ خرداد، ۲۲ بهمن، ۲۹ اسفند` + (offdays.length ? `\nتعطیلی‌های اضافه: ${offdays.join('، ')}` : '') + (bandsCfg ? `\n\nساعت‌های بهتر C6: ${(bandsCfg.bands.C6 || []).map(([a, b]) => `${a}–${b}`).join('، ')} · ساعت شخصی هر نفر (±۴۵ دقیقه) · پرهیز: ${bandsCfg.avoid.map(([a, b]) => `${a}–${b}`).join('، ') || '—'}` : '')
+  DAY_NAMES.map((d) => `${DAY_FA[d]}: ${windows[d] ? `${windows[d][0]}–${windows[d][1]}` : 'تعطیل'}`).join('\n') + `\nتعطیلی ثابت: نوروز، ۱۲ و ۱۳ فروردین، ۱۴ و ۱۵ خرداد، ۲۲ بهمن، ۲۹ اسفند` + (offdays.length ? `\nتعطیلی‌های اضافه: ${offdays.join('، ')}` : '') + (bandsCfg ? `\n\nساعت‌های بهتر: ${Object.entries(bandsCfg.bands).map(([id, r]) => `${id}: ${r.map(([a, b]) => `${a}–${b}`).join('، ')}`).join(' · ')} · ساعت شخصی هر نفر (±۴۵ دقیقه) · پرهیز: ${bandsCfg.avoid.map(([a, b]) => `${a}–${b}`).join('، ') || '—'}` : '')
