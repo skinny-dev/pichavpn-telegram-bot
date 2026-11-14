@@ -156,6 +156,13 @@ ${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="
   //   spec: { style:'f', layout:'wide-r'|'story'|'square', bg:'file.png', hero?:'file.png', cat?:{eyes,acc}, theme, title, subtitle, chips, cta, handle }
   f: (s) => {
     const L = LAYOUTS[s.layout || 'wide-r'], uri = s.bg ? assetUri(s.bg) : '', hero = s.hero ? assetUri(s.hero) : ''
+    // bgScale / bgX / bgY (layout px) shrink and shift a full background so its object lands in the hero zone and stays off the text
+    let bgPos = 'center/cover'
+    if (uri && (s.bgScale || s.bgX || s.bgY)) {
+      const b = Buffer.from(uri.split(',')[1], 'base64'), iw = b.readUInt32BE(16), ih = b.readUInt32BE(20) // PNG header
+      const cw = Math.max(L.w, (L.h * iw) / ih), W = cw * (s.bgScale || 1), H = (W * ih) / iw
+      bgPos = `${(L.w - W) / 2 + (s.bgX || 0)}px ${(L.h - H) / 2 + (s.bgY || 0)}px/${W}px ${H}px no-repeat`
+    }
     const y2k = s.theme === 'y2k' // Y2K glossy palette: sky blue #42BCE8, pearl white #FAFCFD, lavender pink #E2A7E9 on pure black; hero objects are blended with «screen» (their black becomes transparent)
     const th = y2k ? ['#42BCE8', '#0a2a40'] : { cyan: ['#5eead4', '#0e7490'], pink: ['#f472b6', '#be185d'], amber: ['#fbbf24', '#b45309'], violet: ['#a78bfa', '#6d28d9'], green: ['#4ade80', '#15803d'], red: ['#fb7185', '#be123c'] }[s.theme || 'cyan']
     const k = L.w >= 1280 ? 1 : L.h > L.w ? 1.2 : 0.95 // type scale per layout
@@ -163,7 +170,7 @@ ${LOGOBAR()}<div class="txt"><h1>${s.title}</h1><p>${s.subtitle}</p><div class="
     const dir = L.h > L.w ? 'center' : 'right'
     return `<style>
 body{width:${L.w}px;height:${L.h}px;margin:0;font-family:V,sans-serif;position:relative;overflow:hidden;color:#fff;direction:ltr;background:#05080d}
-.bg{position:absolute;inset:0;background:${uri ? `url('${uri}') center/cover` : y2k ? '#000' : `radial-gradient(ellipse at 30% 45%,${th[1]},#060b18 70%)`}}
+.bg{position:absolute;inset:0;background:${uri ? `#000 url('${uri}') ${bgPos}` : y2k ? '#000' : `radial-gradient(ellipse at 30% 45%,${th[1]},#060b18 70%)`}}
 .glow{${box('hero', 'border-radius:50%;background:radial-gradient(circle,#42BCE833,#42BCE800 68%);transform:scale(1.35)')}}
 .shade{position:absolute;inset:0;background:${y2k ? 'transparent' : L.h > L.w ? 'linear-gradient(180deg,rgba(5,8,13,.55),rgba(5,8,13,.25) 40%,rgba(5,8,13,.7) 100%)' : 'linear-gradient(90deg,rgba(5,8,13,.1),rgba(5,8,13,.5) 45%,rgba(5,8,13,.78))'}}
 .logo{${box('logo', 'display:flex;align-items:center;justify-content:' + (dir === 'center' ? 'center' : 'flex-end') + ';direction:rtl;font-weight:900;font-size:' + 34 * k + 'px;gap:14px')}}
