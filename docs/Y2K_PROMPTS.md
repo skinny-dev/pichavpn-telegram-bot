@@ -82,3 +82,66 @@ PNG را در `growth/brand/assets/` بگذارید (در گیت نمی‌رود
 `layout` می‌تواند `wide-r` / `story` / `square` باشد. `"blend": false` اگر تصویرتان پس‌زمینهٔ سیاه خالص ندارد.
 
 قانون‌ها: متن‌های تصویر را خودمان می‌گذاریم (فارسی در ChatGPT خراب می‌شود)؛ هیچ تخفیف یا فوریت ساختگی؛ لحن «درود».
+
+---
+
+# پس‌زمینهٔ کامل (با جای خالی برای متن)
+
+ChatGPT یک تصویر کامل می‌سازد؛ ما لوگو، عنوان، زیرعنوان، چیپ و دکمه را روی آن می‌گذاریم. پس نواحی متن باید **تاریک و ساکت** بمانند. بخش مشترک زیر را همیشه نگه دارید و فقط `{SCENE}` و بلوک «Layout» اندازه را عوض کنید.
+
+## بخش مشترک
+
+```
+Y2K futuristic glossy 3D background artwork, no text.
+
+Scene: {SCENE}. Made of a few bold abstract geometric forms: smooth rounded inflated 3D, high-gloss translucent resin / acrylic, soft beveled edges, gradients from electric sky blue to pearlescent white to soft lavender pink, strong white specular highlights, electric blue internal glow, delicate lavender-pink edge reflections, soft box lighting. Clean, sculptural, playful yet premium.
+
+Palette (ONLY these three colors): Electric Sky Blue #42BCE8 (dominant), Pearlescent White #FAFCFD, Soft Lavender Pink #E2A7E9. Background is pure black #000000 with, at most, a very faint blue glow behind the main object.
+
+The empty areas must stay completely flat black #000000: no objects, no glow, no texture, no stars, no noise. Crisp high-quality 3D render, strong contrast. No typography, no letters, no logo, no watermark, no frames, no guide boxes.
+
+Avoid: rainbow or iridescent colors, purple / green / yellow / orange / red additions, metallic industrial textures, photorealistic environments, excessive detail, flat or cartoon outlines, unnecessary shadows, matte or rough materials.
+```
+
+## بلوک Layout (یکی را به آخر بخش مشترک بچسبانید)
+
+**افقی `1536×1024`** (برش ما: بالا و پایین ±۸٪):
+```
+Layout (landscape 1536x1024): place the main object on the LEFT, centered at 26% from the left and 55% from the top, about 36% of the image width. Place two or three tiny glossy accent shapes (each under 6% of the width) near the object only. Keep the whole RIGHT half (from 47% to the right edge), the top 14% and the bottom 10% pure flat black.
+```
+
+**استوری `1024×1536`** (برش ما: چپ و راست ±۸٪):
+```
+Layout (portrait 1024x1536): place the main object in the CENTER, centered horizontally and at 52% from the top, about 60% of the width. Place two or three tiny glossy accent shapes near the object only. Keep the top 30% and the bottom 28% pure flat black.
+```
+
+**مربع `1024×1024`**:
+```
+Layout (square 1024x1024): place the main object on the LEFT, centered at 24% from the left and 59% from the top, about 38% of the width. Place two or three tiny glossy accent shapes near the object only. Keep the whole right half and the top 20% pure flat black, plus the bottom-right corner.
+```
+
+## جای هر عنصر (برای اطلاع؛ در پرامپت نمی‌نویسیم)
+
+| عنصر | افقی | استوری | مربع |
+|---|---|---|---|
+| لوگو | راست‌بالا، x ۷۸–۹۶٪، y ۵–۱۴٪ | بالا وسط، y ۶–۱۰٪ | راست‌بالا |
+| عنوان | راست، x ۴۷–۹۶٪، y ۲۱–۵۳٪ | y ۱۴–۳۴٪ | راست، y ۱۷–۴۵٪ |
+| زیرعنوان و چیپ | راست، y ۵۴–۷۷٪ | y ۷۱–۸۵٪ | راست، y ۴۵–۶۶٪ |
+| دکمه | راست‌پایین، y ۸۱–۹۳٪ | y ۸۶–۹۲٪ | راست‌پایین، y ۸۳–۹۲٪ |
+| شیء | چپ | وسط، y ۳۵–۶۹٪ | چپ |
+
+راهنمای تصویری هر اندازه: `growth/banner/layouts/guide-wide-r.png`, `guide-story.png`, `guide-square.png`. هنگام پرامپت دادن این‌ها را پیوست نکنید، چون ChatGPT مرزها را روی تصویر می‌کشد.
+
+## `{SCENE}` برای هر مناسبت
+
+- جمعهٔ گربهٔ سیاه / روز گربه: the attached cat-head logo silhouette (two pointed ears, two vertical bar eyes, curled tail), inflated into glossy resin
+- یلدا: an inflated watermelon slice
+- روز برنامه‌نویس: inflated curly brackets
+- روز طراح: an inflated pen-tool nib with a bezier curve
+- روز معمار: an inflated arch and cube house
+- اتصال یا آموزش: three inflated wifi arcs with a dot
+- هدیه ۱۰ گیگ: an inflated gift box with a bow
+
+## استفاده
+
+PNG را در `growth/brand/assets/` بگذارید و `{"style":"f","layout":"wide-r","theme":"y2k","bg":"file.png",...}` بدهید و `"hero"` را خالی بگذارید. اگر مرز را رعایت نکرد، همان روش اولِ بالا (شیء جدا) همیشه جواب می‌دهد.
