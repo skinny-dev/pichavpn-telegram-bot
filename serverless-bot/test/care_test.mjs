@@ -30,6 +30,7 @@ const a1 = await invoice(7101, 30)
 let r = await careRun(c, { at: NOON })
 check('off by default: nothing is sent', r.sent === 0 && r.reason === 'off' && texts().length === 0)
 await kvSet('care:on:C6', '1')
+await kvSet('care:bands', JSON.stringify({ C6: [[0, 24]] })); await kvSet('care:avoid', '[]') // the older checks run at any hour; the hour rules are tested below
 
 // quiet hours
 r = await careRun(c, { at: LATE })
@@ -104,9 +105,30 @@ calls.length = 0
 r = await careRun(c, { at: NOON + 10 * DAY })
 check('daily cap holds (max_day = 1: one message, the next waits for tomorrow)', r.sent === 1 && texts().length === 1 && [(await kvGet(`care:C6:7101:${d2a}`)), (await kvGet(`care:C6:7102:${d2b}`))].filter((v) => v !== null).length === 1, JSON.stringify(r))
 
+// sales-psychology hours: bands, personal hour, lunch avoided
+await kvSet('care:bands', JSON.stringify({ C6: [[10, 12], [18.5, 20.5]] })); await kvSet('care:avoid', JSON.stringify([[13, 15]]))
+const T0 = base + 20 * DAY // a Friday+… far enough: use a Saturday
+const SAT = base + 28 * DAY // Saturday again (4 weeks later)
+const H = (h) => SAT + h * 3600
+await kvSet('care:max_day', '100')
+for (const u of [7101, 7102, 7103, 7104, 7105, 7106]) { await kvSet('care:last:' + u, '0'); await kvSet('care:optout:' + u, '0'); await db.run(sql`DELETE FROM support_message WHERE iduser = ${String(u)}`) }
+await db.run(sql`DELETE FROM invoice WHERE id_user IN ('7101','7102','7103','7104','7105','7106') AND name_product != ${TEST}`)
+// A took the test at 11:00 Tehran two days before, B at 16:45, C at 06:00
+const mk = (uid, hourTaken, daysAgo) => invoice(uid, 0, TEST, 'active', SAT - daysAgo * DAY + hourTaken * 3600)
+const iA = await mk(7101, 11, 2), iB = await mk(7102, 16.75, 2), iC = await mk(7104, 6, 2)
+calls.length = 0
+r = await careRun(c, { at: H(13.5) })
+check('lunch (13–15): nobody is written to', r.sent === 0 && r.why === 'avoid_hours', JSON.stringify(r))
+calls.length = 0
+r = await careRun(c, { at: H(16.7) })
+check('outside the bands: only the person whose own hour it is (16:45) gets it', r.sent === 1 && texts().length === 1 && texts()[0][1].chat_id === '7102', JSON.stringify(texts().map(([, p]) => p.chat_id)))
+calls.length = 0
+r = await careRun(c, { at: H(10.5) })
+check('inside a band (10–12): everyone due may be written to', r.sent === 2 && texts().map(([, p]) => p.chat_id).sort().join() === '7101,7104', JSON.stringify(texts().map(([, p]) => p.chat_id)))
+
 // numbers for the admin
 const s = await careStats(c)
-check('stats: sent, answered and reasons', s.sent >= 3 && s.answered >= 2 && s.reasons.slow === 1 && s.reasons.good === 1 && s.optouts === 1 && s.skipped.bought === 1, JSON.stringify(s))
+check('stats: sent, answered and reasons', s.sent >= 3 && s.answered >= 2 && Object.keys(s.byHour).length >= 1 && s.reasons.slow === 1 && s.reasons.good === 1 && s.optouts === 1 && s.skipped.bought === 1, JSON.stringify(s))
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')
 process.exit(fails ? 1 : 0)

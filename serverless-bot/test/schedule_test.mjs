@@ -5,7 +5,7 @@ import { sql } from 'sdk/db'
 let fails = 0
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' ' + extra}`); if (!ok) fails++ }
 await seed(process.argv[2])
-const { tehranParts, careTime, loadSchedule, DEFAULT_WINDOWS, describeSchedule } = await import('../tgcloud/lib/schedule.js')
+const { tehranParts, careTime, loadSchedule, loadBands, sendMode, DEFAULT_WINDOWS, describeSchedule } = await import('../tgcloud/lib/schedule.js')
 const { handleUpdate } = await import('../tgcloud/lib/bot.js')
 const at = (y, m, d, h = 12, mi = 0) => Date.UTC(y, m - 1, d, h, mi) / 1000 - 12600 // Tehran clock time
 
@@ -34,5 +34,15 @@ await say('/care window sat 21-9'); check('an impossible window is refused and n
 await say('/care offday add 1405/09/05'); check('/care offday add', (await loadSchedule()).offdays.includes('1405/09/05'))
 await say('/care offday del 1405/09/05'); check('/care offday del', !(await loadSchedule()).offdays.includes('1405/09/05'))
 await say('/care schedule'); check('/care schedule lists the week', /شنبه/.test(last()) && /جمعه/.test(last()) && /نوروز/.test(last()))
+// sales-psychology hours
+const B0 = await loadBands()
+check('defaults: C6 bands 10–12 and 18:30–20:30, lunch 13–15 avoided', JSON.stringify(B0.bands.C6) === '[[10,12],[18.5,20.5]]' && JSON.stringify(B0.avoid) === '[[13,15]]')
+check('11:00 is a band, 16:00 only personal, 14:00 none, 19:00 is a band', sendMode('C6', at(2026, 11, 14, 11), B0) === 'band' && sendMode('C6', at(2026, 11, 14, 16), B0) === 'personal' && sendMode('C6', at(2026, 11, 14, 14), B0) === 'none' && sendMode('C6', at(2026, 11, 14, 19), B0) === 'band')
+await say('/care band C6 9-10,17-19'); const B1 = await loadBands()
+check('/care band C6 changes the bands', JSON.stringify(B1.bands.C6) === '[[9,10],[17,19]]', last())
+await say('/care band C6 12-9'); check('an impossible band is refused', /نامعتبر/.test(last()) && JSON.stringify((await loadBands()).bands.C6) === '[[9,10],[17,19]]')
+await say('/care avoid off'); check('/care avoid off clears lunch avoidance', (await loadBands()).avoid.length === 0)
+await say('/care avoid 12.5-14.5'); check('/care avoid 12.5-14.5', JSON.stringify((await loadBands()).avoid) === '[[12.5,14.5]]')
+await say('/care hours'); check('/care hours answers (no data yet)', /نتیجهٔ ساعت ارسال/.test(last()))
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')
 process.exit(fails ? 1 : 0)

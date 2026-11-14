@@ -1,6 +1,6 @@
 // /care — the administrator's switch and numbers for the customer-care follow-ups (care.js)
 import { kvGet, kvSet } from '../db.js'
-import { loadSchedule, describeSchedule, DAY_NAMES } from '../schedule.js'
+import { loadSchedule, describeSchedule, loadBands, DAY_NAMES } from '../schedule.js'
 import { sendmessage } from '../tg.js'
 import { careStats } from '../care.js'
 
@@ -11,7 +11,29 @@ export const adminCareRoutes = [
     if (c.adminRow?.rule !== 'administrator') return false
     const t = String(c.text ?? '').trim()
     // /care schedule
-    if (/^\/care schedule$/.test(t)) { await sendmessage(c.from_id, '🗓 <b>زمان‌بندی پیام‌های مراقبتی</b> (به وقت تهران)\n\n' + describeSchedule(await loadSchedule()) + '\n\nتغییر: /care window thu 9-14 · /care window fri off · /care window all 9-20 · /care offday add 1405/09/05 · /care offday del 1405/09/05', null, 'HTML'); return true }
+    if (/^\/care schedule$/.test(t)) { await sendmessage(c.from_id, '🗓 <b>زمان‌بندی پیام‌های مراقبتی</b> (به وقت تهران)\n\n' + describeSchedule(await loadSchedule(), await loadBands()) + '\n\nتغییر: /care window thu 9-14 · /care window fri off · /care window all 9-20 · /care offday add 1405/09/05 · /care offday del 1405/09/05 · /care band C6 10-12,18.5-20.5 · /care avoid 13-15 (یا off) · /care hours', null, 'HTML'); return true }
+    // /care band C6 10-12,18.5-20.5   ·   /care avoid 13-15|off
+    const ranges = (str) => { const out = []; for (const part of str.split(',')) { const mm = /^(\d{1,2}(?:\.\d)?)-(\d{1,2}(?:\.\d)?)$/.exec(part.trim()); if (!mm) return null; const a = num(mm[1]), b = num(mm[2]); if (a === null || b === null || a >= b) return null; out.push([a, b]) } return out }
+    let bm = /^\/care band (C6) (\S+)$/.exec(t)
+    if (bm) {
+      const r = ranges(bm[2])
+      if (!r) { await sendmessage(c.from_id, 'ساعت‌ها نامعتبر است (مثال: 10-12,18.5-20.5).', null, 'HTML'); return true }
+      let cur = {}; try { cur = JSON.parse((await kvGet('care:bands')) || '{}') } catch { cur = {} }
+      cur[bm[1]] = r; await kvSet('care:bands', JSON.stringify(cur))
+      await sendmessage(c.from_id, '✅ ثبت شد.\n\n' + describeSchedule(await loadSchedule(), await loadBands()), null, 'HTML'); return true
+    }
+    bm = /^\/care avoid (\S+)$/.exec(t)
+    if (bm) {
+      const r = bm[1] === 'off' ? [] : ranges(bm[1])
+      if (!r) { await sendmessage(c.from_id, 'ساعت‌ها نامعتبر است (مثال: 13-15 یا off).', null, 'HTML'); return true }
+      await kvSet('care:avoid', JSON.stringify(r))
+      await sendmessage(c.from_id, '✅ ثبت شد.\n\n' + describeSchedule(await loadSchedule(), await loadBands()), null, 'HTML'); return true
+    }
+    if (/^\/care hours$/.test(t)) {
+      const st = await careStats(c)
+      const rowsTxt = Object.entries(st.byHour).sort((x, y) => Number(x[0]) - Number(y[0])).map(([h, v]) => `${String(h).padStart(2, '0')}:00 — ارسال ${v.sent} · پاسخ ${v.answered} (${Math.round((100 * v.answered) / v.sent)}٪) · خرید ۴۸ساعته ${v.bought}`).join('\n') || 'هنوز دادهٔ کافی نیست.'
+      await sendmessage(c.from_id, '⏰ <b>نتیجهٔ ساعت ارسال C6</b>\n(ساعت‌های با پاسخ و خرید بیشتر را در /care band و /care avoid تقویت کنید؛ با ۳۰ ارسال به بالا در هر ساعت معنی دارد)\n\n' + rowsTxt, null, 'HTML'); return true
+    }
     // /care window <sat|…|fri|all|weekdays> <from>-<to>|off
     let m = /^\/care window (all|weekdays|sat|sun|mon|tue|wed|thu|fri) (?:(\d{1,2}(?:\.\d)?)-(\d{1,2}(?:\.\d)?)|(off))$/.exec(t)
     if (m) {

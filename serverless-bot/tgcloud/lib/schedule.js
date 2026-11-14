@@ -10,6 +10,12 @@ export const DEFAULT_WINDOWS = { sat: [9, 21], sun: [9, 21], mon: [9, 21], tue: 
 // fixed Jalali dates that are public holidays every year (the lunar ones move: add them with /care offday)
 export const FIXED_OFFDAYS = ['01/01', '01/02', '01/03', '01/04', '01/12', '01/13', '03/14', '03/15', '11/22', '12/29']
 
+// Best sending times per case (inside the working window). Reasons (hypotheses, measured by /care hours and adjusted):
+//  C6 test follow-up: the customer used the test the day before; they think about connection quality when they next use it — late morning (work
+//     starts, VPN needed for work/email) or early evening (social media peak, after work). Never over lunch (13–15), when attention is lowest.
+//  A message goes in the person's own hour too (±45 min of the hour they started their test) — that is when they use the internet.
+export const DEFAULT_BANDS = { C6: [[10, 12], [18.5, 20.5]] }
+export const DEFAULT_AVOID = [[13, 15]]
 const parse = (s) => { try { return JSON.parse(s) } catch { return null } }
 
 /** {dow: 'sat'…'fri', hour: 13.5, jmd: 'MM/DD', jymd: 'YYYY/MM/DD'} for a unix time, in Tehran */
@@ -40,5 +46,19 @@ export function careTime(at, { windows, offdays }) {
   return { ok: true }
 }
 
-export const describeSchedule = ({ windows, offdays }) =>
-  DAY_NAMES.map((d) => `${DAY_FA[d]}: ${windows[d] ? `${windows[d][0]}–${windows[d][1]}` : 'تعطیل'}`).join('\n') + `\nتعطیلی ثابت: نوروز، ۱۲ و ۱۳ فروردین، ۱۴ و ۱۵ خرداد، ۲۲ بهمن، ۲۹ اسفند` + (offdays.length ? `\nتعطیلی‌های اضافه: ${offdays.join('، ')}` : '')
+/** the configured bands/avoid ranges (kv `care:bands` {C6:[[a,b],…]}, `care:avoid` [[a,b],…]) */
+export async function loadBands() {
+  const b = parse(await kvGet('care:bands')) || {}
+  const a = parse(await kvGet('care:avoid'))
+  return { bands: { ...DEFAULT_BANDS, ...b }, avoid: Array.isArray(a) ? a : DEFAULT_AVOID }
+}
+const inAny = (h, ranges) => (ranges || []).some(([a, b]) => h >= a && h < b)
+/** 'band' = everyone due may be sent to now · 'personal' = only people whose own hour is now · 'none' = wait */
+export function sendMode(caseId, at, { bands, avoid }) {
+  const h = tehranParts(at).hour
+  if (inAny(h, avoid)) return 'none'
+  return inAny(h, bands[caseId]) ? 'band' : 'personal'
+}
+
+export const describeSchedule = ({ windows, offdays }, bandsCfg = null) =>
+  DAY_NAMES.map((d) => `${DAY_FA[d]}: ${windows[d] ? `${windows[d][0]}–${windows[d][1]}` : 'تعطیل'}`).join('\n') + `\nتعطیلی ثابت: نوروز، ۱۲ و ۱۳ فروردین، ۱۴ و ۱۵ خرداد، ۲۲ بهمن، ۲۹ اسفند` + (offdays.length ? `\nتعطیلی‌های اضافه: ${offdays.join('، ')}` : '') + (bandsCfg ? `\n\nساعت‌های بهتر C6: ${(bandsCfg.bands.C6 || []).map(([a, b]) => `${a}–${b}`).join('، ')} · ساعت شخصی هر نفر (±۴۵ دقیقه) · پرهیز: ${bandsCfg.avoid.map(([a, b]) => `${a}–${b}`).join('، ') || '—'}` : '')

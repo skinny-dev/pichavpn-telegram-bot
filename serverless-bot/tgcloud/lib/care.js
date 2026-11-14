@@ -8,7 +8,7 @@
 import { one, all, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage, Editmessagetext, answerCallback } from './tg.js'
 import { J, intval } from './php.js'
-import { loadSchedule, careTime } from './schedule.js'
+import { loadSchedule, careTime, loadBands, sendMode, tehranParts } from './schedule.js'
 
 const DAY = 86400
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -28,15 +28,20 @@ export async function careRun(c, { at = Math.floor(Date.now() / 1000), BATCH = 4
   if (!(await careOn('C6'))) return { sent: 0, reason: 'off' }
   const slot = careTime(at, await loadSchedule())
   if (!slot.ok) return { sent: 0, reason: 'quiet', why: slot.why }
+  const mode = sendMode('C6', at, await loadBands())
+  if (mode === 'none') return { sent: 0, reason: 'quiet', why: 'avoid_hours' }
   const T = c.T
+  const hourNow = tehranParts(at).hour
   const dayKey = 'care:day:' + Math.floor((at + 12600) / DAY)
   const maxDay = intval(await kvGet('care:max_day')) || 60
   let today = intval(await kvGet(dayKey))
   if (today >= maxDay) return { sent: 0, reason: 'daycap' }
   // test accounts 23 h – 6 days old that nobody has handled yet
+  const lo = mode === 'personal' ? hourNow - 0.75 : -1, hi = mode === 'personal' ? hourNow + 0.75 : 25 // personal: only people whose own hour (the hour they took the test) is now
   const rows = await all(sql`SELECT i.id_invoice, i.id_user, i.time_sell FROM invoice i
     WHERE i.name_product = ${T.common.labels.testServiceName} AND CAST(i.time_sell AS INTEGER) BETWEEN ${at - 6 * DAY} AND ${at - 23 * 3600}
       AND NOT EXISTS (SELECT 1 FROM kv k WHERE k.key = 'care:C6:' || i.id_user || ':' || i.id_invoice)
+      AND ((CAST(i.time_sell AS INTEGER) + 12600) % 86400) / 3600.0 BETWEEN ${lo} + 0 AND ${hi} + 0
     ORDER BY CAST(i.time_sell AS INTEGER) ASC LIMIT 25`)
   let sent = 0
   for (const r of rows) {
@@ -62,7 +67,7 @@ export async function careRun(c, { at = Math.floor(Date.now() / 1000), BATCH = 4
       const res = await sendmessage(r.id_user, C6_TEXT(u.namecustom && u.namecustom !== 'none' ? u.namecustom : ''), C6_KB(r.id_invoice), 'HTML')
       if (res && res.ok === false) { await skip('blocked'); continue }
     } catch { await skip('blocked'); continue }
-    await kvSet(key, JSON.stringify({ state: 'sent', at }))
+    await kvSet(key, JSON.stringify({ state: 'sent', at, mode }))
     await kvSet('care:last:' + r.id_user, String(at))
     await kvSet(dayKey, String(++today))
     await bump('care:n:C6:sent')
@@ -110,16 +115,19 @@ export const careRoutes = [
 export async function careStats(c) {
   const rows = await all(sql`SELECT key, value FROM kv WHERE key LIKE 'care:C6:%:%'`)
   let sent = 0, answered = 0, bought48 = 0
-  const skipped = {}
+  const skipped = {}, byHour = {}
   for (const r of rows) {
     const v = parse(r.value) || {}
     const uid = r.key.split(':')[2]
     if (v.state === 'skipped') { skipped[v.reason] = (skipped[v.reason] || 0) + 1; continue }
     sent++
-    if (v.state === 'answered') answered++
+    const hh = Math.floor(tehranParts(intval(v.at)).hour)
+    const bk = (byHour[hh] ||= { sent: 0, answered: 0, bought: 0 })
+    bk.sent++
+    if (v.state === 'answered') { answered++; bk.answered++ }
     const b = await one(sql`SELECT 1 AS x FROM invoice WHERE id_user = ${uid} AND name_product != ${c.T.common.labels.testServiceName} AND Status != 'Unpaid' AND CAST(time_sell AS INTEGER) BETWEEN ${intval(v.at)} AND ${intval(v.at) + 2 * DAY} LIMIT 1`)
-    if (b) bought48++
+    if (b) { bought48++; bk.bought++ }
   }
   const n = async (k) => intval(await kvGet('care:n:C6:' + k))
-  return { on: await careOn('C6'), sent, answered, bought48, skipped, reasons: { good: await n('good'), slow: await n('slow'), fail: await n('fail'), net: await n('net') }, optouts: await n('optout') }
+  return { on: await careOn('C6'), sent, answered, bought48, skipped, byHour, reasons: { good: await n('good'), slow: await n('slow'), fail: await n('fail'), net: await n('net') }, optouts: await n('optout') }
 }
