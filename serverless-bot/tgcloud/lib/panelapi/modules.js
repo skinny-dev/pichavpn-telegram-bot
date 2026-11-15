@@ -47,5 +47,7 @@ Object.assign(extra.exact, {
 })
 import * as studio from './studio.js'
 extra.prefix.push(['studio_', studio.route])
+import * as events from './events.js'
+extra.prefix.push(['event_', events.route])
 import { route as finRoute } from './finance/routes.js'
 extra.prefix.push(['fin_', finRoute])

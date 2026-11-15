@@ -14,6 +14,7 @@ const Finance = lazy(() => import('@/pages/finance'))
 const Support = lazy(() => import('@/pages/Support'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Studio = lazy(() => import('@/pages/Studio'))
+const Events = lazy(() => import('@/pages/Events'))
 const Users = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Users })))
 const Orders = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Orders })))
 const Products = lazy(() => import('@/pages/Resources').then((m) => ({ default: m.Products })))
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="finance/*" element={<Finance />} />
           <Route path="stats" element={<Stats />} />
           <Route path="studio" element={<Studio />} />
+          <Route path="events" element={<Events />} />
           <Route path="users" element={<Users />} />
           <Route path="orders" element={<Orders />} />
           <Route path="products" element={<Products />} />
