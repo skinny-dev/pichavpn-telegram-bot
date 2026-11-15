@@ -2,6 +2,7 @@
 //   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
+import { dataUser } from '../lib/panel.js'
 import { all, kvGet, one, sql } from '../lib/db.js'
 import { healthGet } from '../lib/gatehealth.js'
 import { paychiBase, paychiCall, paychiKey } from '../lib/paychi.js'
@@ -278,12 +279,24 @@ TOOLS.renewals = (() => {
     if (!user) return { usage: `npx tgcloud run endpoints/admin_report '{"tool":"renewals","user":"<numeric telegram id>"}'` }
     const rows = await all(sql`SELECT username, value, time, price, status FROM service_other WHERE id_user = ${user} AND type = 'extend_user' ORDER BY id DESC LIMIT 6`)
     const method = (await one(sql`SELECT Methodextend FROM marzban_panel WHERE status = 'active' LIMIT 1`))?.Methodextend ?? null
-    const out = rows.map((r) => {
+    const t = Math.floor(Date.now() / 1000)
+    const out = []
+    for (const r of rows) {
       let v = {}; try { v = JSON.parse(r.value) || {} } catch { v = {} }
       const at = tsOf(r.time), old = Number(v.oldtime) || 0
-      return { when_tehran: String(r.time), service: String(r.username).slice(0, 3) + '…', status: r.status, plan_days: Number(v.Service_time), plan_gb: Number(v.volumebuy), days_left_before: old ? Math.round((old - at) / 86400 * 10) / 10 : null, end_before: old ? new Date((old + 12600) * 1000).toISOString().slice(0, 16).replace('T', ' ') : null, toman_k: Math.round(Number(r.price) / 1000) }
-    })
-    return { user_renewals: out, panel_renewal_method: method, how_to_read: 'days_left_before = how many days the customer had left when they renewed; plan_days = what the plan gave. With the reset method the end date becomes now + plan_days (the old days are dropped).' }
+      const row = { when_tehran: String(r.time), service: String(r.username), status: r.status, plan_days: Number(v.Service_time), plan_gb: Number(v.volumebuy), days_left_before: old ? Math.round((old - at) / 86400 * 10) / 10 : null, end_before: old ? new Date((old + 12600) * 1000).toISOString().slice(0, 16).replace('T', ' ') : null, toman_k: Math.round(Number(r.price) / 1000) }
+      if (out.length < 3 && old > at) { // what the panel says NOW, and how many days are missing against the end date before the renewal (read-only)
+        try {
+          const inv = await one(sql`SELECT Service_location FROM invoice WHERE username = ${r.username}`)
+          const du = inv ? await dataUser(inv.Service_location, r.username) : null
+          const now = Number(du?.expire || 0)
+          if (du && du.status !== 'Unsuccessful') { row.end_now = now ? new Date((now + 12600) * 1000).toISOString().slice(0, 16).replace('T', ' ') : 'unlimited'; row.days_left_now = now ? Math.round((now - t) / 86400 * 10) / 10 : null; row.missing_days = now && old > now ? Math.ceil((old - now) / 86400) : 0 }
+          else row.end_now = 'panel unreachable: ' + String(du?.msg ?? 'no invoice').slice(0, 60)
+        } catch (e) { row.end_now = 'error: ' + String(e?.message ?? e).slice(0, 60) }
+      }
+      out.push(row)
+    }
+    return { user_renewals: out, fix: 'if missing_days > 0: Mini App → سفارشات → this service → «زمان اضافه» → days = missing_days (tick «اطلاع به کاربر» if you want him told)', panel_renewal_method: method, how_to_read: 'days_left_before = how many days the customer had left when they renewed; plan_days = what the plan gave. With the reset method the end date becomes now + plan_days (the old days are dropped).' }
   }
   return main
 })()
