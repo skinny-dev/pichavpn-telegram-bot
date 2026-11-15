@@ -12,6 +12,7 @@ import { pulseTick } from './pulse.js'
 import { syncHosts } from './servers.js'
 import { studioTick } from './studio.js'
 import { eventsTick } from './events.js'
+import { partnersTick } from './partners.js'
 import { gateHealthRun, notifyAdmins } from './gatehealth.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
@@ -202,6 +203,7 @@ const JOBS = [
   ['servers', 1800, () => syncHosts()],
   ['studio', 60, () => studioTick()],
   ['events', 60, () => eventsTick()],
+  ['partners', 3600, () => partnersTick()],
   ['gatehealth', 120, () => gateHealthRun(notifyAdmins)],
   ['notifications', 60, notifications],
   ['configtest', 120, configTest],

@@ -7,8 +7,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { seed } from '../seed.mjs'
 import { calls as botCalls } from 'sdk'
-import { handle } from '../../tgcloud/lib/panelapi/index.js'
-import '../../tgcloud/lib/panelapi/modules.js'
+import { handle } from './entry.mjs'
 
 const require = createRequire('/opt/pw-browsers/')
 const { chromium } = (() => { try { return require('playwright') } catch { return createRequire(import.meta.url)('playwright') } })()

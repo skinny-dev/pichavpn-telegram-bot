@@ -7,7 +7,7 @@ const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} $
 await seed(process.argv[2])
 const ep = (await import('../tgcloud/endpoints/panel.js')).default
 const admin = { initData: { user: { id: 99001 } } }
-for (const r of ['me', 'overview', 'stats', 'list', 'activity', 'support_unread', 'support_threads', 'pay_pending', 'order_options', 'promo_state', 'referrals', 'admins', 'fin_overview', 'mg_order', 'studio_state']) {
+for (const r of ['me', 'overview', 'stats', 'list', 'activity', 'support_unread', 'support_threads', 'pay_pending', 'order_options', 'promo_state', 'referrals', 'admins', 'fin_overview', 'mg_order', 'studio_state', 'event_state', 'partner_state']) {
   const x = await ep({ r, query: r === 'list' ? { resource: 'product' } : {}, body: {} }, admin)
   check(`${r} exists on the production entry point`, x.body?.error !== 'مسیر نامعتبر است', JSON.stringify(x).slice(0, 80))
 }
