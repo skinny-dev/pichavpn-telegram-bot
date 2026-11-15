@@ -269,6 +269,25 @@ async function main(input, ctx) {
   return main
 })()
 
+TOOLS.renewals = (() => {
+  // How was this customer's time changed? (their last renewals: the end date before it, the days of the plan, the days they had left)
+  const tsOf = (s) => { s = String(s ?? ''); if (/^\d{9,}$/.test(s)) return Number(s); const m = /^(\d{4})[/-](\d{2})[/-](\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 - 12600 : 0 }
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const user = String(input?.user ?? '').replace(/\D/g, '')
+    if (!user) return { usage: `npx tgcloud run endpoints/admin_report '{"tool":"renewals","user":"<numeric telegram id>"}'` }
+    const rows = await all(sql`SELECT username, value, time, price, status FROM service_other WHERE id_user = ${user} AND type = 'extend_user' ORDER BY id DESC LIMIT 6`)
+    const method = (await one(sql`SELECT Methodextend FROM marzban_panel WHERE status = 'active' LIMIT 1`))?.Methodextend ?? null
+    const out = rows.map((r) => {
+      let v = {}; try { v = JSON.parse(r.value) || {} } catch { v = {} }
+      const at = tsOf(r.time), old = Number(v.oldtime) || 0
+      return { when_tehran: String(r.time), service: String(r.username).slice(0, 3) + '…', status: r.status, plan_days: Number(v.Service_time), plan_gb: Number(v.volumebuy), days_left_before: old ? Math.round((old - at) / 86400 * 10) / 10 : null, end_before: old ? new Date((old + 12600) * 1000).toISOString().slice(0, 16).replace('T', ' ') : null, toman_k: Math.round(Number(r.price) / 1000) }
+    })
+    return { user_renewals: out, panel_renewal_method: method, how_to_read: 'days_left_before = how many days the customer had left when they renewed; plan_days = what the plan gave. With the reset method the end date becomes now + plan_days (the old days are dropped).' }
+  }
+  return main
+})()
+
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const fn = TOOLS[String(input?.tool ?? '')]

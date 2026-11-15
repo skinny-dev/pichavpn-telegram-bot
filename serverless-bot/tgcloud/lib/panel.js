@@ -263,6 +263,12 @@ export function extendMethodKey(value, labels = {}, def = 'resetVolumeTime') {
   return labels[value] ?? def
 }
 
+/** the new end date, but never earlier than the current one when the service is still running (0 = unlimited stays unlimited, an expired service is not touched) */
+export function neverShorten(timeNew, expireBefore, now) {
+  if (!timeNew || !expireBefore || expireBefore <= now) return timeNew
+  return Math.max(timeNew, expireBefore)
+}
+
 /** ManagePanel::extend — $panelCode is code_panel, like the PHP call sites */
 export async function extend(methodExtend, newLimitGb, timeDay, username, codeProduct, panelCode, labels = {}) {
   const panel = await panelByCode(panelCode)
@@ -280,6 +286,7 @@ export async function extend(methodExtend, newLimitGb, timeDay, username, codePr
   timeOld = now - timeOld > 0 ? now : timeOld
   let dataLimitNew = Number(newLimitGb) === 0 ? 0 : Number(newLimitGb) * GB
   const dataLimitNewAdd = Number(newLimitGb) === 0 ? 0 : oldLimit + Number(newLimitGb) * GB
+  const expireBefore = Number(du.expire || 0) // the end date the customer has now (0 = unlimited)
   let timeNew = Number(timeDay) === 0 ? 0 : now + Number(timeDay) * 86400
   timeOld = timeOld === 0 ? now : timeOld
   const timeNewAdd = Number(timeDay) === 0 ? 0 : timeOld + Number(timeDay) * 86400
@@ -301,6 +308,7 @@ export async function extend(methodExtend, newLimitGb, timeDay, username, codePr
     timeNew = timeNewAdd
     dataLimitNew = dataLimitNew + Math.max(0, Number(du.data_limit || 0) - Number(du.used_traffic || 0))
   }
+  timeNew = neverShorten(timeNew, expireBefore, now) // a renewal that RESETS the time must not end the service earlier than it already ends (10 days left + a 3-day plan used to leave 3)
   const data = { data_limit: dataLimitNew, expire: timeNew, inbounds }
   if (invoice && invoice.uuid != null && invoice.uuid !== "") data.proxies = parse(invoice.uuid) // the value read before it was cleared (as the PHP driver does)
   return modifyUser(panel.name_panel, username, data)
