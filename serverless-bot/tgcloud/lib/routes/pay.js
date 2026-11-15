@@ -1,5 +1,6 @@
 // Wallet top-up and paying for an order — index.php lines 4671–5916: amount, payment method (card-to-card, Variza,
 // Telegram Stars), receipt photo to the admins, gift code, tariff list.
+import { richOrPlain } from '../tgfmt.js'
 import { fetch } from 'sdk'
 import { one, run, sql, kvGet } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram, sendphoto, sendvideo } from '../tg.js'
@@ -411,12 +412,15 @@ export const payRoutes = [
         await sendmessage(c.from_id, B.varizaReceiptEarlyNote, null, 'HTML')
       }
     }
+    let reached = 0
     for (const id of c.admin_ids) {
       const a = await one(sql`SELECT rule FROM admin WHERE id_admin = ${id}`)
       if (a && a.rule === 'support') continue
-      await telegram('sendphoto', { chat_id: id, photo: c.photoid, caption: c.caption, parse_mode: 'HTML' })
-      await sendmessage(id, text, kb, 'HTML')
+      await telegram('sendphoto', { chat_id: id, photo: c.photoid, caption: c.caption }) // the customer's caption is plain text: no HTML parsing (a «<» in it used to drop the photo)
+      const r = await richOrPlain((d) => telegram('sendmessage', d), { chat_id: id, text, reply_markup: kb }) // an unparsable name falls back to plain text instead of vanishing
+      if (r && r.ok !== false) reached++
     }
+    if (reached === 0) await report(c, 'errorreport', `⚠️ رسید سفارش ${o.id_order} به هیچ ادمینی نرسید (ربات را استارت نکرده‌اند یا مسدود است). در پنل «پرداخت‌های معلق» تأیید کنید.`)
     await run(sql`UPDATE Payment_report SET payment_Status = 'waiting', at_updated = ${tehranDate()} WHERE id_order = ${o.id_order} AND payment_Status IN ('Unpaid','waiting')`)
     return true
   },

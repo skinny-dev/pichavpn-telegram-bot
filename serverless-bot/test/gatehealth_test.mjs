@@ -53,6 +53,17 @@ const st = JSON.parse((await db.get(sql`SELECT value FROM kv WHERE key = 'gate:h
 st.paychi.at -= 5000; await kvSet('gate:health', JSON.stringify(st))
 check('a stale «down» (the checker stopped) counts as healthy', (await buttons()).includes('paychi') && !(await gatewayDownSet()).has('paychi'))
 
+// our own probe breaking must never hide a button (production once threw «Not supported» from a dynamic import)
+const boom = { reach: async () => { throw new Error('Not supported') }, tetra: async () => { throw new Error('Not supported') } }
+await setPay('tetraminator_status', 'ontetraminator'); await setPay('tetraminator_api_key', 'k')
+await db.run(sql`DELETE FROM kv WHERE key = 'gate:health'`)
+sent.length = 0
+for (let i = 0; i < 4; i++) await H.gateHealthRun(notify, boom)
+check('a probe that throws never hides a gateway and never alarms', (await buttons()).includes('variza') && sent.length === 0 && !(await gatewayDownSet()).size)
+await kvSet('gate:health', JSON.stringify({ tetraminator: { ok: false, fails: 6, at: Math.floor(Date.now() / 1000), reason: 'Not supported' } }))
+await H.gateHealthRun(notify, boom)
+check('a gateway wrongly marked down comes back at the next check when the probe itself is what fails', !(await gatewayDownSet()).has('tetraminator'))
+await setPay('tetraminator_status', 'offtetraminator')
 // a gateway that is switched off is not checked
 await setPay('paychi_status', 'offpaychi'); up.paychi = true
 const s2 = await H.gateHealthRun(notify, probes)

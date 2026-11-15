@@ -9,6 +9,7 @@ import { one, all, sql, kvGet, kvSet } from './db.js'
 import { fetch } from 'sdk'
 import { withTimeout, abortAfter } from './timer.js'
 import { sendmessage } from './tg.js'
+import { tetraCall } from './tetraminator.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 export const FAILS_TO_HIDE = 2
@@ -27,7 +28,6 @@ export async function reach(url) {
 export const PROBES = {
   reach,
   tetra: async () => {
-    const { tetraCall } = await import('./tetraminator.js')
     const r = await tetraCall('GET', '/payment/inquiry/diagprobe', null, 8000)
     return r.http > 0 && r.http < 500 ? { ok: true } : { ok: false, reason: r.error || 'HTTP ' + r.http }
   },
@@ -67,15 +67,18 @@ export async function gateHealthRun(notify = async () => {}, probes = PROBES) {
   for (const [g, def] of Object.entries(CHECKS)) {
     if (!(await def.enabled())) { delete state[g]; continue }
     let r
-    try { r = await def.check(probes) } catch (e) { r = { ok: false, reason: String((e && e.message) || e).slice(0, 80) } }
+    try { r = await def.check(probes) } catch (e) { r = { ok: true, probeError: String((e && e.message) || e).slice(0, 80) } } // OUR check broke (not the gateway): never hide a button for that
     const old = state[g] || { ok: true, fails: 0, since: t }
     const st = { ...old, at: t, last: r.ok }
-    if (r.ok) {
-      st.fails = 0
+    if (r.probeError) {
+      st.ok = true; st.fails = 0; st.probe_error = r.probeError // shown, never reported as an outage
+      if (old.ok === false) await notify(`🟢 ${NAMES[g]}: دکمه به منوی پرداخت برگشت (بررسی اتصال خودش خطا داد، نه درگاه).`)
+    } else if (r.ok) {
+      st.fails = 0; delete st.probe_error
       if (old.ok === false) { st.ok = true; st.since = t; await notify(`🟢 ${NAMES[g]} دوباره وصل شد؛ دکمهٔ آن به منوی پرداخت برگشت.`) }
       st.ok = true; delete st.reason
     } else {
-      st.fails = (old.fails || 0) + 1; st.reason = r.reason
+      st.fails = (old.fails || 0) + 1; st.reason = r.reason; delete st.probe_error
       if (old.ok !== false && st.fails >= FAILS_TO_HIDE) { st.ok = false; st.since = t; await notify(`🔴 ${NAMES[g]} وصل نیست (${r.reason}). دکمهٔ آن از منوی پرداخت برداشته شد و به‌محض وصل شدن خودکار برمی‌گردد.`) }
       else st.ok = old.ok !== false
     }

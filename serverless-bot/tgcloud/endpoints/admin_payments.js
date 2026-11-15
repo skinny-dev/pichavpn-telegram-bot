@@ -18,6 +18,7 @@ export default async function (input, ctx) {
   out.last_payments = rows.map((r) => ({ order: String(r.id_order ?? '').slice(0, 4) + '…', age_min: Math.round((t - tsOf(r.time)) / 60), method: r.m, status: r.s, toman_k: Math.round(Number(r.price) / 1000), kind: String(r.id_invoice ?? '').split('|')[0].slice(0, 22) }))
   const since = new Date((t - 86400 + 12600) * 1000).toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/')
   out.last_24h = (await all(sql`SELECT Payment_Method AS m, payment_Status AS s, COUNT(*) AS n FROM Payment_report WHERE time >= ${since} GROUP BY 1, 2 ORDER BY 1, 2`)).map((r) => `${r.m}/${r.s}=${r.n}`)
+  out.waiting_rows = (await all(sql`SELECT id_order, time, Payment_Method AS m, id_invoice FROM Payment_report WHERE payment_Status = 'waiting' ORDER BY id DESC LIMIT 12`)).map((r) => ({ order: String(r.id_order ?? '').slice(0, 4) + '…', age_min: Math.round((t - tsOf(r.time)) / 60), method: r.m, kind: String(r.id_invoice ?? '').split('|')[0].slice(0, 22) }))
   out.stuck_waiting = Number((await one(sql`SELECT COUNT(*) AS n FROM Payment_report WHERE payment_Status = 'waiting'`)).n)
   out.stuck_unpaid_last_6h = (await all(sql`SELECT Payment_Method AS m, time FROM Payment_report WHERE payment_Status = 'Unpaid' ORDER BY id DESC LIMIT 60`)).filter((r) => t - tsOf(r.time) < 6 * 3600).length
 
