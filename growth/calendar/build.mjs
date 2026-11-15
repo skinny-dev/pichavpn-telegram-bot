@@ -46,7 +46,7 @@ for (const e of days) {
   checkSpec(id, e.spec)
 }
 for (let i = 0; i < MAIN.length; i++) if (!seen.has(i)) errors.push(`day ${i} missing`)
-const offType = days.filter((e) => e.type !== WEEKLY[e.wd] && !['جمعه‌ی سیاه', 'امنیت', 'نگهداشت'].includes(e.type) && !(e.wd === 'چهارشنبه' && ['پیشنهاد', 'نگهداشت'].includes(e.type)))
+const offType = days.filter((e) => e.type !== WEEKLY[e.wd] && !['بلک‌فرایدی', 'امنیت', 'نگهداشت'].includes(e.type) && !(e.wd === 'چهارشنبه' && ['پیشنهاد', 'نگهداشت'].includes(e.type)))
 for (const e of offType) errors.push(`day ${e.day}: type «${e.type}» ≠ weekday rhythm «${WEEKLY[e.wd]}»`)
 if (FORBIDDEN.test(textOf(occasions))) errors.push('occasions: religious/lunar wording')
 for (const o of occasions) checkSpec('occasion ' + o.id, o.spec)

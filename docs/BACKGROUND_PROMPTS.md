@@ -22,7 +22,7 @@ contrast, no bright white areas, no lens-flare in the empty zones.
 STRICT: no text, no letters, no numbers, no logos, no watermark, no people, no animals, no cats.
 Do not draw the guide boxes or their labels.
 ```
-`{ACCENT}`: صورتی (pink #f472b6) برای روز گربه · کهربایی (amber #fbbf24) یلدا/نوروز/جمعه · بنفش (violet #a78bfa) جمعهٔ گربهٔ سیاه · سبز (green #4ade80) آموزش/برنامه‌نویس.
+`{ACCENT}`: صورتی (pink #f472b6) برای روز گربه · کهربایی (amber #fbbf24) یلدا/نوروز/جمعه · بنفش (violet #a78bfa) بلک‌فرایدیِ گربه‌ها · سبز (green #4ade80) آموزش/برنامه‌نویس.
 
 ## چیدمان هر قالب (به پرامپت اضافه کنید)
 ### افقی `wide-r` (۱۲۸۰×۷۲۰ → از 1536×1024 بخواهید)
@@ -57,7 +57,7 @@ calm for a character.
 | مناسبت/پست | Scene (sci-fi) | ACCENT |
 |---|---|---|
 | روز گربه‌ها / روز بین‌المللی گربه | a neon rooftop terrace in a futuristic city at night, holographic koi-fish drones swimming in the air, a huge crescent moon and an orbital ring | pink |
-| جمعهٔ گربهٔ سیاه / روز گربهٔ سیاه | a cyberpunk megacity at night under a giant glowing crescent moon, shining rain, a huge neon billboard made only of light shapes (no text) | violet |
+| بلک‌فرایدیِ گربه‌ها / روز گربهٔ سیاه | a cyberpunk megacity at night under a giant glowing crescent moon, shining rain, a huge neon billboard made only of light shapes (no text) | violet |
 | شب یلدا | a sci-fi space-station greenhouse on the longest winter night, glowing watermelon-shaped and pomegranate-shaped energy orbs floating, warm light against deep space | amber |
 | نوروز | a futuristic spring garden under an orbital ring, holographic sprouts and seven glowing objects on a luminous table, goldfish-shaped light drones, soft dawn glow | amber |
 | روز برنامه‌نویس | a neon terminal city with floating streams of code-like light (abstract, unreadable), holographic keyboards and glowing server towers | green |

@@ -32,7 +32,7 @@ Square image, 1024x1024.
 
 | مناسبت | `{OBJECT}` |
 |---|---|
-| جمعهٔ گربهٔ سیاه (۶ آذر) / روز گربه | the attached cat-head logo silhouette (two pointed ears, two vertical bar eyes, a curled tail at the lower left), exactly that shape, inflated into glossy resin. Attach `growth/brand/picha-cat-1024.png` |
+| بلک‌فرایدیِ گربه‌ها (۶ آذر) / روز گربه | the attached cat-head logo silhouette (two pointed ears, two vertical bar eyes, a curled tail at the lower left), exactly that shape, inflated into glossy resin. Attach `growth/brand/picha-cat-1024.png` |
 | یلدا (۳۰ آذر) | an abstract inflated watermelon slice, simple rounded shape |
 | نوروز | an inflated sprout with two rounded leaves |
 | روز برنامه‌نویس | a pair of inflated curly brackets `{ }` as a 3D sculpture (shapes only, no text) |
@@ -134,7 +134,7 @@ Layout (square 1024x1024): place the main object on the LEFT, centered at 24% fr
 
 ## `{SCENE}` برای هر مناسبت
 
-- جمعهٔ گربهٔ سیاه / روز گربه: the attached cat-head logo silhouette (two pointed ears, two vertical bar eyes, curled tail), inflated into glossy resin
+- بلک‌فرایدیِ گربه‌ها / روز گربه: the attached cat-head logo silhouette (two pointed ears, two vertical bar eyes, curled tail), inflated into glossy resin
 - یلدا: an inflated watermelon slice
 - روز برنامه‌نویس: inflated curly brackets
 - روز طراح: an inflated pen-tool nib with a bezier curve

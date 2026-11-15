@@ -19,7 +19,7 @@ Do NOT include: any text, letters, logos, watermarks, people, or any cat/animal 
 | مناسبت | صحنه |
 |---|---|
 | روز گربه‌ها / روز بین‌المللی گربه | a cozy window at night with soft fairy lights and a few small stars, a fish-shaped paper lantern |
-| روز گربهٔ سیاه / جمعهٔ گربهٔ سیاه | a moonlit rooftop skyline at night with a huge glowing crescent moon and floating sparkles |
+| روز گربهٔ سیاه / بلک‌فرایدیِ گربه‌ها | a moonlit rooftop skyline at night with a huge glowing crescent moon and floating sparkles |
 | شب یلدا | a cozy winter night room with a sliced watermelon and pomegranates on a rug, warm lamp glow |
 | نوروز | a Haft-sin table corner with sprouts (sabzeh), goldfish bowl, hyacinth and soft spring light |
 | روز برنامه‌نویس | a dark desk with a glowing laptop showing abstract code lines, small neon plants and a coffee cup |
