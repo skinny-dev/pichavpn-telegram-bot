@@ -85,13 +85,25 @@ export async function settleTetraminator(c, o, deliver = null) {
   return res.result
 }
 /** lazy cron: a lost callback must not leave a paid customer waiting — ask about the newest open orders (at most 5 a run) */
+
+const tehranCut = (secondsAgo) => {
+  const d = new Date((now() - secondsAgo + 12600) * 1000), p = (n) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}/${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`
+}
+/** the open orders worth asking the gateway about: the newest ones every run, and the older ones (up to 36 h) every 10 minutes — the bot only runs when
+ *  someone writes to it, so after a quiet night a payment whose callback was lost must still be found, without asking about abandoned orders every 30 s */
+export async function openOrders(method) {
+  const recent = await all(sql`SELECT * FROM Payment_report WHERE Payment_Method = ${method} AND payment_Status IN ('Unpaid', 'waiting') AND time >= ${tehranCut(65 * 60)} ORDER BY time DESC LIMIT 5`)
+  let older = []
+  if (now() - intval(await kvGet('reconcile:old:' + method)) >= 600) {
+    await kvSet('reconcile:old:' + method, String(now()))
+    older = await all(sql`SELECT * FROM Payment_report WHERE Payment_Method = ${method} AND payment_Status IN ('Unpaid', 'waiting') AND time >= ${tehranCut(36 * 3600)} AND time < ${tehranCut(65 * 60)} ORDER BY time DESC LIMIT 8`)
+  }
+  return [...recent, ...older]
+}
 export async function tetraReconcile(c) {
   if (String((await pay('tetraminator_status')) ?? '') !== 'ontetraminator') return
-  const since = new Date((now() - 65 * 60 + 12600) * 1000)
-  const p = (n) => String(n).padStart(2, '0')
-  const cut = `${since.getUTCFullYear()}/${p(since.getUTCMonth() + 1)}/${p(since.getUTCDate())} ${p(since.getUTCHours())}:${p(since.getUTCMinutes())}:${p(since.getUTCSeconds())}`
-  const rows = await all(sql`SELECT * FROM Payment_report WHERE Payment_Method = 'tetraminator' AND payment_Status IN ('Unpaid', 'waiting') AND time >= ${cut} ORDER BY time DESC LIMIT 5`)
-  for (const o of rows) await settleTetraminator(c, o)
+  for (const o of await openOrders('tetraminator')) await settleTetraminator(c, o)
 }
 
 /** Paychi's webhook (POST, signed) or a bare GET ?order_id=…: only says which order to look at — the money is credited after an inquiry.
@@ -122,11 +134,7 @@ export async function settlePaychi(c, o, deliver = null) {
 /** lazy cron: a lost webhook must not leave a paid customer waiting — ask about the newest open orders (at most 5 a run) */
 export async function paychiReconcile(c) {
   if (String((await pay('paychi_status')) ?? '') !== 'onpaychi') return
-  const since = new Date((now() - 65 * 60 + 12600) * 1000)
-  const p = (n) => String(n).padStart(2, '0')
-  const cut = `${since.getUTCFullYear()}/${p(since.getUTCMonth() + 1)}/${p(since.getUTCDate())} ${p(since.getUTCHours())}:${p(since.getUTCMinutes())}:${p(since.getUTCSeconds())}`
-  const rows = await all(sql`SELECT * FROM Payment_report WHERE Payment_Method = 'paychi' AND payment_Status IN ('Unpaid', 'waiting') AND time >= ${cut} ORDER BY time DESC LIMIT 5`)
-  for (const o of rows) await settlePaychi(c, o)
+  for (const o of await openOrders('paychi')) await settlePaychi(c, o)
 }
 
 /** smsExtractPayload() + payment/sms_webhook.php */
@@ -176,6 +184,8 @@ export async function pullRelay(c, force = false) {
   if (!url || !key) return
   if (!force && now() - intval(await kvGet('relay:last_pull')) < RELAY_EVERY) return
   await kvSet('relay:last_pull', String(now()))
+  // one time: the relay's numbering used to restart at 1 and this pointer (5) hid the new events — start from 0; every handler is idempotent (an order already paid stays paid)
+  if ((await kvGet('relay:epoch')) !== '2') { await kvSet('relay:after', '0'); await kvSet('relay:epoch', '2') }
   let after = intval(await kvGet('relay:after'))
   let events = []
   try {

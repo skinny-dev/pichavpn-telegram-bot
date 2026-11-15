@@ -62,6 +62,35 @@ try {
   await db.run(sql`UPDATE kv SET value = '0' WHERE key = 'relay:last_pull'`)
   await handleUpdate({ update_id: 2, message: { message_id: 2, from: { id: 1001, first_name: 'Ali', username: 'ali', is_bot: false }, chat: { id: 1001, type: 'private' }, date: 1, text: '/start' } })
   check('second pull pays nothing again', (await bal('1001')) === 51000 && (await bal('1002')) === 32123)
+  // the event number never goes backwards, even when the queue empties (it used to restart at 1: the bot, which had seen 5, silently skipped the new events 1..5 — lost payments)
+  const events = async (after = 0) => (await (await fetch(`http://127.0.0.1:8140/pull?after=${after}`, { headers: { 'X-Relay-Key': KEY } })).json()).events
+  await fetch('http://127.0.0.1:8140/tetraminator?order_id=seqaaa111')
+  const before = (await events()).reduce((m, e) => Math.max(m, e.seq), 0)
+  const qf = path.join(dir, 'queue.jsonl')
+  fs.writeFileSync(qf, fs.readFileSync(qf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.stringify({ ...JSON.parse(l), at: now - 10 * 86400 })).join('\n') + '\n') // everything is older than the 7 days kept
+  await events() // the next request rewrites the file and the old rows are gone: the queue is EMPTY
+  await fetch('http://127.0.0.1:8140/tetraminator?order_id=seqbbb222')
+  const evs = await events()
+  check('the queue was emptied and the new event is the only one', evs.length === 1 && evs[0].query?.order_id === 'seqbbb222', JSON.stringify(evs.map((e) => e.seq)))
+  check('its number is higher than every number before (the bot would skip it otherwise)', evs[0].seq > before, `${evs[0].seq} <= ${before}`)
+  check('and a bot that has seen the old number still gets it', (await events(before)).length === 1)
+  // the bot's old pointer (5) must not hide events: one time it starts again from 0
+  await db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('relay:after', '5', 0)`)
+  await db.run(sql`DELETE FROM kv WHERE key = 'relay:epoch'`)
+  fs.writeFileSync(qf, JSON.stringify({ seq: 3, at: now, type: 'tetraminator', query: { order_id: 'nosuchorder' } }) + '\n') // an old-style small number
+  await db.run(sql`UPDATE kv SET value = '0' WHERE key = 'relay:last_pull'`)
+  await handleUpdate({ update_id: 9, message: { message_id: 9, from: { id: 1001, first_name: 'Ali', username: 'ali', is_bot: false }, chat: { id: 1001, type: 'private' }, date: now, text: '/start' } })
+  const afterNow = Number((await db.get(sql`SELECT value FROM kv WHERE key = 'relay:after'`)).value)
+  check('the pointer was reset once: event number 3 was looked at although the bot had seen 5', afterNow === 3 && (await db.get(sql`SELECT value FROM kv WHERE key = 'relay:epoch'`)).value === '2', String(afterNow))
+  // older open orders (up to 36 h) are asked about every 10 minutes, the newest every run
+  const { openOrders } = await import('../tgcloud/lib/relay.js')
+  const iso = (t) => tehran(t)
+  for (const [id, ago] of [['old3h', 3 * 3600], ['old40h', 40 * 3600], ['new10m', 600]]) await db.run(sql`INSERT INTO Payment_report (id_user, id_order, time, price, payment_Status, Payment_Method, id_invoice, dec_not_confirmed) VALUES ('1001', ${id}, ${iso(now - ago)}, '50000', 'Unpaid', 'tetraminator', 'none', 'pid')`)
+  await db.run(sql`DELETE FROM kv WHERE key = 'reconcile:old:tetraminator'`)
+  const first = (await openOrders('tetraminator')).map((o) => o.id_order)
+  check('a 3-hour-old open order is asked about (after a quiet night), a 40-hour-old one is not', first.includes('old3h') && first.includes('new10m') && !first.includes('old40h'), JSON.stringify(first))
+  const second = (await openOrders('tetraminator')).map((o) => o.id_order)
+  check('the older ones are not asked again within 10 minutes, the newest still are', !second.includes('old3h') && second.includes('new10m'), JSON.stringify(second))
 } finally {
   php.kill()
   fs.rmSync(dir, { recursive: true, force: true })

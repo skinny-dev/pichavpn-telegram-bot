@@ -24,12 +24,12 @@ export default async function (input, ctx) {
 
   const url = String((await kvGet('config:pay_relay_url')) || '').replace(/\/+$/, ''), key = String((await kvGet('config:pay_relay_key')) || '')
   const after = Number(await kvGet('relay:after')) || 0, lastPull = Number(await kvGet('relay:last_pull')) || 0
-  out.relay = { url_set: !!url, key_set: !!key, last_pull_age_s: lastPull ? t - lastPull : null, after }
+  out.relay = { url_set: !!url, key_set: !!key, last_pull_age_s: lastPull ? t - lastPull : null, after, epoch: (await kvGet('relay:epoch')) ?? null, peek_all: !!input?.peek_all }
   if (url && key) {
     try {
-      const res = await withTimeout(fetch(`${url}/pull?after=${after}`, { headers: { 'X-Relay-Key': key, Accept: 'application/json' }, ...abortAfter(10000) }), 10000)
+      const res = await withTimeout(fetch(`${url}/pull?after=${input?.peek_all ? 0 : after}`, { headers: { 'X-Relay-Key': key, Accept: 'application/json' }, ...abortAfter(10000) }), 10000)
       const d = JSON.parse(await res.text())
-      out.relay.peek = { http: res.status, waiting: (d.events || []).filter((e) => Number(e.seq) > after).map((e) => ({ seq: e.seq, type: e.type, age_s: e.ts ? t - Number(e.ts) : null })).slice(0, 15) }
+      out.relay.peek = { http: res.status, waiting: (d.events || []).filter((e) => input?.peek_all || Number(e.seq) > after).map((e) => ({ seq: e.seq, type: e.type, age_s: e.ts ? t - Number(e.ts) : null })).slice(0, 15) }
     } catch (e) { out.relay.peek = { error: String((e && e.message) || e).slice(0, 80) } }
   }
   const JOBS = ['broadcast', 'tetraminator', 'paychi', 'care', 'pulse', 'servers', 'studio', 'events', 'gatehealth', 'partners', 'notifications', 'configtest', 'payment_expire', 'alert_balance', 'on_hold', 'statusday', 'optimize_order', 'expireagent']

@@ -48,7 +48,10 @@ function withQueue(?array $add, int $after = 0, int $ack = 0): array
     $fh = fopen($file, 'c+');
     flock($fh, LOCK_EX);
     $rows = [];
-    $seq = 0;
+    // the number of an event only ever goes UP: it used to restart at 1 when the queue had emptied, and the bot (which had seen 5) then skipped
+    // the new events 1..5 for good. It is kept in a file of its own and is never lower than the clock (so it passes a pointer set by the old numbering).
+    $seqFile = rtrim(RELAY_DIR, '/') . '/seq';
+    $seq = (int) @file_get_contents($seqFile);
     while (($line = fgets($fh)) !== false) {
         $e = json_decode($line, true);
         if (!is_array($e) || !isset($e['seq'])) {
@@ -67,7 +70,9 @@ function withQueue(?array $add, int $after = 0, int $ack = 0): array
             fclose($fh);
             reply(503, ['ok' => false, 'error' => 'queue full']);
         }
-        $rows[] = ['seq' => $seq + 1, 'at' => time()] + $add;
+        $next = max($seq + 1, time());
+        $rows[] = ['seq' => $next, 'at' => time()] + $add;
+        @file_put_contents($seqFile, (string) $next, LOCK_EX);
     }
     ftruncate($fh, 0);
     rewind($fh);
