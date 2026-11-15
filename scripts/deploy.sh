@@ -49,6 +49,12 @@ else
 fi
 [ -f "$TMP/index.php" ] || die "download looks wrong (no index.php)"
 
+# the Serverless project is mirrored, not merged: a file removed from the repo must go from the server too (a leftover endpoint counted against the
+# platform's 100-module limit and `tgcloud push` failed with «Too many modules per app»)
+if [ -d "$TMP/serverless-bot" ]; then
+  rm -rf "$APP/serverless-bot/tgcloud" "$APP/serverless-bot/dist" "$APP/serverless-bot/tools"
+fi
+
 say "copying files (skipping installer, config, backups, tests, dev sources)"
 shopt -s dotglob nullglob
 n=0
