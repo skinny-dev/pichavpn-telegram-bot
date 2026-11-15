@@ -1,5 +1,6 @@
 // Product / category / duration keyboards (keyboard.php), product order (sortProductRows), promotions
 // (promo_lib.php), custom-service price (custom_price.php) and savedata() — the same results as the PHP bot.
+import { gatewayDownSet } from './gatepause.js'
 import { one, all, run, sql, kvGet } from './db.js'
 import { catalogLabel, emojiConfig } from './emoji.js'
 import { numberFormat, intval, J, time } from './php.js'
@@ -341,12 +342,15 @@ export const changes = (r) => Number(r?.rowsAffected ?? r?.changes ?? r?.meta?.c
 /** $step_payment of keyboard.php (the payment methods offered when the wallet is short) */
 export async function stepPaymentKb(c) {
   const T = c.T
+  const down = await gatewayDownSet() // found disconnected by the health check (gatehealth.js): no button, so nobody pays into a dead gateway
   const rows = await all(sql`SELECT NamePay, ValuePay FROM PaySetting`)
   const pay = (name, def = null) => { const r = rows.find((x) => String(x.NamePay ?? '').trim().toLowerCase() === name.toLowerCase()); return r ? r.ValuePay : def }
   const users = c.usersBefore || {}
   let kb = []
   if (pay('Cartstatus') === 'oncard' && intval(users.cardpayment) === 1) {
-    kb.push(pay('Cartstatuspv') === 'oncardpv' ? [{ text: T.textbot.cartToCart, url: `https://t.me/${pay('CartDirect') ?? ''}` }] : [{ text: T.textbot.cartToCart, callback_data: 'cart_to_offline' }])
+    const hasCard = !!(await one(sql`SELECT 1 AS x FROM card_number WHERE TRIM(COALESCE(cardnumber, '')) != '' AND TRIM(COALESCE(namecard, '')) != '' LIMIT 1`)) // no card to pay to: no button
+    if (pay('Cartstatuspv') === 'oncardpv') kb.push([{ text: T.textbot.cartToCart, url: `https://t.me/${pay('CartDirect') ?? ''}` }])
+    else if (hasCard) kb.push([{ text: T.textbot.cartToCart, callback_data: 'cart_to_offline' }])
   }
   const paid = Number((await one(sql`SELECT COUNT(*) AS n FROM Payment_report WHERE id_user = ${c.from_id} AND payment_Status = 'paid'`)).n)
   if (paid === 0 && pay('checkpaycartfirst') === 'onpayverify') kb = []
@@ -362,11 +366,11 @@ export async function stepPaymentKb(c) {
   if (pay('statusiranpay3') === 'oniranpay3' && paid >= 2) kb.push([{ text: T.textbot.iranPay1, callback_data: 'iranpay3' }])
   if (pay('statusaqayepardakht') === 'onaqayepardakht') kb.push([{ text: T.textbot.aqayePardakht, callback_data: 'aqayepardakht' }])
   if (pay('zarinpalstatus') === 'onzarinpal') kb.push([{ text: T.textbot.zarinPal, callback_data: 'zarinpal' }])
-  if (pay('variza_status', 'offvariza') === 'onvariza' && set(pay('variza_api_token', '')) && set(pay('variza_webhook_secret', '')) && !paused('variza')) priority[1] = [{ text: T.textbot.variza, callback_data: 'variza' }]
-  if (pay('tetraminator_status', 'offtetraminator') === 'ontetraminator' && set(pay('tetraminator_api_key', '')) && !paused('tetraminator')) priority[0] = [{ text: T.textbot.tetraminator || '💳 پرداخت آنلاین', callback_data: 'tetraminator' }]
+  if (pay('variza_status', 'offvariza') === 'onvariza' && set(pay('variza_api_token', '')) && set(pay('variza_webhook_secret', '')) && !paused('variza') && !down.has('variza')) priority[1] = [{ text: T.textbot.variza, callback_data: 'variza' }]
+  if (pay('tetraminator_status', 'offtetraminator') === 'ontetraminator' && set(pay('tetraminator_api_key', '')) && !paused('tetraminator') && !down.has('tetraminator')) priority[0] = [{ text: T.textbot.tetraminator || '💳 پرداخت آنلاین', callback_data: 'tetraminator' }]
   if (pay('paymentstatussnotverify') === 'onverifypay') kb.push([{ text: T.textbot.paymentNotVerify, callback_data: 'paymentnotverify' }])
   // Paychi (own card-to-card service) sits next to Variza until it is trusted enough to replace it
-  if (pay('paychi_status', 'offpaychi') === 'onpaychi' && set(pay('paychi_api_key', '')) && set(pay('paychi_base_url', '')) && !paused('paychi')) priority[2] = [{ text: T.textbot.paychi || '💳 کارت به کارت (پی‌چی)', callback_data: 'paychi' }]
+  if (pay('paychi_status', 'offpaychi') === 'onpaychi' && set(pay('paychi_api_key', '')) && set(pay('paychi_base_url', '')) && !paused('paychi') && !down.has('paychi')) priority[2] = [{ text: T.textbot.paychi || '💳 کارت به کارت (پی‌چی)', callback_data: 'paychi' }]
   if (intval(pay('statusstar')) === 1) priority[3] = [{ text: T.textbot.starTelegram, callback_data: 'startelegrams' }]
   kb = [...priority.filter(Boolean), ...kb]
   kb.push([{ text: T.keyboard.closeList, callback_data: 'colselist' }])

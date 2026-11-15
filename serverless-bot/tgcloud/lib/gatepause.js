@@ -1,6 +1,6 @@
 // A gateway that is down (or refuses us) is hidden from the payment menu for a while — port of gateway_pause.php.
 // The pause lives in PaySetting as «<gateway>_pause_until» (unix time) and ends by itself.
-import { one, run, sql } from './db.js'
+import { one, run, sql, kvGet } from './db.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 
@@ -28,4 +28,14 @@ export function gatewayOutageSeconds(res) {
   const code = Number(res.http_code ?? 0)
   if (code === 401 || code === 403) return 1800
   return code === 0 || code >= 500 ? 600 : 0
+}
+
+/** the gateways the health check found DOWN (kv `gate:health`, written by gatehealth.js). Stale data (the checker stopped) counts as healthy: never hide a gateway on old news. */
+export const HEALTH_STALE = 900
+export async function gatewayDownSet() {
+  let st = {}
+  try { st = JSON.parse((await kvGet('gate:health')) || '{}') || {} } catch { st = {} }
+  const down = new Set()
+  for (const [g, v] of Object.entries(st)) if (v && v.ok === false && now() - Number(v.at || 0) < HEALTH_STALE) down.add(g)
+  return down
 }

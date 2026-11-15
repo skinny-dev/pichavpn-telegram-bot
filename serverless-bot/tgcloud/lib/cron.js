@@ -12,6 +12,7 @@ import { pulseTick } from './pulse.js'
 import { syncHosts } from './servers.js'
 import { studioTick } from './studio.js'
 import { eventsTick } from './events.js'
+import { gateHealthRun, notifyAdmins } from './gatehealth.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
@@ -201,6 +202,7 @@ const JOBS = [
   ['servers', 1800, () => syncHosts()],
   ['studio', 60, () => studioTick()],
   ['events', 60, () => eventsTick()],
+  ['gatehealth', 120, () => gateHealthRun(notifyAdmins)],
   ['notifications', 60, notifications],
   ['configtest', 120, configTest],
   ['payment_expire', 300, paymentExpire],

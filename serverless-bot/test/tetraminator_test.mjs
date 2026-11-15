@@ -136,6 +136,7 @@ try {
   // ---- the payment menu: online payment, automatic card-to-card, Stars, then the rest; paused ones hidden
   const T = { textbot: { cartToCart: 'CARD', variza: 'AUTO', tetraminator: 'ONLINE', starTelegram: 'STARS', zarinPal: 'ZARIN' }, keyboard: { closeList: 'CLOSE' } }
   const menu = async (extra = {}) => {
+    await db.run(sql`DELETE FROM card_number`); await db.run(sql`INSERT INTO card_number (cardnumber, namecard) VALUES ('6037991111111111', 'ali')`) // a card to pay to: without one the card-to-card button is hidden
     for (const [k, v] of Object.entries({ Cartstatus: 'oncard', Cartstatuspv: 'offcardpv', variza_status: 'onvariza', variza_api_token: 'x', variza_webhook_secret: 'y', statusstar: '1', zarinpalstatus: 'onzarinpal', checkpaycartfirst: 'offpayverify', nowpaymentstatus: 'offnowpayment', statusnowpayment: '0', digistatus: 'offdigi', statusSwapWallet: 'offnSolutions', statustarnado: 'offternado', statusiranpay3: 'offiranpay3', statusaqayepardakht: 'offaqayepardakht', paymentstatussnotverify: 'offverifypay', ...extra })) await setPay(k, v)
     return JSON.parse(await stepPaymentKb({ T, from_id: '7001', usersBefore: { cardpayment: 1 } })).inline_keyboard.map((r) => r[0].text)
   }

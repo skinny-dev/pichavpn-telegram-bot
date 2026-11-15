@@ -10,7 +10,7 @@ import { smsUniqueAmount, smsReconcileOrder, reportTs } from '../sms.js'
 import { pullRelay, settleTetraminator, settlePaychi } from '../relay.js'
 import { createPayTetraminator } from '../tetraminator.js'
 import { createPayPaychi, paychiPauseSeconds } from '../paychi.js'
-import { gatewayPause, varizaLimitReached, gatewayOutageSeconds } from '../gatepause.js'
+import { gatewayPause, varizaLimitReached, gatewayOutageSeconds, gatewayDownSet } from '../gatepause.js'
 import { sprintf, strtr, numberFormat, intval, time, randomHex, J } from '../php.js'
 
 const isNumeric = (v) => (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(v))
@@ -95,13 +95,13 @@ async function createPayVariza(c, price, orderId) {
 }
 
 /** the gateway is down / over its own limit: hide it for a while and give this customer the menu of the other methods at once */
-async function backToMenu(c, gateway, seconds, err) {
-  await gatewayPause(gateway, seconds)
+async function backToMenu(c, gateway, seconds, err, quiet = false) {
+  if (!quiet) await gatewayPause(gateway, seconds)
   const menu = JSON.parse(await stepPaymentKb(c))
   menu.inline_keyboard = menu.inline_keyboard.filter((row) => row[0]?.callback_data !== gateway)
   await sendmessage(c.from_id, c.T.users.Balance.gatewayTemporarilyOff || '⚠️ این روش پرداخت موقتاً در دسترس نیست.\nلطفاً یکی از روش‌های دیگر را انتخاب کنید 👇', J(menu), 'HTML')
   await step(c, 'get_step_payment')
-  await report(c, 'errorreport', `🚫 ${gateway}: ${String(err).slice(0, 300)}\n(دکمهٔ آن ${Math.round(seconds / 60)} دقیقه از منوی پرداخت مخفی شد)`)
+  if (!quiet) await report(c, 'errorreport', `🚫 ${gateway}: ${String(err).slice(0, 300)}\n(دکمهٔ آن ${Math.round(seconds / 60)} دقیقه از منوی پرداخت مخفی شد)`)
   return true
 }
 
@@ -142,6 +142,8 @@ export const payRoutes = [
     const GW = ['cart_to_offline', 'aqayepardakht', 'zarinpal', 'variza', 'tetraminator', 'paychi', 'plisio', 'nowpayment', 'iranpay1', 'iranpay2', 'iranpay4', 'iranpay3', 'digitaltron', 'startelegrams']
     if (!(c.user.step === 'get_step_payment' && GW.includes(c.datain))) return false
     const T = c.T, user = c.user, B = T.users.Balance
+    // an old menu on the customer's screen: the gateway has been found down since — no link, back to the other methods
+    if (['variza', 'paychi', 'tetraminator'].includes(c.datain) && (await gatewayDownSet()).has(c.datain)) return backToMenu(c, c.datain, 0, 'health check: down', true)
     const amount = user.Processing_value
     const range = async (minKey, maxKey) => {
       const lo = await pay(minKey), hi = await pay(maxKey)

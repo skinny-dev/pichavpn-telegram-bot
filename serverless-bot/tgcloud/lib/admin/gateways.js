@@ -2,6 +2,7 @@
 import { one, run, sql } from '../db.js'
 import { sendmessage, Editmessagetext, answerCallback } from '../tg.js'
 import { J } from '../php.js'
+import { healthGet, gateHealthRun, notifyAdmins } from '../gatehealth.js'
 
 export const GATEWAY_BTN = '💳 درگاه‌های کارت به کارت'
 const GW = {
@@ -13,15 +14,19 @@ const setPay = async (k, v) => { await run(sql`DELETE FROM PaySetting WHERE Name
 const filled = (v) => v !== '' && v !== '0'
 
 async function view() {
+  const health = await healthGet()
   const rows = []
   const kb = []
   for (const [id, g] of Object.entries(GW)) {
     const on = (await getPay(g.key)) === g.on
     const ready = (await Promise.all(g.need.map(async (k) => filled(await getPay(k))))).every(Boolean)
-    rows.push(`${on ? '🟢' : '⚫️'} ${g.name}: ${on ? 'روشن' : 'خاموش'}${ready ? '' : ' ⚠️ (کلید/آدرس ثبت نشده)'}`)
+    const h = health[id]
+    const hl = !on || !h ? '' : h.ok === false ? `\n     🔴 وصل نیست: ${h.reason || ''} — دکمه برای مشتری پنهان است` : '\n     🟢 وصل است (بررسی خودکار)'
+    rows.push(`${on ? '🟢' : '⚫️'} ${g.name}: ${on ? 'روشن' : 'خاموش'}${ready ? '' : ' ⚠️ (کلید/آدرس ثبت نشده)'}${hl}`)
     kb.push([{ text: on ? `⏹ خاموش کردن ${g.name}` : `▶️ روشن کردن ${g.name}`, callback_data: `gw_${on ? 'off' : 'on'}_${id}` }])
   }
-  return { text: '💳 <b>درگاه‌های کارت به کارت</b>\n\n' + rows.join('\n') + '\n\nخاموش‌کردن فقط دکمهٔ پرداخت را از دید مشتری برمی‌دارد؛ پرداخت‌های در جریان همچنان تأیید می‌شوند.', kb: J({ inline_keyboard: kb }) }
+  kb.push([{ text: '🔄 بررسی اتصال همین حالا', callback_data: 'gw_check' }])
+  return { text: '💳 <b>درگاه‌های کارت به کارت</b>\n\n' + rows.join('\n') + '\n\nدرگاهی که وصل نباشد خودکار از منوی پرداخت برداشته می‌شود و با وصل شدن برمی‌گردد.\nخاموش‌کردن فقط دکمهٔ پرداخت را از دید مشتری برمی‌دارد؛ پرداخت‌های در جریان همچنان تأیید می‌شوند.', kb: J({ inline_keyboard: kb }) }
 }
 
 export const adminGatewayRoutes = [
@@ -30,6 +35,13 @@ export const adminGatewayRoutes = [
     if (c.text === GATEWAY_BTN || c.text === '/gateways' || c.text === '/paychi') {
       const v = await view()
       await sendmessage(c.from_id, v.text, v.kb, 'HTML')
+      return true
+    }
+    if (c.datain === 'gw_check') {
+      await answerCallback(c.callback_query_id, 'در حال بررسی…')
+      await gateHealthRun(notifyAdmins)
+      const v = await view()
+      await Editmessagetext(c.from_id, c.message_id, v.text, v.kb, 'HTML')
       return true
     }
     const m = /^gw_(on|off)_(paychi|variza)$/.exec(c.datain ?? '')
