@@ -17,7 +17,7 @@ ssh root@168.222.43.253 'bash /root/pay_relay/install.sh pay.theownlypwcha.top'
 ## ۳. دیپلوی ربات
 ```
 bash scripts/deploy.sh && php scripts/serverless_setup.php project --main --full \
-  && cd /root/picha-serverless-main && npx tgcloud push && npx tgcloud run endpoints/admin_diag '{}'
+  && cd /root/picha-serverless-main && npx tgcloud push && npx tgcloud run endpoints/admin_report '{"tool":"diag"}'
 ```
 
 ## ۴. ثبت کلید (بدون نمایش در چت)
