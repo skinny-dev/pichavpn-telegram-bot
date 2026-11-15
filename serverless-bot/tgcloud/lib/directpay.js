@@ -1,6 +1,7 @@
 // DirectPayment() of function.php: a confirmed payment either finishes what it was for (a purchase waiting for
 // payment, a renewal, extra volume / time) or tops up the wallet. `c` is the update that confirmed it (the admin who
 // approved a receipt, or the customer's own Stars payment); confirmKb is the admin message's keyboard.
+import { receiptsClose } from './receipts.js'
 import { one, run, sql } from './db.js'
 import { sendmessage, Editmessagetext, telegram } from './tg.js'
 import { shop, tehranDate } from './bot.js'
@@ -35,6 +36,8 @@ export async function directPayment(c, orderId, confirmKb = null) {
   const bu = (await userBy(pay.id_user)) || {}
   const steppay = String(pay.id_invoice ?? '').split('|')
   if (steppay[0] === 'refunded') return
+  // the receipt messages other administrators (or this one, earlier) still have open: settled now — say so, take the buttons away. The one being edited here is left to the caller.
+  await receiptsClose(String(orderId), c.from_id && intval(c.message_id) !== 0 ? '✅ تأیید شد؛ لازم نیست کاری کنید.' : '✅ همین پرداخت خودکار تأیید شد (واریزا/درگاه)؛ لازم نیست کاری کنید.', { chat: c.from_id, message: c.message_id })
   await run(sql`UPDATE user SET Processing_value = '0', Processing_value_one = '0', Processing_value_tow = '0', Processing_value_four = '0' WHERE id = ${bu.id ?? null}`)
   const admins = c.admin_ids
   const adminMsg = async (text) => { if (c.from_id && intval(c.message_id) !== 0) await Editmessagetext(c.from_id, c.message_id, text, confirmKb) }

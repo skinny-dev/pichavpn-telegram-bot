@@ -34,5 +34,41 @@ replies.sendmessage = (p) => { if (admins.includes(String(p.chat_id))) throw new
 replies.sendphoto = (p) => { if (admins.includes(String(p.chat_id))) throw new BotApiError(403, 'Forbidden: bot was blocked by the user', 'sendphoto'); return { message_id: 1, chat: { id: Number(p.chat_id) }, date: 0 } }
 await run()
 check('no administrator reachable: the report channel is told with the order id', calls.some(([m, p]) => /sendmessage/i.test(m) && String(p.chat_id) === '-1001234567890' && /rcpt2/.test(String(p.text)) && /پرداخت‌های معلق/.test(String(p.text))), JSON.stringify(calls.map(([m, p]) => [m, p.chat_id])))
+
+// 3) the order is settled by the gateway AFTER the receipt went out: the administrators' messages are closed, buttons gone
+let mid = 100
+delete replies.sendphoto
+replies.sendmessage = (p) => ({ message_id: ++mid, chat: { id: Number(p.chat_id) }, date: 0 })
+const { directPayment } = await import('../tgcloud/lib/directpay.js')
+const { neutral } = await import('../tgcloud/lib/relay.js')
+const { adminPayRoutes } = await import('../tgcloud/lib/admin/payments.js')
+const kvGet = async (k) => (await db.get(sql`SELECT value FROM kv WHERE key = ${k}`))?.value ?? null
+await db.run(sql`UPDATE setting SET Channel_Report = ''`); c.setting = await db.get(sql`SELECT * FROM setting`)
+await setup('rcpt3')
+await run()
+const remembered = JSON.parse((await kvGet('receipt:rcpt3')) || '[]')
+check('every administrator message of the receipt is remembered', remembered.length === admins.length && remembered.every((r) => r.m > 100), JSON.stringify(remembered.map((r) => [r.c, r.m])))
+calls.length = 0
+await db.run(sql`UPDATE Payment_report SET payment_Status = 'paid' WHERE id_order = 'rcpt3'`)
+await directPayment(neutral(c), 'rcpt3') // Variza's webhook, a minute later
+const edits = calls.filter(([m]) => /editmessagetext/i.test(m)).map(([, p]) => p)
+check('the gateway settles it: every administrator message is edited with the note', admins.every((a) => edits.some((p) => String(p.chat_id) === a && /خودکار تأیید شد/.test(String(p.text)))), JSON.stringify(edits.map((p) => [p.chat_id, String(p.text).slice(-40)])))
+check('the original text stays and the buttons are removed', edits.every((p) => String(p.text).includes('rcpt3') || String(p.text).length > 60) && edits.every((p) => { const rm = typeof p.reply_markup === 'string' ? JSON.parse(p.reply_markup) : p.reply_markup; return !rm || (rm.inline_keyboard ?? []).length === 0 }))
+check('nothing is left to close', (await kvGet('receipt:rcpt3')) === null)
+calls.length = 0
+await directPayment(neutral(c), 'rcpt3')
+check('a repeat edits nothing more', !calls.some(([m]) => /editmessagetext/i.test(m)))
+
+// 4) one administrator approves: the others' copies are closed, his own is left to his handler
+await setup('rcpt4')
+await run()
+const mine = JSON.parse(await kvGet('receipt:rcpt4'))
+const first = mine[0]
+c.adminRow = { rule: 'administrator' }; c.from_id = first.c; c.datain = 'Confirm_pay_rcpt4'; c.message_id = first.m; c.callback_query_id = 'cb1'; c.text = ''; c.step = ''
+calls.length = 0
+let handled = false; for (const r of adminPayRoutes) { if (await r(c)) { handled = true; break } }
+const edited = calls.filter(([m]) => /editmessagetext/i.test(m)).map(([, p]) => `${p.chat_id}:${p.message_id}`)
+check('the approving administrator handled it', handled && (await db.get(sql`SELECT payment_Status AS s FROM Payment_report WHERE id_order = 'rcpt4'`)).s === 'paid')
+check('the other administrators\' copies were closed', mine.slice(1).every((r) => edited.includes(`${r.c}:${r.m}`)) || admins.length === 1, JSON.stringify(edited))
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)

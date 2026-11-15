@@ -3,6 +3,7 @@ import { one, run, sql } from '../db.js'
 import { sendmessage, Editmessagetext, telegram } from '../tg.js'
 import { step } from '../bot.js'
 import { directPayment } from '../directpay.js'
+import { receiptsClose } from '../receipts.js'
 import { keyboardAdmin, backAdmin } from './keyboards.js'
 import { sprintf, numberFormat, intval, J } from '../php.js'
 
@@ -65,6 +66,7 @@ export const adminPayRoutes = [
     await run(sql`UPDATE user SET Processing_value = ${o.id_user}, Processing_value_one = ${m[1]} WHERE id = ${c.from_id}`)
     if (o.payment_Status === 'reject' || o.payment_Status === 'paid') { await alert(c, T.Admin.Payment.reviewedPayment); return true }
     await run(sql`UPDATE Payment_report SET payment_Status = 'reject' WHERE id_order = ${m[1]}`)
+    await receiptsClose(m[1], '❌ رد شد.', { chat: c.from_id, message: c.message_id }) // the other administrators' copies
     await sendmessage(c.from_id, T.Admin.Payment.reasonRejecting, backAdmin(c), 'HTML')
     await step(c, 'reject-dec')
     await Editmessagetext(c.from_id, c.message_id, c.text_inline, null)
