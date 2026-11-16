@@ -33,10 +33,11 @@ const ADMIN_SALE = "'manual invoice','add order by admin','extend by admin'"
 const BAD_INVOICE = "('unpaid','expire','unsuccessful','reject')"
 
 export const accExpenseKinds = () => ({
-  purchase: 'خرید (بهای تمام‌شده)', salary: 'حقوق و دستمزد', advertising: 'تبلیغات', server: 'سرور و زیرساخت', tools: 'نرم‌افزار و ابزار',
+  purchase: 'خرید (بهای تمام‌شده)', partner: 'جذب و فعال‌سازی همکاران', salary: 'حقوق و دستمزد', advertising: 'تبلیغات', server: 'سرور و زیرساخت', tools: 'نرم‌افزار و ابزار',
   fee: 'کارمزد درگاه و بانک', tax: 'مالیات و عوارض', general: 'سایر هزینه‌ها', dividend: 'سود سهام / برداشت شرکا',
 })
 const KIND_RULES = {
+  partner: ['جذب همکار', 'هدیه همکار'],
   dividend: ['سهام', 'سهم شریک', 'سهم ', 'سود شریک', 'برداشت شریک', 'برداشت شخصی', 'تقسیم سود', 'dividend'],
   salary: ['حقوق', 'دستمزد', 'پشتیبان', 'کارمند', 'اپراتور', 'پاداش', 'salary'],
   advertising: ['تبلیغ', 'کمپین', 'اینستا', 'تلگرام ادز', 'ادز', 'بنر', 'اینفلوئنسر', 'اسپانسر', 'کلیک', 'ads', 'campaign'],
@@ -52,7 +53,7 @@ export function accGuessKind(desc) {
   return null
 }
 export const accKindGroup = (k) => (k === 'purchase' ? 'cogs' : k === 'dividend' ? 'equity' : 'opex')
-export const accKindIcon = (k) => ({ purchase: '🛒', salary: '👥', advertising: '📣', server: '🖥', tools: '🧰', fee: '🏦', tax: '🏛', general: '🧾', dividend: '🤝' })[k] ?? '🧾'
+export const accKindIcon = (k) => ({ purchase: '🛒', partner: '🤝', salary: '👥', advertising: '📣', server: '🖥', tools: '🧰', fee: '🏦', tax: '🏛', general: '🧾', dividend: '🤝' })[k] ?? '🧾'
 
 /** a date typed by a person → unix time ('' = now); Jalali or Gregorian, any digits. null = not understood */
 export function accParseDateTime(input, at = null) {

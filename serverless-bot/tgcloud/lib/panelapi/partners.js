@@ -3,6 +3,7 @@ import { kvSet, run, sql } from '../db.js'
 import { fail } from './util.js'
 import * as P from '../partners.js'
 import { notifyPartners, noticesGet } from '../partnerhub.js'
+import { economics, giftAdd, welcomeGet } from '../partnereco.js'
 
 export async function route(name, q, b) {
   switch (name) {
@@ -31,6 +32,18 @@ export async function route(name, q, b) {
       if (!b.send) return { ok: true, ...(await notifyPartners(text, { dry: true })) }
       if (!b.confirm) fail('تأیید ارسال لازم است', 409)
       return await notifyPartners(text, { source: 'manual' })
+    }
+    case 'partner_econ': return { ...(await economics()), welcome: await welcomeGet() }
+    case 'partner_gift': {
+      if (!b.confirm) fail('تأیید ثبت لازم است', 409)
+      const r = await giftAdd(String(b.id), { kind: b.kind, amount: b.amount, gb: b.gb, days: b.days, note: b.note, by: 'panel' })
+      if (!r.ok) fail(r.error, 422)
+      return r
+    }
+    case 'partner_welcome': {
+      const w = { on: !!b.on, wallet: Math.max(0, Math.min(2000000, Math.trunc(Number(b.wallet) || 0))), gb: Math.max(0, Math.min(200, Number(b.gb) || 0)), days: Math.max(0, Math.min(90, Math.trunc(Number(b.days) || 0))) }
+      await kvSet('partner:welcome', JSON.stringify(w))
+      return { ok: true, welcome: w }
     }
     case 'partner_requests': return { ok: true, requests: await P.requestsList(), welcome_pct: await P.welcomePct() }
     case 'partner_request': {

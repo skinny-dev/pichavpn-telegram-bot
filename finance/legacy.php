@@ -16,7 +16,7 @@ if (!function_exists('accGuessKind')) {
 
 function finLegacyKindAccount(string $kind): string
 {
-    return ['purchase' => 'cogs', 'salary' => 'exp_salary', 'advertising' => 'exp_advertising', 'server' => 'exp_server', 'tools' => 'exp_tools', 'fee' => 'exp_fee',
+    return ['purchase' => 'cogs', 'partner' => 'exp_advertising', 'salary' => 'exp_salary', 'advertising' => 'exp_advertising', 'server' => 'exp_server', 'tools' => 'exp_tools', 'fee' => 'exp_fee',
         'tax' => 'exp_tax', 'general' => 'exp_general', 'dividend' => 'dividends'][$kind] ?? 'exp_general';
 }
 

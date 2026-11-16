@@ -5,6 +5,7 @@
 // Never touched automatically: credit partners (n2), partners an administrator has LOCKED (a manual price), and partners whose agent expiry has passed.
 import { all, one, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage } from './tg.js'
+import { welcomeGive } from './partnereco.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 const DAY = 86400
@@ -46,9 +47,8 @@ export const modeGet = async () => ((await kvGet('partners:mode')) === 'live' ? 
 export const tierFor = (tiers, gb) => [...tiers].reverse().find((t) => gb >= t.gb) || tiers[0]
 export const tierByPct = (tiers, pct) => [...tiers].reverse().find((t) => Number(pct) >= t.pct) || null
 
-/** GB bought in the last 30 days: new services (invoice) + renewals (service_other.value.volumebuy). Tests, unpaid and refused orders do not count. */
-export async function volume30(userId, at = now()) {
-  const since = at - 30 * DAY
+/** GB bought since a moment: new services (invoice) + renewals (service_other.value.volumebuy). Tests, unpaid and refused orders do not count. */
+export async function volumeSince(userId, since) {
   const a = await one(sql`SELECT COALESCE(SUM(CAST(Volume AS REAL)), 0) AS v, COUNT(*) AS n, COALESCE(SUM(CAST(price_product AS INTEGER)), 0) AS s FROM invoice
     WHERE id_user = ${String(userId)} AND CAST(time_sell AS INTEGER) >= ${since} AND LOWER(Status) NOT IN ('unpaid','expire','unsuccessful','reject') AND CAST(price_product AS INTEGER) > 0 AND name_product NOT LIKE '%تست%'`)
   const sinceStr = new Date((since + 12600) * 1000).toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/')
@@ -59,6 +59,8 @@ export async function volume30(userId, at = now()) {
   } catch { /* a malformed value never stops the report */ }
   return { gb: Number(a?.v ?? 0) + Number(ren.v ?? 0), orders: Number(a?.n ?? 0) + Number(ren.n ?? 0), spent: Number(a?.s ?? 0) + Number(ren.s ?? 0) }
 }
+/** GB bought in the last 30 days (the tier basis) */
+export const volume30 = (userId, at = now()) => volumeSince(userId, at - 30 * DAY)
 
 /** the end of a partnership (expiry): back to an ordinary customer at the ordinary prices. The old system left `pricediscount` behind, so an ex-partner kept the discount forever. */
 export async function partnerEnd(id) {
@@ -186,7 +188,8 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
     const pct = await welcomePct()
     await run(sql`UPDATE user SET agent = ${type}, expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
     await sendmessage(id, `درود 🌿\nدرخواست همکاری شما تأیید شد. از این پس قیمت همکار برای شما فعال است (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).\nبرای شروع، ربات را باز کنید و از منوی خرید استفاده کنید. اگر سؤالی داشتید همین‌جا بنویسید. سپاسگزارم.`, null, 'HTML')
-    return { ok: true, pct }
+    const gift = await welcomeGive(id)
+    return { ok: true, pct, gift }
   }
   const claim = await run(sql`UPDATE Requestagent SET status = 'reject' WHERE id = ${id} AND status = 'waiting'`)
   if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }

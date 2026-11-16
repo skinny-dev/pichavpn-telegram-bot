@@ -53,6 +53,62 @@ function Requests() {
 }
 
 interface NoticeState { count: number; notices: { t: number; source: string; text: string; sent: number; failed: number }[] }
+interface EcoRow { id: string; username: string; level: string; revenue: number; revenue30: number; gb: number; cogs: number; gifts: number; net: number }
+interface Eco { rows: EcoRow[]; totals: { revenue: number; cogs: number; gifts: number; net: number; partners: number; withSales: number }; gifts: { t: number; partner: string; username: string; what: string; cost: number }[]; welcome: { on: boolean; wallet: number; gb: number; days: number }; costPerGb: number }
+function Economy() {
+  const qc = useQueryClient()
+  const q = useQuery({ queryKey: ['partner_econ'], queryFn: () => api<Eco>('partner_econ') })
+  const [f, setF] = useState({ id: '', kind: 'wallet', amount: '400000', gb: '20', days: '3', note: '' })
+  const [w, setW] = useState<{ on: boolean; wallet: string; gb: string; days: string } | null>(null)
+  const d = q.data
+  const cur = w ?? (d ? { on: d.welcome.on, wallet: String(d.welcome.wallet), gb: String(d.welcome.gb), days: String(d.welcome.days) } : null)
+  const gift = useMutation({
+    mutationFn: () => api('partner_gift', { body: { id: f.id, kind: f.kind, amount: Number(f.amount), gb: Number(f.gb), days: Number(f.days), note: f.note, confirm: true } }),
+    onSuccess: () => { toast.success('هدیه ثبت شد و به‌عنوان هزینهٔ جذب همکار در حساب‌ها آمد'); qc.invalidateQueries({ queryKey: ['partner_econ'] }); qc.invalidateQueries({ queryKey: ['partners'] }) }, onError: err,
+  })
+  const wel = useMutation({
+    mutationFn: () => api('partner_welcome', { body: cur }),
+    onSuccess: () => { toast.success('ذخیره شد'); setW(null); qc.invalidateQueries({ queryKey: ['partner_econ'] }) }, onError: err,
+  })
+  if (!d || !cur) return <Skeleton className="h-32 w-full" />
+  const t = d.totals
+  return (
+    <Card><CardHeader><CardTitle className="text-base">هزینه و درآمد همکاران</CardTitle></CardHeader><CardContent className="space-y-3 text-sm" data-testid="economy">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div><div className="text-xs text-muted-foreground">درآمد از همکاران</div><div className="font-semibold">{fmtToman(t.revenue)}</div></div>
+        <div><div className="text-xs text-muted-foreground">بهای حجم فروخته‌شده</div><div className="font-semibold">{fmtToman(t.cogs)}</div></div>
+        <div><div className="text-xs text-muted-foreground">هزینهٔ جذب (هدیه‌ها)</div><div className="font-semibold">{fmtToman(t.gifts)}</div></div>
+        <div><div className="text-xs text-muted-foreground">خالص</div><div className={`font-semibold ${t.net < 0 ? 'text-red-600' : ''}`}>{fmtToman(t.net)}</div></div>
+      </div>
+      <div className="text-xs text-muted-foreground">هدیهٔ کیف پول به‌اندازهٔ خودش هزینه ثبت می‌شود (دیدگاه محتاطانه؛ چون صرف خرید از خودمان می‌شود هزینهٔ واقعی کمتر است). سرویس رایگان = گیگ × {fmtNum(d.costPerGb)} تومان. همه در «هزینه‌ها» و سود و زیان با نوع «جذب و فعال‌سازی همکاران» می‌آیند. {fmtNum(t.withSales)} از {fmtNum(t.partners)} همکار فروش داشته‌اند.</div>
+      <div className="space-y-1">{d.rows.slice(0, 15).map((r) => <div key={r.id} className="flex flex-wrap gap-x-3 text-xs"><span className="font-medium">@{r.username || r.id}</span><span>درآمد {fmtToman(r.revenue)}</span><span>هدیه {fmtToman(r.gifts)}</span><span className={r.net < 0 ? 'text-red-600' : ''}>خالص {fmtToman(r.net)}</span></div>)}</div>
+      <div className="rounded-md border p-2 space-y-2" data-testid="gift-form">
+        <div className="font-medium">ثبت هدیه (هزینهٔ جذب)</div>
+        <div className="flex flex-wrap items-end gap-2">
+          <Select value={f.id} onValueChange={(v) => setF({ ...f, id: v })}><SelectTrigger className="w-44"><SelectValue placeholder="همکار" /></SelectTrigger><SelectContent>{d.rows.map((r) => <SelectItem key={r.id} value={r.id}>@{r.username || r.id}</SelectItem>)}</SelectContent></Select>
+          <Select value={f.kind} onValueChange={(v) => setF({ ...f, kind: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wallet">شارژ کیف پول</SelectItem><SelectItem value="service">سرویس رایگان</SelectItem><SelectItem value="other">هزینهٔ دیگر</SelectItem></SelectContent></Select>
+          {f.kind === 'service'
+            ? <><div><Label className="text-xs">گیگ</Label><Input className="w-20" value={f.gb} onChange={(e) => setF({ ...f, gb: e.target.value })} /></div><div><Label className="text-xs">روز</Label><Input className="w-20" value={f.days} onChange={(e) => setF({ ...f, days: e.target.value })} /></div></>
+            : <div><Label className="text-xs">مبلغ (تومان)</Label><Input className="w-32" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></div>}
+          <Input className="w-44" placeholder="یادداشت (اختیاری)" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+          <Button size="sm" disabled={!f.id || gift.isPending} data-testid="gift-send" onClick={() => { if (window.confirm(f.kind === 'wallet' ? 'کیف پول شارژ و هزینه ثبت می‌شود. ادامه؟' : 'هزینه ثبت می‌شود (سرویس را خودتان از منوی معمول بسازید). ادامه؟')) gift.mutate() }}>ثبت</Button>
+        </div>
+      </div>
+      <div className="rounded-md border p-2 space-y-2" data-testid="welcome-form">
+        <div className="font-medium">هدیهٔ خوشامد هنگام تأیید درخواست (برای آشنایی با ربات و پرداخت)</div>
+        <div className="flex flex-wrap items-end gap-2">
+          <Button size="sm" variant={cur.on ? 'default' : 'outline'} onClick={() => setW({ ...cur, on: !cur.on })}>{cur.on ? 'روشن است' : 'خاموش است'}</Button>
+          <div><Label className="text-xs">کیف پول (تومان)</Label><Input className="w-28" value={cur.wallet} onChange={(e) => setW({ ...cur, wallet: e.target.value })} /></div>
+          <div><Label className="text-xs">سرویس رایگان (گیگ)</Label><Input className="w-20" value={cur.gb} onChange={(e) => setW({ ...cur, gb: e.target.value })} /></div>
+          <div><Label className="text-xs">روز</Label><Input className="w-16" value={cur.days} onChange={(e) => setW({ ...cur, days: e.target.value })} /></div>
+          <Button size="sm" variant="outline" disabled={w === null || wel.isPending} onClick={() => wel.mutate()}>ذخیره</Button>
+        </div>
+        <div className="text-xs text-muted-foreground">یک‌بار برای هر همکار. پیش‌فرض خاموش است.</div>
+      </div>
+      {d.gifts.length > 0 && <div className="space-y-0.5 text-xs text-muted-foreground">{d.gifts.slice(0, 8).map((g, i) => <div key={i}>{new Date(g.t * 1000).toLocaleDateString('fa-IR')} · @{g.username || g.partner} · {g.what} · {fmtToman(g.cost)}</div>)}</div>}
+    </CardContent></Card>
+  )
+}
 function Notice() {
   const qc = useQueryClient()
   const [text, setText] = useState('')
@@ -180,6 +236,7 @@ export default function Partners() {
         </CardContent></Card>
       )}
       <Requests />
+      <Economy />
       <Notice />
       <Brand st={data} />
       <Tiers key={JSON.stringify(data.tiers)} st={data} />

@@ -6,7 +6,7 @@ import { accParseDateTime, accGuessKind } from '../stats.js'
 import * as E from './engine.js'
 import { md5 } from './md5.js'
 
-const KIND_ACCOUNT = { purchase: 'cogs', salary: 'exp_salary', advertising: 'exp_advertising', server: 'exp_server', tools: 'exp_tools', fee: 'exp_fee', tax: 'exp_tax', general: 'exp_general', dividend: 'dividends' }
+const KIND_ACCOUNT = { purchase: 'cogs', partner: 'exp_advertising', salary: 'exp_salary', advertising: 'exp_advertising', server: 'exp_server', tools: 'exp_tools', fee: 'exp_fee', tax: 'exp_tax', general: 'exp_general', dividend: 'dividends' }
 export const finLegacyKindAccount = (kind) => KIND_ACCOUNT[kind] ?? 'exp_general'
 
 /** which money account a customer payment method lands in (system_key) */

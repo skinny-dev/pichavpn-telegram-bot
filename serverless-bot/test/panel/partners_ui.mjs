@@ -63,6 +63,7 @@ check('the tier table is there with five steps', (await page.getByTestId('tier')
 await page.getByTestId('preview').click(); await page.waitForTimeout(800)
 check('the preview of the automatic changes is shown', (await page.getByTestId('plan').count()) === 1)
 if (shots) { fs.mkdirSync(shots, { recursive: true }); await page.screenshot({ path: path.join(shots, 'partners.png'), fullPage: true }) }
+check('the cost-and-revenue card with the gift and welcome forms is on the page', (await page.getByTestId('economy').count()) === 1 && (await page.getByTestId('gift-form').count()) === 1 && (await page.getByTestId('welcome-form').count()) === 1)
 check('the brand-name card is on the page', (await page.getByTestId('brand').count()) === 1)
 await page.getByTestId('brand-on').click(); await page.waitForTimeout(800)
 check('turning it on shows a brand line on each partner', (await page.getByTestId('partner-brand').count()) >= 1)
