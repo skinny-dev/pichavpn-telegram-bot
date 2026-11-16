@@ -74,9 +74,9 @@ export function phpJson(v) {
 
 // ---------------------------------------------------------------- dynamic product names
 // A product NAME may carry tokens that are filled in for whoever looks at it, so a partner's price (or any price change) is never stale in the text:
-//   {price} = the viewer's final price (number, no unit) · {volume} / {traffic} / {traffic_volume} = GB · {days} / {time} = days
-const NAME_TOKEN = /\{(price|volume|traffic|traffic_volume|days|time)(_fa)?\}/gi
-export const hasNameTokens = (s) => /\{(price|volume|traffic|traffic_volume|days|time)(_fa)?\}/i.test(String(s ?? ''))
+//   {price} = the viewer's final price (number, no unit) · {price_k} = the same in thousands («۲۹۰ هزار تومان» style) · {volume} / {traffic} / {traffic_volume} = GB · {days} / {time} = days
+const NAME_TOKEN = /\{(price_k|price|volume|traffic|traffic_volume|days|time)(_fa)?\}/gi
+export const hasNameTokens = (s) => /\{(price_k|price|volume|traffic|traffic_volume|days|time)(_fa)?\}/i.test(String(s ?? ''))
 const limitText = (v) => { const x = Number(v); return !Number.isFinite(x) || x === 0 ? 'نامحدود' : String(Math.round(x * 100) / 100) }
 const faDigits = (t) => t.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]).replace(/,/g, '٬') // {volume_fa} / {price_fa} / {days_fa}: Persian digits (the shop's names are often written in them)
 export function productName(name, product = {}, price = product.price_product) {
@@ -84,7 +84,7 @@ export function productName(name, product = {}, price = product.price_product) {
   if (!hasNameTokens(s)) return s
   return s.replace(NAME_TOKEN, (m, k, fa) => {
     k = k.toLowerCase()
-    const v = k === 'price' ? numberFormat(Number(price) || 0) : limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint)
+    const v = k === 'price_k' ? String(Math.round((Number(price) || 0) / 100) / 10) : k === 'price' ? numberFormat(Number(price) || 0) : limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint)
     return fa ? faDigits(v) : v
   })
 }
@@ -98,7 +98,7 @@ export function nameMatchesProduct(stored, product) {
   for (const m of tpl.matchAll(NAME_TOKEN)) {
     re += esc(tpl.slice(last, m.index))
     const k = m[1].toLowerCase()
-    re += k === 'price' ? '[\\d۰-۹,٬.]+' : esc(m[2] ? faDigits(limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint)) : limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint))
+    re += k === 'price' || k === 'price_k' ? '[\\d۰-۹,٬.]+' : esc(m[2] ? faDigits(limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint)) : limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint))
     last = m.index + m[0].length
   }
   re += esc(tpl.slice(last))

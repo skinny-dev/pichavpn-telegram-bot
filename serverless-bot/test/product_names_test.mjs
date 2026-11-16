@@ -50,6 +50,16 @@ check('a baked price that equals the product price becomes {price}; the partner 
 const ap2 = await run({ apply: true })
 check('products with warnings are NOT written by apply', (await db.get(sql`SELECT name_product FROM product WHERE id = 2`)).name_product === '25 گیگ — 60,000 تومان' && ap2.with_warnings >= 1)
 
+// «۲۹۰ هزار تومان» style and the explicit trust of the database price
+await db.run(sql`UPDATE product SET name_product = '۱ گیگ: ۲۹۰ هزار تومان', Volume_constraint = '1', price_product = '290000' WHERE id = 4`)
+await db.run(sql`UPDATE product SET name_product = '25 گیگ — 144,000 تومان', Volume_constraint = '25', price_product = '120000' WHERE id = 5`)
+const k = (await run()).items
+const i4 = k.find((i) => i.id === 4), i5 = k.find((i) => i.id === 5)
+check('the «هزار تومان» style stays: ۲۹۰ هزار for the customer, ۲۴۶٫۵ هزار for a 15% partner', i4.new === '{volume_fa} گیگ: {price_k_fa} هزار تومان' && i4.customer_sees === '۱ گیگ: ۲۹۰ هزار تومان' && i4.partner_15pct_sees === '۱ گیگ: ۲۴۶٫۵ هزار تومان'.replace('٫', '.').replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]), JSON.stringify(i4))
+check('a name that disagrees with the price stays untouched by default', i5.warnings && i5.warnings.length === 1 && !/\{price\}/.test(i5.new))
+const t = (await run({ trust_price: [5] })).items.find((i) => i.id === 5)
+check('trust_price for that id only: the database price becomes the truth', t.new === '{volume} گیگ — {price} تومان' && !t.warnings && t.customer_sees === '25 گیگ — 120,000 تومان', JSON.stringify(t))
+
 // restore
 const rs = await run({ restore: true })
 check('restore puts the old names back', rs.restored >= 1 && (await db.get(sql`SELECT name_product FROM product WHERE id = 3`)).name_product === before[2].name_product, JSON.stringify(rs))

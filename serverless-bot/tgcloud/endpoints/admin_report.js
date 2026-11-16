@@ -379,10 +379,11 @@ TOOLS.partner_ready = (() => {
 //   npx tgcloud run endpoints/admin_report '{"tool":"product_names"}'                 → preview only (nothing written)
 //   npx tgcloud run endpoints/admin_report '{"tool":"product_names","apply":true}'    → writes (a backup of every old name is kept)
 //   npx tgcloud run endpoints/admin_report '{"tool":"product_names","restore":true}'  → puts the old names back
+//   add "trust_price":[ids] to treat the DATABASE price as the truth for names that disagree with it (those ids only)
 // A number in a name is replaced ONLY when it equals the product's own data (volume, days, price); a number that disagrees is reported and left alone.
 const FA = '۰۱۲۳۴۵۶۷۸۹', AR = '٠١٢٣٤٥٦٧٨٩'
 const toLatin = (t) => String(t).replace(/[۰-۹]/g, (d) => FA.indexOf(d)).replace(/[٠-٩]/g, (d) => AR.indexOf(d))
-function dynamicNamePlan(p) {
+function dynamicNamePlan(p, trustPrice = false) {
   const name = String(p.name_product ?? '')
   if (hasNameTokens(name)) return { new: name, changed: false, note: 'already dynamic', warnings: [] }
   const vol = Number(p.Volume_constraint), days = Number(p.Service_time), price = Number(p.price_product)
@@ -394,7 +395,7 @@ function dynamicNamePlan(p) {
     if (/گیگ|GB|gb/.test(unit)) { if (v === vol && vol > 0) { used.push('volume'); return `{volume${fa}}${gap}${unit}` } warnings.push(`${m.trim()} ≠ حجم محصول (${p.Volume_constraint})`); return m }
     if (/روز/.test(unit)) { if (v === days && days > 0) { used.push('days'); return `{days${fa}}${gap}${unit}` } warnings.push(`${m.trim()} ≠ مدت محصول (${p.Service_time})`); return m }
     const toman = /هزار/.test(unit) ? v * 1000 : v
-    if (toman === price) { used.push('price'); return `{price${fa}}${gap}${/هزار/.test(unit) ? 'تومان' : unit}` }
+    if (toman === price || trustPrice) { used.push('price'); return /هزار/.test(unit) ? `{price_k${fa}}${gap}هزار تومان` : `{price${fa}}${gap}${unit}` }
     warnings.push(`${m.trim()} ≠ قیمت محصول (${p.price_product}) — قیمت همکار/تخفیف‌دار نیست`); return m
   })
   return { new: out, changed: out !== name, used, warnings, note: used.length ? '' : 'no number to make dynamic' }
@@ -409,7 +410,8 @@ TOOLS.product_names = (() => {
       for (const r of rows) if (backup[r.id] !== undefined && backup[r.id] !== r.name_product) { await run(sql`UPDATE product SET name_product = ${backup[r.id]} WHERE id = ${r.id}`); n++ }
       return { restored: n }
     }
-    const list = rows.map((r) => ({ r, plan: dynamicNamePlan(r) }))
+    const trust = input?.trust_price === 'all' ? null : new Set((Array.isArray(input?.trust_price) ? input.trust_price : []).map(String)) // ids whose DATABASE price is the truth when the name disagrees
+    const list = rows.map((r) => ({ r, plan: dynamicNamePlan(r, trust === null || trust.has(String(r.id))) }))
     const seen = {}
     for (const { r, plan } of list) { const k = `${r.agent}|${r.Location}|${plan.new}`; seen[k] = (seen[k] || 0) + 1 }
     const show = (name, r, off) => productName(name, r, Math.round(Number(r.price_product) * (1 - off / 100)))
