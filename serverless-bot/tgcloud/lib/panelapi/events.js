@@ -2,6 +2,7 @@
 import { kvSet } from '../db.js'
 import { fail } from './util.js'
 import * as E from '../events.js'
+import { notifyPartners } from '../partnerhub.js'
 
 const EDITABLE = ['draft', 'approved', 'cancelled']
 async function view(list) {
@@ -32,9 +33,12 @@ export async function route(name, q, b) {
         if (r.errors.length) fail(r.errors[0], 409, { errors: r.errors })
         e.status = 'approved'
       }
+      const fresh = e.status === 'approved' && !(i >= 0 && list[i].status === 'approved')
       if (i >= 0) list[i] = e; else list.push(e)
       await E.eventsSet(list)
-      return { ok: true, event: e }
+      let partners = null // partners hear first; in simulation nobody is messaged
+      if (fresh) partners = (await E.modeGet()) === 'live' ? await notifyPartners(E.partnerHeadsUp(e), { source: 'event:' + e.name }) : { ok: true, simulated: true }
+      return { ok: true, event: e, partners }
     }
     case 'event_status': {
       const e = list.find((x) => x.id === b.id)

@@ -13,7 +13,9 @@ import { syncHosts } from './servers.js'
 import { studioTick } from './studio.js'
 import { eventsTick } from './events.js'
 import { partnersTick } from './partners.js'
-import { gateHealthRun, notifyAdmins } from './gatehealth.js'
+import { gateHealthRun, notifyAdmins, NAMES } from './gatehealth.js'
+import { notifyPartners } from './partnerhub.js'
+import { modeGet as partnersMode } from './partners.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
@@ -204,7 +206,7 @@ const JOBS = [
   ['studio', 60, () => studioTick()],
   ['events', 60, () => eventsTick()],
   ['partners', 3600, () => partnersTick()],
-  ['gatehealth', 120, () => gateHealthRun(notifyAdmins)],
+  ['gatehealth', 120, () => gateHealthRun(gateNotify)],
   ['notifications', 60, notifications],
   ['configtest', 120, configTest],
   ['payment_expire', 300, paymentExpire],
@@ -215,6 +217,14 @@ const JOBS = [
   ['expireagent', 1800, expireAgent],
 ]
 
+/** a gateway outage: administrators get the technical text; partners (in live mode) a short, plain one — before customers notice */
+async function gateNotify(text) {
+  await notifyAdmins(text)
+  const name = Object.values(NAMES).find((n) => text.includes(n))
+  if (!name || (await partnersMode()) !== 'live') return
+  if (text.startsWith('🔴')) await notifyPartners(`درود 🌿\n${name} موقتاً در دسترس نیست. پرداخت با کیف پول و روش‌های دیگر ادامه دارد؛ به‌محض وصل شدن اطلاع می‌دهیم.`, { source: 'gate' })
+  else if (text.startsWith('🟢')) await notifyPartners(`✅ ${name} دوباره وصل شد.`, { source: 'gate' })
+}
 /** run the most overdue job (at most one an update) */
 export async function cronTick(c) {
   if (!c.T || !c.setting) return

@@ -5,6 +5,7 @@ import { step, tehranDate } from '../bot.js'
 import { checkActiveBtn, backuserKb } from '../keyboards.js'
 import { savedata, userData } from '../catalog.js'
 import { jdate } from '../fmt.js'
+import { isPartner, PRIORITY_TAG } from '../partnerhub.js'
 import { sprintf, crc32, dechex, randomHex, J } from '../php.js'
 
 const soon = (T) => T.users.helpComingSoon || '📚 این آموزش به‌زودی منتشر می‌شود!'
@@ -147,7 +148,7 @@ export const supportRoutes = [
       await run(sql`UPDATE support_message SET file_id = ${media.file_id}, file_type = ${media.type}, file_name = ${media.name} WHERE Tracking = ${tracking}`)
       for (const id of to) await sendMedia(id, media.type, media.file_id)
     }
-    const text = sprintf(T.Admin.reportgroup.supportMessage, c.from_id, c.from_id, jdate('Y/m/d H:i:s'), c.username, dep.name_departman, ticket, '')
+    const text = (isPartner(c.user) ? PRIORITY_TAG : '') + sprintf(T.Admin.reportgroup.supportMessage, c.from_id, c.from_id, jdate('Y/m/d H:i:s'), c.username, dep.name_departman, ticket, '')
     const kb = J({ inline_keyboard: [[{ text: T.users.support.answermessage, callback_data: 'Responsesupport_' + tracking }]] })
     for (const id of to) await sendmessage(id, text, kb, 'HTML')
     await sendmessage(c.from_id, T.users.support.sentForReview, c.keyboard, 'HTML')
@@ -206,7 +207,7 @@ export const supportRoutes = [
     const tracking = randomHex(4)
     await run(sql`INSERT OR IGNORE INTO support_message (Tracking, idsupport, iduser, name_departman, text, time, status) VALUES (${tracking}, ${t.idsupport ?? null}, ${t.iduser ?? null}, ${t.name_departman ?? null}, ${ticket}, ${tehranDate()}, 'Customerresponse')`)
     if (media) await run(sql`UPDATE support_message SET file_id = ${media.file_id}, file_type = ${media.type}, file_name = ${media.name} WHERE Tracking = ${tracking}`)
-    const text = sprintf(T.Admin.reportgroup.supportMessage2, c.from_id, c.from_id, jdate('Y/m/d H:i:s'), c.username, t.name_departman, ticket)
+    const text = (isPartner(c.user) ? PRIORITY_TAG : '') + sprintf(T.Admin.reportgroup.supportMessage2, c.from_id, c.from_id, jdate('Y/m/d H:i:s'), c.username, t.name_departman, ticket)
     const kb = J({ inline_keyboard: [[{ text: T.users.support.answermessage, callback_data: 'Responsesupport_' + tracking }]] })
     const to = await recipients(t.idsupport)
     if (media) for (const id of to) await sendMedia(id, media.type, media.file_id)

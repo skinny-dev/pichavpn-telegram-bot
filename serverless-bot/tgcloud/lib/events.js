@@ -180,6 +180,13 @@ export async function stopNow(e) {
   e.status = 'ended'; e.endsAt = Math.min(e.endsAt || now(), now())
 }
 
+/** the early notice to partners when an event is approved (they hear before the public) */
+export function partnerHeadsUp(e) {
+  const p = e.params || {}
+  const what = e.type === 'price_discount' ? `${p.percent}٪ تخفیف روی پلن‌های منتخب` : e.type === 'bonus_gb' ? `${p.gb} گیگ هدیه روی پلن‌های منتخب` : e.type === 'code' ? `${p.percent}٪ تخفیف با کد ${p.code}` : e.type === 'test_extension' ? `تست رایگان ${p.hours} ساعته` : e.type === 'price_increase' ? `افزایش ${p.percent}٪ قیمت‌ها (قیمت همکاران هم متناسب تغییر می‌کند)` : 'ثبات قیمت‌ها'
+  const d = (t) => jdate('Y/m/d H:i', t, true)
+  return `درود 🌿\nاطلاع زودهنگام برای همکاران: «${e.name}» — ${what}.\nشروع: ${d(e.startsAt)}${e.endsAt ? `\nپایان: ${d(e.endsAt)} (به وقت تهران)` : ''}\nاعلام عمومی بعداً انجام می‌شود؛ شما زودتر می‌دانید تا برنامه‌ریزی کنید. سپاسگزارم.`
+}
 // ---------- posts: the event's announcements become Studio drafts (never auto-scheduled)
 const when = (t) => jdate('Y/m/d H:i', t, true)
 export async function makePosts(e) {

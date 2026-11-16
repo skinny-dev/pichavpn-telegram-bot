@@ -1,6 +1,7 @@
 // index.php lines 5918–6652: referral page and membership gift, agents (extra volume for a panel user, panel,
 // custom name, request to become an agent), message to the admins, lucky wheel, price commands, renew list, apps, notes.
 import { brandSettings, brandEligibility, brandSet } from '../partners.js'
+import { HUB } from './partnerhub.js'
 import { sleep } from '../timer.js'
 import { one, all, run, sql, kvGet } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
@@ -20,18 +21,18 @@ const agentOf = (json, agent) => { try { const d = JSON.parse(json); return d &&
 const report = (c, thread, text) => (String(c.setting.Channel_Report ?? '').length > 0 ? telegram('sendmessage', { chat_id: c.setting.Channel_Report, message_thread_id: c.topics[thread], text, parse_mode: 'HTML' }) : null)
 const LIVE = `(status = 'active' OR status = 'end_of_time' OR status = 'end_of_volume' OR status = 'sendedwarn' OR Status = 'send_on_hold')`
 
-/** $keyboardagent of keyboard.php */
+/** $keyboardagent of keyboard.php + the partner corner (report, customers, wallet, priority support) */
 export async function keyboardAgent(c) {
   const T = c.T
-  const named = Number((await one(sql`SELECT COUNT(*) AS n FROM marzban_panel WHERE MethodUsername = 'agentCustomTextSequential'`)).n)
+  const named = Number((await one(sql`SELECT COUNT(*) AS n FROM marzban_panel WHERE MethodUsername = 'agentCustomTextSequential'`)).n) || (await brandSettings()).on
   if (c.setting.inlinebtnmain === 'oninline') {
     const row = [{ text: T.keyboard.bulkPurchase, callback_data: 'kharidanbuh' }]
     if (named) row.push({ text: T.keyboard.selectCustomName, callback_data: 'selectname' })
-    return J({ inline_keyboard: [row, [{ text: T.users.backbtn, callback_data: 'backuser' }]], resize_keyboard: true })
+    return J({ inline_keyboard: [row, [{ text: HUB.report, callback_data: 'agentreport' }, { text: HUB.customers, callback_data: 'pcust_need_1' }], [{ text: T.textbot.accountWallet, callback_data: 'account' }, { text: HUB.support, callback_data: 'agentsupport' }], [{ text: T.users.backbtn, callback_data: 'backuser' }]], resize_keyboard: true })
   }
   const row = [{ text: T.keyboard.bulkPurchase }]
   if (named) row.push({ text: T.keyboard.selectCustomName })
-  return J({ keyboard: [row, [{ text: T.users.backbtn }]], resize_keyboard: true })
+  return J({ keyboard: [row, [{ text: HUB.report }, { text: HUB.customers }], [{ text: T.textbot.accountWallet }, { text: HUB.support }], [{ text: T.users.backbtn }]], resize_keyboard: true })
 }
 /** the renew list (20 a page) */
 async function renewList(c, page) {

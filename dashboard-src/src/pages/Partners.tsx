@@ -52,6 +52,27 @@ function Requests() {
   )
 }
 
+interface NoticeState { count: number; notices: { t: number; source: string; text: string; sent: number; failed: number }[] }
+function Notice() {
+  const qc = useQueryClient()
+  const [text, setText] = useState('')
+  const q = useQuery({ queryKey: ['partner_notice'], queryFn: () => api<NoticeState>('partner_notice_state') })
+  const send = useMutation({
+    mutationFn: () => api<{ sent: number; failed: number }>('partner_notice', { body: { text, send: true, confirm: true } }),
+    onSuccess: (r) => { toast.success(`برای ${fmtNum(r.sent)} همکار ارسال شد`); setText(''); qc.invalidateQueries({ queryKey: ['partner_notice'] }) }, onError: err,
+  })
+  const n = q.data?.count ?? 0
+  return (
+    <Card><CardHeader><CardTitle className="text-base">اطلاع‌رسانی زودهنگام به همکاران</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="notice">
+      <div className="text-xs text-muted-foreground">قطعی، رویداد یا تغییر قیمت را اول به همکاران بگویید. رویدادهای تأییدشده و قطع درگاه (در حالت زنده) خودکار هم اطلاع داده می‌شوند. با «درود» شروع کنید.</div>
+      <textarea className="w-full rounded-md border bg-background p-2 text-sm" rows={3} maxLength={1500} value={text} onChange={(e) => setText(e.target.value)} placeholder="درود 🌿 ..." data-testid="notice-text" />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={text.trim().length < 5 || send.isPending} data-testid="notice-send" onClick={() => { if (window.confirm(`این پیام برای ${n} همکار ارسال می‌شود. ادامه؟`)) send.mutate() }}>{send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `ارسال به ${fmtNum(n)} همکار`}</Button>
+      </div>
+      {(q.data?.notices ?? []).slice(0, 5).map((x, i) => <div key={i} className="text-xs text-muted-foreground">{new Date(x.t * 1000).toLocaleDateString('fa-IR')} · {x.source} · {fmtNum(x.sent)} ارسال{x.failed ? ` · ${fmtNum(x.failed)} ناموفق` : ''} — {x.text.slice(0, 60)}</div>)}
+    </CardContent></Card>
+  )
+}
 function Brand({ st }: { st: State }) {
   const qc = useQueryClient()
   const after = () => qc.invalidateQueries({ queryKey: ['partners'] })
@@ -159,6 +180,7 @@ export default function Partners() {
         </CardContent></Card>
       )}
       <Requests />
+      <Notice />
       <Brand st={data} />
       <Tiers key={JSON.stringify(data.tiers)} st={data} />
       <div className="space-y-2">{data.partners.length === 0 ? <div className="text-sm text-muted-foreground">هنوز همکاری ثبت نشده است.</div> : data.partners.map((p) => <Row key={p.id + p.pct + String(p.locked) + p.level + p.brand + String(p.brandAllowed)} p={p} tiers={data.tiers} maxPct={data.maxPct} st={data} />)}</div>

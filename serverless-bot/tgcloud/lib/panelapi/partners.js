@@ -2,6 +2,7 @@
 import { kvSet, run, sql } from '../db.js'
 import { fail } from './util.js'
 import * as P from '../partners.js'
+import { notifyPartners, noticesGet } from '../partnerhub.js'
 
 export async function route(name, q, b) {
   switch (name) {
@@ -22,6 +23,14 @@ export async function route(name, q, b) {
       if (b.action === 'set') { const r = await P.brandSet(id, b.name); if (!r.ok) fail(r.error, 409); return { ok: true, name: r.name } }
       fail('عمل نامعتبر', 400)
       break
+    }
+    case 'partner_notice_state': return { ok: true, mode: await P.modeGet(), count: (await notifyPartners('', { dry: true })).count, notices: await noticesGet() }
+    case 'partner_notice': {
+      const text = String(b.text ?? '').trim()
+      if (text.length < 5 || text.length > 1500) fail('متن پیام ۵ تا ۱۵۰۰ نویسه باشد', 400)
+      if (!b.send) return { ok: true, ...(await notifyPartners(text, { dry: true })) }
+      if (!b.confirm) fail('تأیید ارسال لازم است', 409)
+      return await notifyPartners(text, { source: 'manual' })
     }
     case 'partner_requests': return { ok: true, requests: await P.requestsList(), welcome_pct: await P.welcomePct() }
     case 'partner_request': {
