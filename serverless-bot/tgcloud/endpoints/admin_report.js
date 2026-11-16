@@ -328,7 +328,7 @@ TOOLS.customer = (() => {
       }
       out.services.push(row)
     }
-    out.changes = other.map((r) => { let v = {}; try { v = JSON.parse(r.value) || {} } catch { v = {} } return { when: String(r.time), type: r.type, service: r.username, status: r.status, toman_k: Math.round(Number(r.price) / 1000), days: v.Service_time ?? v.time ?? undefined, gb: v.volumebuy ?? v.volume ?? undefined, end_before: v.oldtime ? fmt(Number(v.oldtime)) : undefined } })
+    out.changes = other.map((r) => { let v = {}; try { v = JSON.parse(r.value) || {} } catch { v = {} } return { when: String(r.time), type: r.type, service: r.username, status: r.status, toman_k: Math.round(Number(r.price) / 1000), days: v.Service_time ?? v.time_value ?? v.time ?? undefined, gb: v.volumebuy ?? v.volume ?? undefined, end_before: v.oldtime ? fmt(Number(v.oldtime)) : v.expire_old ? fmt(Number(v.expire_old)) : undefined } })
     out.payments = pays.map((r) => ({ when: String(r.time), method: r.m, status: r.s, toman_k: Math.round(Number(r.price) / 1000), kind: String(r.id_invoice ?? '').split('|')[0].slice(0, 22) }))
     out.how_to_read = 'services = what he bought (plan_days is what the PRODUCT gave); panel_now = the real end date at the VPN panel; changes = renewals / extra time / extra volume; payments = what he paid.'
     return out
