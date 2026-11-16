@@ -55,6 +55,25 @@ function Requests() {
 interface NoticeState { count: number; notices: { t: number; source: string; text: string; sent: number; failed: number }[] }
 interface EcoRow { id: string; username: string; level: string; revenue: number; revenue30: number; gb: number; cogs: number; gifts: number; net: number }
 interface Eco { rows: EcoRow[]; totals: { revenue: number; cogs: number; gifts: number; net: number; partners: number; withSales: number }; gifts: { t: number; partner: string; username: string; what: string; cost: number }[]; welcome: { on: boolean; wallet: number; gb: number; days: number }; costPerGb: number }
+function Invite() {
+  const qc = useQueryClient()
+  const [f, setF] = useState({ who: '', type: 'n', trialDays: '30' })
+  const m = useMutation({
+    mutationFn: () => api<{ username: string; pct: number }>('partner_invite', { body: { who: f.who, type: f.type, trialDays: Number(f.trialDays) || 0 } }),
+    onSuccess: (r) => { toast.success(`@${r.username || f.who} همکار شد (${fmtNum(r.pct)}٪) و پیام دعوت رفت`); setF({ ...f, who: '' }); qc.invalidateQueries({ queryKey: ['partners'] }); qc.invalidateQueries({ queryKey: ['partner_econ'] }) }, onError: err,
+  })
+  return (
+    <Card><CardHeader><CardTitle className="text-base">دعوت همکار (مغازه‌هایی که خودمان می‌خوانیم)</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="invite">
+      <div className="text-xs text-muted-foreground">از او بخواهید ربات را یک بار /start کند، بعد شناسهٔ عددی یا @نام‌کاربری‌اش را بنویسید. همکار می‌شود، پله‌ی اول را می‌گیرد و پیام دعوت (با «درود») می‌رود. «مدت آشنایی» اگر بگذارید، بعد از آن خودکار به قیمت عادی برمی‌گردد (۰ = بدون پایان).</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div><Label className="text-xs">شناسه یا @نام‌کاربری</Label><Input className="w-48" dir="ltr" value={f.who} onChange={(e) => setF({ ...f, who: e.target.value })} data-testid="invite-who" /></div>
+        <Select value={f.type} onValueChange={(v) => setF({ ...f, type: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="n">همکار (پیش‌پرداخت)</SelectItem><SelectItem value="n2">همکار اعتباری</SelectItem></SelectContent></Select>
+        <div><Label className="text-xs">مدت آشنایی (روز)</Label><Input className="w-24" value={f.trialDays} onChange={(e) => setF({ ...f, trialDays: e.target.value })} /></div>
+        <Button size="sm" disabled={!f.who.trim() || m.isPending} data-testid="invite-send" onClick={() => m.mutate()}>{m.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'دعوت'}</Button>
+      </div>
+    </CardContent></Card>
+  )
+}
 function Economy() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['partner_econ'], queryFn: () => api<Eco>('partner_econ') })
@@ -236,6 +255,7 @@ export default function Partners() {
         </CardContent></Card>
       )}
       <Requests />
+      <Invite />
       <Economy />
       <Notice />
       <Brand st={data} />

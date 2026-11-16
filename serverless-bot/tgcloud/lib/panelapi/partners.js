@@ -45,6 +45,11 @@ export async function route(name, q, b) {
       await kvSet('partner:welcome', JSON.stringify(w))
       return { ok: true, welcome: w }
     }
+    case 'partner_invite': {
+      const r = await P.partnerInvite(b.who, { type: b.type === 'n2' ? 'n2' : 'n', trialDays: b.trialDays })
+      if (!r.ok) fail(r.error, 409)
+      return r
+    }
     case 'partner_requests': return { ok: true, requests: await P.requestsList(), welcome_pct: await P.welcomePct() }
     case 'partner_request': {
       if (!['accept', 'reject'].includes(b.decision)) fail('تصمیم نامعتبر', 400)

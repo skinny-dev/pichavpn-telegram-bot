@@ -53,8 +53,27 @@ const mine = (await exp()).filter((x) => /9604/.test(x.description))
 check('ON: accepting a request books wallet + free service, credits the wallet, tells the partner', mine.length === 2 && Number((await db.get(sql`SELECT Balance FROM user WHERE id = '9604'`)).Balance) === 200000 && calls.some(([, p]) => /هدیهٔ خوشامد/.test(String(p.text))))
 check('and only once per partner', (await Eco.welcomeGive('9604')) === null && (await exp()).filter((x) => /9604/.test(x.description)).length === 2)
 
+// an invitation
+await user('9610', 'f'); await db.run(sql`UPDATE user SET username = 'ShopOne' WHERE id = '9610'`)
+await kvSet('partner:welcome', JSON.stringify({ on: false, wallet: 0, gb: 0, days: 0 }))
+calls.length = 0
+const inv1 = await P.partnerInvite('@shopone', { type: 'n', trialDays: 30 })
+const iu = await db.get(sql`SELECT agent, pricediscount, expire FROM user WHERE id = '9610'`)
+check('invite by @username: partner, first tier, a 30-day expiry, a respectful message', inv1.ok && iu.agent === 'n' && Number(iu.pricediscount) === 10 && Math.abs(Number(iu.expire) - (nowT + 30 * 86400)) < 60 && calls.some(([, p]) => /^درود/.test(String(p.text)) && /30 روز/.test(String(p.text))))
+check('invite twice / unknown user / empty are refused with a reason', !(await P.partnerInvite('9610')).ok && !(await P.partnerInvite('999999999')).ok && !(await P.partnerInvite('')).ok)
+await user('9611', 'f')
+const inv2 = await P.partnerInvite('9611', { type: 'n2' })
+check('invite by id as credit level, no expiry by default', inv2.ok && (await db.get(sql`SELECT agent, expire FROM user WHERE id = '9611'`)).agent === 'n2' && (await db.get(sql`SELECT expire FROM user WHERE id = '9611'`)).expire === null)
+await kvSet('partner:welcome', JSON.stringify({ on: true, wallet: 150000, gb: 0, days: 0 }))
+await user('9612', 'f')
+check('invite also gives the welcome package when it is on', (await P.partnerInvite('9612')).gift?.length === 1 && Number((await db.get(sql`SELECT Balance FROM user WHERE id = '9612'`)).Balance) === 150000)
+// the trial ends by itself: ordinary prices again
+await P.partnerEnd('9610')
+check('when the partnership ends the discount is gone', String((await db.get(sql`SELECT pricediscount FROM user WHERE id = '9610'`)).pricediscount) === '0')
+
 // the panel
 const call = (r, body = {}) => ep({ r, query: {}, body }, { initData: { user: { id: 99001 } } })
+check('panel: invite', (await call('partner_invite', { who: '9613' })).status === 409 && (await user('9613', 'f'), (await call('partner_invite', { who: '9613', trialDays: 14 })).status === 200))
 check('panel: economics', (await call('partner_econ')).body.rows.length >= 3)
 check('panel: a gift needs confirmation', (await call('partner_gift', { id: '9602', kind: 'wallet', amount: 100000 })).status === 409)
 check('panel: a confirmed gift is booked', (await call('partner_gift', { id: '9602', kind: 'wallet', amount: 100000, confirm: true })).status === 200 && Number((await db.get(sql`SELECT Balance FROM user WHERE id = '9602'`)).Balance) === 100000)

@@ -200,6 +200,23 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
   return { ok: true, refunded: fee }
 }
 
+// ---------- an invitation: the administrator makes someone a partner directly (the shops we call). The user must have started the bot once.
+/** who = numeric Telegram id or @username. trialDays > 0 → the partnership expires by itself (the old expiry mechanism: back to an ordinary customer at ordinary prices). */
+export async function partnerInvite(who, { type = 'n', trialDays = 0 } = {}) {
+  const key = String(who ?? '').trim().replace(/^@/, '')
+  if (!key) return { ok: false, error: 'شناسه یا نام کاربری را بنویسید' }
+  const u = /^\d+$/.test(key) ? await one(sql`SELECT id, username, agent, pricediscount FROM user WHERE id = ${key}`) : await one(sql`SELECT id, username, agent, pricediscount FROM user WHERE LOWER(username) = ${key.toLowerCase()}`)
+  if (!u) return { ok: false, error: 'این کاربر هنوز ربات را شروع نکرده؛ از او بخواهید یک بار /start بزند' }
+  if (u.agent === 'n' || u.agent === 'n2') return { ok: false, error: 'این کاربر همین حالا همکار است' }
+  const days = Math.max(0, Math.min(365, Math.trunc(Number(trialDays) || 0))), pct = await welcomePct(), id = String(u.id)
+  const expire = days > 0 ? now() + days * DAY : null
+  await run(sql`UPDATE user SET agent = ${type === 'n2' ? 'n2' : 'n'}, expire = ${expire}, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
+  await sendmessage(id, `درود 🌿\nبه همکاری با پیچا دعوت شدید. از این پس قیمت همکار برای شما فعال است (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).${days ? `\nدورهٔ آشنایی شما ${days} روز است؛ در این مدت با ربات کار کنید و هر سؤالی داشتید همین‌جا بنویسید.` : ''}\nبرای شروع، ربات را باز کنید و از «پنل همکار» استفاده کنید. سپاسگزارم.`, null, 'HTML')
+  const gift = await welcomeGive(id)
+  await logAdd({ id, username: String(u.username ?? ''), action: 'invite', to: `${pct}٪` + (days ? ` · ${days} روز` : '') })
+  return { ok: true, id, username: String(u.username ?? ''), pct, expire, gift }
+}
+
 // ---------- the partner's own brand in the service names: «acme_a1b2» instead of «pichavpn_a1b2»
 // Off by default (kv `partner:brand_on`). A partner qualifies when his tier reaches `partner:brand_min` (default: the second tier, bronze), or an
 // administrator allows him by hand, or he is a credit partner (n2). The name is Latin letters/digits, unique, never a name of ours.
