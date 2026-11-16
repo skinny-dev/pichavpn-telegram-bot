@@ -60,6 +60,12 @@ export async function volume30(userId, at = now()) {
   return { gb: Number(a?.v ?? 0) + Number(ren.v ?? 0), orders: Number(a?.n ?? 0) + Number(ren.n ?? 0), spent: Number(a?.s ?? 0) + Number(ren.s ?? 0) }
 }
 
+/** the end of a partnership (expiry): back to an ordinary customer at the ordinary prices. The old system left `pricediscount` behind, so an ex-partner kept the discount forever. */
+export async function partnerEnd(id) {
+  await run(sql`UPDATE user SET agent = 'f', expire = NULL, pricediscount = '0' WHERE id = ${String(id)}`)
+  const locks = parse(await kvGet('partner:locks'), {})
+  if (locks[id]) { delete locks[id]; await kvSet('partner:locks', JSON.stringify(locks)) }
+}
 export const locksGet = async () => parse(await kvGet('partner:locks'), {})
 export const logGet = async () => parse(await kvGet('partner:log'), [])
 const logAdd = async (e) => kvSet('partner:log', JSON.stringify([{ t: now(), ...e }, ...(await logGet())].slice(0, 200)))

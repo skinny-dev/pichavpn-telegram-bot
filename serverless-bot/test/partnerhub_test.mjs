@@ -81,5 +81,11 @@ check('panel: the state shows the count and the log', (await call('partner_notic
 const E = await import('../tgcloud/lib/events.js')
 const ev = { id: 'e1', name: 'رویداد آزمایشی', type: 'code', startsAt: nowT + 10 * 86400, endsAt: nowT + 12 * 86400, params: { percent: 10, code: 'PART10', limit: 20 } }
 check('the early notice text has the name, the dates and the tone', /«رویداد آزمایشی»/.test(E.partnerHeadsUp(ev)) && E.partnerHeadsUp(ev).startsWith('درود') && /PART10/.test(E.partnerHeadsUp(ev)))
+// the end of a partnership: ordinary prices again (the old bot left the discount behind)
+const Pm = await import('../tgcloud/lib/partners.js')
+await user('9506', 'n', 25); await Pm.partnerSet('9506', { pct: 25, lock: true }).catch(() => {})
+await Pm.partnerEnd('9506')
+const gone = await db.get(sql`SELECT agent, pricediscount FROM user WHERE id = '9506'`)
+check('expiry: back to an ordinary customer AND the discount is gone', gone.agent === 'f' && String(gone.pricediscount) === '0', JSON.stringify(gone))
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)

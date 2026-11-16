@@ -15,7 +15,7 @@ import { eventsTick } from './events.js'
 import { partnersTick } from './partners.js'
 import { gateHealthRun, notifyAdmins, NAMES } from './gatehealth.js'
 import { notifyPartners } from './partnerhub.js'
-import { modeGet as partnersMode } from './partners.js'
+import { modeGet as partnersMode, partnerEnd } from './partners.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
@@ -161,7 +161,7 @@ async function alertBalance(c) {
 async function expireAgent(c) {
   for (const u of await all(sql`SELECT id, username FROM user WHERE expire IS NOT NULL AND expire != '' AND CAST(expire AS INTEGER) < ${now()} + 0 LIMIT 20`)) {
     await sendmessage(u.id, c.T.users.agent.expiredNotice, null, 'HTML')
-    await run(sql`UPDATE user SET agent = 'f', expire = NULL WHERE id = ${u.id}`)
+    await partnerEnd(u.id)
     if (String(c.setting.Channel_Report ?? '').length > 0) await telegram('sendmessage', { chat_id: c.setting.Channel_Report, message_thread_id: c.topicsAll?.otherreport, text: sprintf(c.T.Admin.reportgroup.agentExpiredGroupChanged, u.id, u.username), parse_mode: 'HTML' })
   }
 }
