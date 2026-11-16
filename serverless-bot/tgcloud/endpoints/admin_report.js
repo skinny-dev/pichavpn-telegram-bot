@@ -336,6 +336,40 @@ TOOLS.customer = (() => {
   return main
 })()
 
+TOOLS.partner_ready = (() => {
+  // Can a new partner (agent) really work today? Read-only checklist: the partner price list, the request button, bulk buying, the number of partners, the tiers.
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const out = { checks: [] }
+    const add = (name, ok, detail) => out.checks.push({ ok: ok === null ? 'check' : ok ? 'OK' : 'MISSING', name, detail })
+    const byAgent = await all(sql`SELECT agent, COUNT(*) AS n FROM product GROUP BY agent`)
+    const count = (a) => Number(byAgent.find((r) => String(r.agent) === a)?.n ?? 0)
+    out.products_by_agent = Object.fromEntries(byAgent.map((r) => [String(r.agent) || '(empty)', Number(r.n)]))
+    add('a PARTNER price list exists (products with agent «n»)', count('n') > 0, `${count('n')} plans for partners, ${count('f')} for customers` + (count('n') === 0 ? ' — a partner would see NO plans to buy' : ''))
+    add('an ADVANCED partner (n2, credit) price list exists, or n2 is not offered', count('n2') > 0 ? true : null, `${count('n2')} plans for n2`)
+    const set = (await one(sql`SELECT bulkbuy, agentreqprice, keyboardmain FROM setting LIMIT 1`)) || {}
+    let btn = false; try { const k = JSON.parse(set.keyboardmain).keyboard; for (const row of Array.isArray(k) ? k : Object.values(k || {})) for (const b of Array.isArray(row) ? row : Object.values(row || {})) if (b && /نمایندگی|همکار/.test(String(b.text))) btn = true } catch { /* keep false */ }
+    add('the «درخواست نمایندگی» button is on the customer keyboard', btn, btn ? 'visible' : 'not found in keyboardmain (customers cannot ask)')
+    add('bulk purchase is enabled', set.bulkbuy !== 'offbulk', String(set.bulkbuy ?? ''))
+    add('the request fee is set (0 = free request)', true, String(set.agentreqprice ?? '0') + ' toman (refunded on reject)')
+    const partners = await all(sql`SELECT agent, COUNT(*) AS n, SUM(CASE WHEN expire IS NOT NULL AND expire != '' AND expire != '0' THEN 1 ELSE 0 END) AS with_expiry FROM user WHERE agent IN ('n', 'n2') GROUP BY agent`)
+    out.partners = Object.fromEntries(partners.map((r) => [r.agent, { count: Number(r.n), with_expiry: Number(r.with_expiry) }]))
+    const reqs = await all(sql`SELECT status, COUNT(*) AS n FROM Requestagent GROUP BY status`)
+    out.requests = Object.fromEntries(reqs.map((r) => [r.status, Number(r.n)]))
+    add('there is no request stuck waiting', Number(out.requests.waiting ?? 0) === 0, `${out.requests.waiting ?? 0} waiting`)
+    // the partner price against the customer price of the same plan (margin check against the infrastructure cost)
+    const cost = Number(await kvGet('events:cost_gb')) || 1877
+    const rows = await all(sql`SELECT p.name_product AS name, CAST(p.Volume_constraint AS REAL) AS gb, CAST(p.price_product AS INTEGER) AS partner, CAST(f.price_product AS INTEGER) AS retail FROM product p LEFT JOIN product f ON f.code_product = p.code_product AND f.agent = 'f' AND f.Location = p.Location WHERE p.agent = 'n' ORDER BY gb LIMIT 14`)
+    out.partner_prices = rows.map((r) => ({ plan: String(r.name).split(/\s*[—|-]\s*/)[0], gb: r.gb, partner_toman: r.partner, retail_toman: r.retail || null, off_pct: r.retail ? Math.round((1 - r.partner / r.retail) * 100) : null, margin_pct: r.partner > 0 ? Math.round(((r.partner - r.gb * cost) / r.partner) * 100) : null }))
+    const low = out.partner_prices.filter((r) => r.margin_pct !== null && r.margin_pct < 25)
+    add('no partner plan is sold below a 25% margin', low.length === 0, low.length ? low.map((r) => `${r.plan}: ${r.margin_pct}%`).join(', ') : 'ok')
+    out.tiers_mode = (await kvGet('partners:mode')) === 'live' ? 'live' : 'simulation'
+    out.verdict = out.checks.every((c) => c.ok !== 'MISSING') ? 'ready for a first partner' : 'NOT ready: fix the MISSING items first'
+    return out
+  }
+  return main
+})()
+
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const fn = TOOLS[String(input?.tool ?? '')]

@@ -140,3 +140,84 @@ export const adminPayRoutes = [
     return true
   },
 ]
+
+// ---------- partner (agent) requests: accept / reject / type / expiry — admin.php 4850–4975 and 8688. An administrator only.
+// (The PHP reject handler refunded the request fee BEFORE checking whether it was already reviewed: a double tap refunded twice. Here the check comes first.)
+const agentLabels = (T) => ({ n: T.keyboard?.normalAgent ?? 'نماینده عادی', n2: T.keyboard?.advancedAgent ?? 'نماینده پیشرفته' })
+const agentKb = (c, id, current) => {
+  const T = c.T, L = agentLabels(T)
+  return J({ inline_keyboard: [
+    [{ text: T.keyboard?.requestApproved ?? '✅ تأیید شد', callback_data: 'accept' }],
+    Object.entries(L).map(([code, label]) => ({ text: (code === current ? '✅ ' : '') + label, callback_data: `setagenttype_${code}_${id}` })),
+    [{ text: T.keyboard?.agentExpireTime ?? '⏳ زمان نمایندگی', callback_data: 'expireset_' + id }],
+    [{ text: T.keyboard?.userManagement ?? '👤 مدیریت کاربر', callback_data: 'manageuser_' + id }],
+  ] })
+}
+const requestBy = (id) => one(sql`SELECT * FROM Requestagent WHERE id = ${String(id)}`)
+
+export const adminAgentRoutes = [
+  async (c) => {
+    const m = /^rejectrequesta_(\w+)/.exec(c.datain ?? '')
+    if (!m || c.adminRow?.rule !== 'administrator') return false
+    const T = c.T, id = m[1], A = T.Admin?.agent ?? {}, K = T.keyboard ?? {}
+    const req = await requestBy(id)
+    if (!req) { await alert(c, K.requestNotFound ?? 'درخواست پیدا نشد'); return true }
+    if (req.status === 'reject' || req.status === 'accept') { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
+    const claim = await run(sql`UPDATE Requestagent SET status = 'reject' WHERE id = ${id} AND status NOT IN ('reject', 'accept')`)
+    if (Number(claim?.rowsAffected ?? 0) === 0) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true } // someone else was faster: no second refund
+    const u = await one(sql`SELECT Balance FROM user WHERE id = ${id}`)
+    if (u) await run(sql`UPDATE user SET Balance = ${intval(u.Balance) + intval(c.setting.agentreqprice)} WHERE id = ${id}`) // the request fee goes back
+    await sendmessage(c.from_id, A.requestRejected ?? '❌ درخواست نمایندگی رد شد', null, 'HTML')
+    await sendmessage(id, T.users?.agent?.requestRejected ?? 'درخواست نمایندگی شما رد شد. هزینهٔ درخواست به کیف پول شما برگشت.', null, 'HTML')
+    await Editmessagetext(c.from_id, c.message_id, sprintf(A.requestNotice ?? '%s %s %s', id, req.username, req.Description), J({ inline_keyboard: [[{ text: K.requestRejected ?? '❌ رد شد', callback_data: 'reject' }]] }))
+    return true
+  },
+  async (c) => {
+    const m = /^addagentrequest_(\w+)/.exec(c.datain ?? '')
+    if (!m || c.adminRow?.rule !== 'administrator') return false
+    const T = c.T, id = m[1], A = T.Admin?.agent ?? {}, K = T.keyboard ?? {}
+    const req = await requestBy(id)
+    if (!req) { await alert(c, K.requestNotFound ?? 'درخواست پیدا نشد'); return true }
+    if (req.status === 'reject' || req.status === 'accept') { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
+    const claim = await run(sql`UPDATE Requestagent SET status = 'accept', type = 'n' WHERE id = ${id} AND status NOT IN ('reject', 'accept')`)
+    if (Number(claim?.rowsAffected ?? 0) === 0) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
+    await run(sql`UPDATE user SET agent = 'n', expire = NULL WHERE id = ${id}`)
+    await sendmessage(id, T.users?.agent?.requestApproved ?? 'درخواست نمایندگی شما تأیید شد.', null, 'HTML')
+    await sendmessage(c.from_id, A.userAgented ?? '✅ کاربر نماینده شد', keyboardAdmin(c), 'HTML')
+    const label = agentLabels(T).n
+    const text = sprintf(A.requestNotice2 ?? '%s %s %s', id, req.username, req.Description) + sprintf(A.statusApproved ?? ' %s', label) + (A.changeTypeHint ?? '')
+    await Editmessagetext(c.from_id, c.message_id, text, agentKb(c, id, 'n'))
+    await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text: K.agentActivated ?? 'نمایندگی فعال شد', show_alert: false, cache_time: 5 })
+    return true
+  },
+  async (c) => {
+    const m = /^setagenttype_(n|n2)_(\w+)/.exec(c.datain ?? '')
+    if (!m || c.adminRow?.rule !== 'administrator') return false
+    const T = c.T, sel = m[1], id = m[2], A = T.Admin?.agent ?? {}
+    if (!(await one(sql`SELECT 1 AS x FROM user WHERE id = ${id}`))) { await alert(c, T.keyboard?.requestNotFound ?? 'کاربر پیدا نشد'); return true }
+    await run(sql`UPDATE user SET agent = ${sel} WHERE id = ${id}`)
+    await run(sql`UPDATE Requestagent SET type = ${sel} WHERE id = ${id}`)
+    const req = await requestBy(id)
+    if (req) await Editmessagetext(c.from_id, c.message_id, sprintf(A.requestNotice3 ?? '%s %s %s', id, req.username, req.Description) + sprintf(A.statusApproved2 ?? ' %s', agentLabels(T)[sel]) + (A.changeTypeHint ?? ''), agentKb(c, id, sel))
+    await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text: T.keyboard?.agentActivated ?? 'سطح نماینده عوض شد', show_alert: false, cache_time: 5 })
+    return true
+  },
+  // the agent's expiry: the administrator types a number of days
+  async (c) => {
+    const m = /^expireset_(\w+)/.exec(c.datain ?? '')
+    if (!m || c.adminRow?.rule !== 'administrator') return false
+    await run(sql`UPDATE user SET Processing_value = ${m[1]} WHERE id = ${c.from_id}`)
+    await sendmessage(c.from_id, c.T.Admin?.agent?.askExpiry ?? 'تعداد روز اعتبار نمایندگی را بنویسید', backAdmin(c), 'HTML')
+    await step(c, 'gettime_expire_agent')
+    return true
+  },
+  async (c) => {
+    if (c.user.step !== 'gettime_expire_agent' || c.adminRow?.rule !== 'administrator') return false
+    if (!/^\d+$/.test(String(c.text ?? ''))) { await sendmessage(c.from_id, c.T.common?.invalidInput ?? 'ورودی نامعتبر است', backAdmin(c), 'HTML'); return true }
+    await step(c, 'home')
+    const id = String(c.user.Processing_value ?? '')
+    await run(sql`UPDATE user SET expire = ${String(Math.floor(Date.now() / 1000) + intval(c.text) * 86400)} WHERE id = ${id} AND agent IN ('n', 'n2')`)
+    await sendmessage(c.from_id, c.T.Admin?.agent?.expirySaved ?? '✅ زمان نمایندگی ذخیره شد', keyboardAdmin(c), 'HTML')
+    return true
+  },
+]

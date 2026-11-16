@@ -9,7 +9,7 @@ import { supportRoutes } from './routes/support.js'
 import { buyRoutes } from './routes/buy.js'
 import { bulkRoutes } from './routes/bulk.js'
 import { payRoutes } from './routes/pay.js'
-import { adminPayRoutes } from './admin/payments.js'
+import { adminPayRoutes, adminAgentRoutes } from './admin/payments.js'
 import { adminRelayRoutes } from './admin/relay.js'
 import { adminGatewayRoutes } from './admin/gateways.js'
 import { adminCareRoutes } from './admin/care.js'
@@ -49,5 +49,6 @@ export const adminRoutes = [
   ...adminFitRoutes,
   ...adminPulseRoutes,
   ...adminPayRoutes,
+  ...adminAgentRoutes,
   ...adminMenuRoutes,
 ]
