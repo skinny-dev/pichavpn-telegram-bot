@@ -71,3 +71,36 @@ export function urldecode(s) {
 export function phpJson(v) {
   return JSON.stringify(v ?? null).replace(/\//g, '\\/').replace(/[\u0080-\uffff]/g, (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'))
 }
+
+// ---------------------------------------------------------------- dynamic product names
+// A product NAME may carry tokens that are filled in for whoever looks at it, so a partner's price (or any price change) is never stale in the text:
+//   {price} = the viewer's final price (number, no unit) · {volume} / {traffic} / {traffic_volume} = GB · {days} / {time} = days
+const NAME_TOKEN = /\{(price|volume|traffic|traffic_volume|days|time)(_fa)?\}/gi
+export const hasNameTokens = (s) => /\{(price|volume|traffic|traffic_volume|days|time)(_fa)?\}/i.test(String(s ?? ''))
+const limitText = (v) => { const x = Number(v); return !Number.isFinite(x) || x === 0 ? 'نامحدود' : String(Math.round(x * 100) / 100) }
+const faDigits = (t) => t.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]).replace(/,/g, '٬') // {volume_fa} / {price_fa} / {days_fa}: Persian digits (the shop's names are often written in them)
+export function productName(name, product = {}, price = product.price_product) {
+  const s = String(name ?? '')
+  if (!hasNameTokens(s)) return s
+  return s.replace(NAME_TOKEN, (m, k, fa) => {
+    k = k.toLowerCase()
+    const v = k === 'price' ? numberFormat(Number(price) || 0) : limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint)
+    return fa ? faDigits(v) : v
+  })
+}
+/** does an invoice's stored name belong to this product? Exact, or the product's template filled with ITS OWN volume/days and any price (the price differs per viewer and per day) */
+export function nameMatchesProduct(stored, product) {
+  const tpl = String(product.name_product ?? ''), st = String(stored ?? '')
+  if (tpl === st) return true
+  if (!hasNameTokens(tpl)) return false
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let re = '', last = 0
+  for (const m of tpl.matchAll(NAME_TOKEN)) {
+    re += esc(tpl.slice(last, m.index))
+    const k = m[1].toLowerCase()
+    re += k === 'price' ? '[\\d۰-۹,٬.]+' : esc(m[2] ? faDigits(limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint)) : limitText(k === 'days' || k === 'time' ? product.Service_time : product.Volume_constraint))
+    last = m.index + m[0].length
+  }
+  re += esc(tpl.slice(last))
+  return new RegExp('^' + re + '$').test(st)
+}

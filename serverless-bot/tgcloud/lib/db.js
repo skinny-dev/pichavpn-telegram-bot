@@ -3,6 +3,7 @@ import { db } from 'sdk'
 import { sql as sdkSql } from 'sdk/db'
 import COLUMNS from './columns.js'
 import { phpFloat } from './fmt.js'
+import { nameMatchesProduct } from './php.js'
 
 /**
  * sql`` with every number bound as text, the way PHP's PDO sends values: a number written into a TEXT column is
@@ -64,4 +65,15 @@ export async function kvSet(key, value) {
 }
 export async function kvDel(key) {
   await run(sql`DELETE FROM kv WHERE key = ${key}`)
+}
+
+/** the product an invoice was bought from, by the NAME stored on the invoice: exact match first (old behaviour), then dynamic-name templates.
+ *  location: panel name (or null = any); agent: restrict to one user type (or null). Several matches → prefer the one in this exact location. */
+export async function productByInvoiceName(name, location = null, agent = null) {
+  const exact = await one(sql`SELECT * FROM product WHERE name_product = ${name ?? null} AND (${location} IS NULL OR Location = ${location} OR Location = '/all') AND (${agent} IS NULL OR agent = ${agent}) ORDER BY Location = '/all' LIMIT 1`)
+  if (exact) return exact
+  if (!name) return null
+  const rows = await all(sql`SELECT * FROM product WHERE name_product LIKE '%{%' AND (${location} IS NULL OR Location = ${location} OR Location = '/all') AND (${agent} IS NULL OR agent = ${agent})`)
+  const hit = rows.filter((p) => nameMatchesProduct(name, p))
+  return hit.find((p) => p.Location === location) || hit[0] || null
 }

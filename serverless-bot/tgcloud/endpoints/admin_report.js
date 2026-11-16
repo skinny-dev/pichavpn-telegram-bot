@@ -3,7 +3,8 @@
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
 import { dataUser } from '../lib/panel.js'
-import { all, kvGet, one, sql } from '../lib/db.js'
+import { all, kvGet, kvSet, one, run, sql } from '../lib/db.js'
+import { productName, hasNameTokens } from '../lib/php.js'
 import { healthGet } from '../lib/gatehealth.js'
 import { paychiBase, paychiCall, paychiKey } from '../lib/paychi.js'
 import { USE_SERVICES, catalogGet, rankFor, syncHosts } from '../lib/servers.js'
@@ -369,6 +370,67 @@ TOOLS.partner_ready = (() => {
     out.tiers_mode = (await kvGet('partners:mode')) === 'live' ? 'live' : 'simulation'
     out.verdict = out.checks.every((c) => c.ok !== 'MISSING') ? 'ready for a first partner' : 'NOT ready: fix the MISSING items first'
     return out
+  }
+  return main
+})()
+
+
+// product_names: turn the product NAMES into dynamic ones ({volume} / {days} / {price}) so a partner, a discount or a price change shows right everywhere.
+//   npx tgcloud run endpoints/admin_report '{"tool":"product_names"}'                 → preview only (nothing written)
+//   npx tgcloud run endpoints/admin_report '{"tool":"product_names","apply":true}'    → writes (a backup of every old name is kept)
+//   npx tgcloud run endpoints/admin_report '{"tool":"product_names","restore":true}'  → puts the old names back
+// A number in a name is replaced ONLY when it equals the product's own data (volume, days, price); a number that disagrees is reported and left alone.
+const FA = '۰۱۲۳۴۵۶۷۸۹', AR = '٠١٢٣٤٥٦٧٨٩'
+const toLatin = (t) => String(t).replace(/[۰-۹]/g, (d) => FA.indexOf(d)).replace(/[٠-٩]/g, (d) => AR.indexOf(d))
+function dynamicNamePlan(p) {
+  const name = String(p.name_product ?? '')
+  if (hasNameTokens(name)) return { new: name, changed: false, note: 'already dynamic', warnings: [] }
+  const vol = Number(p.Volume_constraint), days = Number(p.Service_time), price = Number(p.price_product)
+  const warnings = [], used = []
+  const re = /([0-9۰-۹٠-٩][0-9۰-۹٠-٩,٬]*(?:[.٫][0-9۰-۹٠-٩]+)?)(\s*)(گیگابایت|گیگ|GB|gb|روزه|روز|هزار\s*تومان|تومان|تومن)/gu
+  const out = name.replace(re, (m, num, gap, unit) => {
+    const fa = /[۰-۹]/.test(num) ? '_fa' : ''
+    const v = Number(toLatin(num).replace(/[,٬]/g, '').replace('٫', '.'))
+    if (/گیگ|GB|gb/.test(unit)) { if (v === vol && vol > 0) { used.push('volume'); return `{volume${fa}}${gap}${unit}` } warnings.push(`${m.trim()} ≠ حجم محصول (${p.Volume_constraint})`); return m }
+    if (/روز/.test(unit)) { if (v === days && days > 0) { used.push('days'); return `{days${fa}}${gap}${unit}` } warnings.push(`${m.trim()} ≠ مدت محصول (${p.Service_time})`); return m }
+    const toman = /هزار/.test(unit) ? v * 1000 : v
+    if (toman === price) { used.push('price'); return `{price${fa}}${gap}${/هزار/.test(unit) ? 'تومان' : unit}` }
+    warnings.push(`${m.trim()} ≠ قیمت محصول (${p.price_product}) — قیمت همکار/تخفیف‌دار نیست`); return m
+  })
+  return { new: out, changed: out !== name, used, warnings, note: used.length ? '' : 'no number to make dynamic' }
+}
+TOOLS.product_names = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const backup = JSON.parse((await kvGet('product:names_backup')) || '{}') || {}
+    const rows = await all(sql`SELECT id, name_product, Volume_constraint, Service_time, price_product, agent, Location, category FROM product ORDER BY agent, CAST(Volume_constraint AS REAL), CAST(Service_time AS REAL)`)
+    if (input?.restore) {
+      let n = 0
+      for (const r of rows) if (backup[r.id] !== undefined && backup[r.id] !== r.name_product) { await run(sql`UPDATE product SET name_product = ${backup[r.id]} WHERE id = ${r.id}`); n++ }
+      return { restored: n }
+    }
+    const list = rows.map((r) => ({ r, plan: dynamicNamePlan(r) }))
+    const seen = {}
+    for (const { r, plan } of list) { const k = `${r.agent}|${r.Location}|${plan.new}`; seen[k] = (seen[k] || 0) + 1 }
+    const show = (name, r, off) => productName(name, r, Math.round(Number(r.price_product) * (1 - off / 100)))
+    const items = list.map(({ r, plan }) => ({
+      id: r.id, agent: r.agent, panel: r.Location, category: r.category, old: r.name_product, new: plan.new, changed: plan.changed, warnings: plan.warnings, note: plan.note,
+      customer_sees: show(plan.new, r, 0), partner_15pct_sees: show(plan.new, r, 15),
+      duplicate_template: seen[`${r.agent}|${r.Location}|${plan.new}`] > 1 && !plan.changed ? 'same name as another product (ok: the bot tells them apart by code)' : undefined,
+    }))
+    const todo = items.filter((i) => i.changed && i.warnings.length === 0)
+    const out = { products: items.length, will_change: todo.length, already_dynamic: items.filter((i) => i.note === 'already dynamic').length, with_warnings: items.filter((i) => i.warnings.length).length, no_number: items.filter((i) => i.note === 'no number to make dynamic').length }
+    if (input?.apply) {
+      let n = 0
+      for (const i of todo) {
+        if (backup[i.id] === undefined) backup[i.id] = i.old
+        const w = await run(sql`UPDATE product SET name_product = ${i.new} WHERE id = ${i.id} AND name_product = ${i.old}`)
+        n += Number(w?.rowsAffected ?? 0)
+      }
+      await kvSet('product:names_backup', JSON.stringify(backup))
+      return { ...out, applied: n, note: 'the old names are kept; undo with {"tool":"product_names","restore":true}' }
+    }
+    return { ...out, preview_only: true, items: items.map((i) => ({ id: i.id, agent: i.agent, old: i.old, new: i.new, customer_sees: i.customer_sees, partner_15pct_sees: i.partner_15pct_sees, warnings: i.warnings.length ? i.warnings : undefined, note: i.note || undefined })) }
   }
   return main
 })()

@@ -5,7 +5,7 @@ import { sendStartMessage, step, shop } from '../bot.js'
 import { panelLists, backuserKb } from '../keyboards.js'
 import { dataUser } from '../panel.js'
 import { jdate, formatBytes, phpFloat, phpRound } from '../fmt.js'
-import { sprintf, strtr, time, intval, J } from '../php.js'
+import { sprintf, strtr, time, intval, J, productName } from '../php.js'
 
 const LIVE = `(status = 'active' OR status = 'end_of_time' OR status = 'end_of_volume' OR status = 'sendedwarn' OR status = 'send_on_hold')`
 
@@ -220,7 +220,7 @@ async function servicePage(c, m) {
     try { v = typeof so.value === 'string' ? JSON.parse(so.value) : null } catch { v = null }
     if (v && typeof v === 'object') {
       const p = await one(sql`SELECT * FROM product WHERE code_product = ${v.code_product}`)
-      if (p) { inv.name_product = p.name_product; inv.Volume = p.Volume_constraint; inv.Service_time = p.Service_time }
+      if (p) { inv.name_product = productName(p.name_product, p, inv.price_product); inv.Volume = p.Volume_constraint; inv.Service_time = p.Service_time }
     }
   }
   const [timeextra, extra, disorder, changeservice, showconfig, removeservice] = await Promise.all(['statustimeextra', 'statusextra', 'statusdisorder', 'statuschangeservice', 'configshow', 'backserviecstatus'].map(shop))

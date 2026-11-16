@@ -1,6 +1,6 @@
 // A service's actions — index.php lines 1917–2899: new subscription link, extra volume, change location,
 // report a problem, extra time, delete request, transfer to another user.
-import { one, all, run, sql } from '../db.js'
+import { one, all, run, sql, productByInvoiceName } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
 import { step, shop, tehranDate } from '../bot.js'
 import { backuserKb, keyboardConfig, panelLists } from '../keyboards.js'
@@ -217,7 +217,7 @@ export const manageRoutes = [
     let price = newP.priceChangeloc
     const custom = eq(inv.name_product, T.users.customSellVolume.btnVolume) || eq(inv.name_product, T.users.customSellVolume.btnService)
     const prod = custom ? { code_product: T.users.customSellVolume.btnVolume }
-      : await one(sql`SELECT * FROM product WHERE (Location = ${inv.Service_location} OR Location = '/all') AND agent = ${user.agent} AND name_product = ${inv.name_product}`)
+      : await productByInvoiceName(inv.name_product, inv.Service_location, user.agent)
     if (newP.type === 'Manualsale' && oldP.url_panel === newP.url_panel) { await sendmessage(c.from_id, T.users.changeLocation.notPossible, null, 'html'); return true }
     const d = await dataUser(inv.Service_location, inv.username, c.domain)
     if (d.status === 'on_hold') { await sendmessage(c.from_id, T.users.changeLocation.configUnused, null, 'html'); return true }

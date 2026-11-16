@@ -3,7 +3,7 @@
 import { gatewayDownSet } from './gatepause.js'
 import { one, all, run, sql, kvGet } from './db.js'
 import { catalogLabel, emojiConfig } from './emoji.js'
-import { numberFormat, intval, J, time } from './php.js'
+import { numberFormat, intval, J, time, productName, hasNameTokens, nameMatchesProduct } from './php.js'
 import { phpRound } from './fmt.js'
 import { shop } from './bot.js'
 
@@ -125,23 +125,8 @@ export function promoApplyQuote(product, quote, now = time()) {
   return p
 }
 
-// ---------------------------------------------------------------- dynamic product names
-// A product NAME may carry tokens that are filled in for whoever looks at it, so a partner's price (or any price change) is never stale in the text:
-//   {price} = the viewer's final price (number, no unit) · {volume} / {traffic} / {traffic_volume} = GB · {days} / {time} = days
-const NAME_TOKENS = /\{(price|volume|traffic|traffic_volume|days|time)\}/gi
-export const hasNameTokens = (s) => /\{(price|volume|traffic|traffic_volume|days|time)\}/i.test(String(s ?? ''))
-export function productName(name, product = {}, price = product.price_product) {
-  const s = String(name ?? '')
-  if (!hasNameTokens(s)) return s
-  const num0 = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
-  const lim = (v) => (num0(v) === 0 ? 'نامحدود' : String(Math.round(num0(v) * 100) / 100))
-  return s.replace(NAME_TOKENS, (m, k) => {
-    k = k.toLowerCase()
-    if (k === 'price') return numberFormat(num0(price))
-    if (k === 'days' || k === 'time') return lim(product.Service_time)
-    return lim(product.Volume_constraint)
-  })
-}
+// dynamic product names live in php.js (a leaf module, so panel.js / directpay.js can use them too)
+export { productName, hasNameTokens, nameMatchesProduct }
 
 // ---------------------------------------------------------------- keyboards
 /** KeyboardProduct(): rows = the product rows the PHP query returned */

@@ -2,7 +2,7 @@
 // payment, a renewal, extra volume / time) or tops up the wallet. `c` is the update that confirmed it (the admin who
 // approved a receipt, or the customer's own Stars payment); confirmKb is the admin message's keyboard.
 import { receiptsClose } from './receipts.js'
-import { one, run, sql } from './db.js'
+import { one, run, sql, productByInvoiceName } from './db.js'
 import { sendmessage, Editmessagetext, telegram } from './tg.js'
 import { shop, tehranDate } from './bot.js'
 import { dataUser, createUserFor, extend as panelExtend, extraVolume, extraTime } from './panel.js'
@@ -62,7 +62,7 @@ export async function directPayment(c, orderId, confirmKb = null) {
       return
     }
     if (inv.Status === 'active') return
-    let info = { ...((await one(sql`SELECT * FROM product WHERE name_product = ${inv.name_product} AND (Location = ${inv.Service_location} OR Location = '/all')`)) || {}) }
+    let info = { ...((await productByInvoiceName(inv.name_product, inv.Service_location)) || {}) }
     if (eq(inv.name_product, T.users.customSellVolume.btnVolume) || eq(inv.name_product, T.users.customSellVolume.btnService)) {
       info = { ...info, data_limit_reset: 'no_reset', Volume_constraint: inv.Volume, name_product: T.users.customSellVolume.title, code_product: 'customvolume', Service_time: inv.Service_time, price_product: inv.price_product }
     }

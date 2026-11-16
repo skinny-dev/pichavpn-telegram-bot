@@ -165,13 +165,14 @@ export async function dataUser(panelName, username, domain = '') {
 const protocolsConfigured = (raw) => { const d = parse(String(raw ?? '')); return d && typeof d === 'object' && Object.keys(d).length > 0 }
 
 /** adduser + driver create: {status:'successful', username, subscription_url, configs} */
-export async function createUser(panelName, { dataLimit, username, expire, note = '', dataLimitReset = 'no_reset', productName = false, invoice = null, domain = '' }) {
+export async function createUser(panelName, { dataLimit, username, expire, note = '', dataLimitReset = 'no_reset', productName = false, productCode = null, invoice = null, domain = '' }) {
   const panel = await panelByName(panelName)
   if (!panel) return { status: 'Unsuccessful', msg: 'Panel Not Found' }
   let inbounds
   if (panel.inbounds != null && panel.inbounds !== 'null') {
     if (productName !== false && productName !== 'usertest') {
-      const p = await one(sql`SELECT * FROM product WHERE name_product = ${productName} AND (Location = ${panelName} OR Location = '/all') ORDER BY Location = '/all' LIMIT 1`)
+      const p = productCode ? await one(sql`SELECT * FROM product WHERE code_product = ${productCode} AND (Location = ${panelName} OR Location = '/all') ORDER BY Location = '/all' LIMIT 1`)
+        : await one(sql`SELECT * FROM product WHERE name_product = ${productName} AND (Location = ${panelName} OR Location = '/all') ORDER BY Location = '/all' LIMIT 1`) // by code: dynamic names can be the same for several products
       if (!p || !p.inbounds) inbounds = parse(panel.inbounds)
       else { inbounds = parse(p.inbounds); panel.proxies = p.proxies }
     } else inbounds = parse(panel.inbounds)
@@ -369,7 +370,7 @@ export async function createUserFor(panelName, codeProduct, usernameC, cfg, { do
   }
   return createUser(panelName, {
     dataLimit: cfg.data_limit, username: usernameC, expire: cfg.expire, note: `${cfg.from_id ?? ''} | ${cfg.username ?? ''} | ${cfg.type ?? ''}`,
-    dataLimitReset: reset ?? 'no_reset', productName, invoice, domain,
+    dataLimitReset: reset ?? 'no_reset', productName, productCode: ['usertest', customLabel, 'customvolume'].includes(codeProduct) ? null : codeProduct, invoice, domain,
   })
 }
 

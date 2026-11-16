@@ -1,6 +1,6 @@
 // Renewal (تمدید) — index.php lines 1409–1917: plan list (categories / durations / products), custom renewal,
 // discount code, confirm: pay from the wallet (or go to payment), extend on the panel, cashback, reports.
-import { one, all, run, sql } from '../db.js'
+import { one, all, run, sql, productByInvoiceName } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
 import { step, shop, tehranDate } from '../bot.js'
 import { backuserKb } from '../keyboards.js'
@@ -135,7 +135,7 @@ export const extendRoutes = [
     } else if (c.datain === 'exntedagei') {
       const so = await one(sql`SELECT value FROM service_other WHERE username = ${inv.username ?? null} AND type = 'extend_user' AND status = 'paid' ORDER BY time DESC, id DESC`)
       let prod
-      if (!so) prod = await one(sql`SELECT * FROM product WHERE name_product = ${inv.name_product ?? null}`)
+      if (!so) prod = await productByInvoiceName(inv.name_product ?? null)
       else {
         let v = null
         try { v = JSON.parse(so.value) } catch { v = null }
