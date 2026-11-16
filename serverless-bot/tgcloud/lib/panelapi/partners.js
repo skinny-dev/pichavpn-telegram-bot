@@ -9,6 +9,13 @@ export async function route(name, q, b) {
       ok: true, now: Math.floor(Date.now() / 1000), mode: await P.modeGet(), tiers: await P.tiersGet(), maxPct: P.MAX_PCT, downgradeMonths: P.DOWNGRADE_AFTER_MONTHS,
       partners: await P.partnersList(), log: (await P.logGet()).slice(0, 30),
     }
+    case 'partner_requests': return { ok: true, requests: await P.requestsList(), welcome_pct: await P.welcomePct() }
+    case 'partner_request': {
+      if (!['accept', 'reject'].includes(b.decision)) fail('تصمیم نامعتبر', 400)
+      const r = await P.requestDecide(String(b.id), b.decision, { type: b.type === 'n2' ? 'n2' : 'n' })
+      if (!r.ok) fail(r.error, 404)
+      return r
+    }
     case 'partner_set': {
       try { await P.partnerSet(String(b.id), { pct: b.pct === undefined || b.pct === '' ? undefined : Number(b.pct), lock: b.lock, level: b.level }) } catch (e) { fail(String(e.message), 409) }
       return { ok: true }

@@ -8,6 +8,8 @@ import { createRequire } from 'node:module'
 import { seed } from '../seed.mjs'
 import { calls as botCalls } from 'sdk'
 import { handle } from './entry.mjs'
+import { db } from 'sdk'
+import { sql } from 'sdk/db'
 
 const require = createRequire('/opt/pw-browsers/')
 const { chromium } = (() => { try { return require('playwright') } catch { return createRequire(import.meta.url)('playwright') } })()
@@ -50,7 +52,12 @@ await page.waitForTimeout(1500)
 
 const base = `http://127.0.0.1:${port}/`
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' ' + extra}`); if (!ok) errors.push('check: ' + name) }
+for (const id of ['8301', '8302']) { await db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, Balance, pricediscount) VALUES (${id}, ${'shop' + id}, 'f', '0', '0')`); await db.run(sql`INSERT OR REPLACE INTO Requestagent (id, username, time, Description, status, type) VALUES (${id}, ${'shop' + id}, ${String(Math.floor(Date.now() / 1000))}, 'موبایل‌فروشی در تهران', 'waiting', 'None')`) }
 await page.goto(base + '#/partners'); await page.waitForTimeout(1500)
+check('the waiting partner requests are listed on top', (await page.getByTestId('request').count()) >= 2, String(await page.getByTestId('request').count()))
+await page.getByTestId('request').first().getByRole('button', { name: /تأیید \(همکار\)/ }).click(); await page.waitForTimeout(900)
+check('accepting a request removes it from the list', (await page.getByTestId('request').count()) === 1)
+
 check('the page lists the partners and says simulation is on', (await page.getByTestId('partner').count()) >= 5 && (await page.innerText('body')).includes('شبیه‌سازی'), String(await page.getByTestId('partner').count()))
 check('the tier table is there with five steps', (await page.getByTestId('tier').count()) === 5)
 await page.getByTestId('preview').click(); await page.waitForTimeout(800)

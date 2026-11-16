@@ -27,6 +27,7 @@ const req = (id) => db.get(sql`SELECT status, type FROM Requestagent WHERE id = 
 await mkUser('8101'); await mkReq('8101')
 calls.length = 0
 check('accept is handled', await go(await ctx('addagentrequest_8101')))
+check('the first tier (10%) is given with the approval', Number((await db.get(sql`SELECT pricediscount FROM user WHERE id = '8101'`)).pricediscount) === 10)
 check('the user becomes a partner (n), the request is accepted, no expiry', (await user('8101')).agent === 'n' && (await req('8101')).status === 'accept' && (await req('8101')).type === 'n' && (await user('8101')).expire === null)
 check('the new partner is told, the administrator gets the type and expiry buttons', calls.some(([m, p]) => /sendmessage/i.test(m) && String(p.chat_id) === '8101') && JSON.stringify(calls).includes('setagenttype_n2_8101') && JSON.stringify(calls).includes('expireset_8101'))
 calls.length = 0

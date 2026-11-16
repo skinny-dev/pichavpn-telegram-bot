@@ -156,3 +156,35 @@ export async function partnerSet(id, { pct, lock, level }) {
   if (pct !== undefined && lock === undefined) lock = true // a hand-set price is not overwritten by the automation
   if (lock !== undefined) { const l = await locksGet(); if (lock) l[id] = now(); else delete l[id]; await kvSet('partner:locks', JSON.stringify(l)) }
 }
+
+// ---------- partner requests (the «درخواست نمایندگی» of the bot): the list, and a decision that works from the panel as well as from the bot's buttons.
+// Accepting makes the user a partner (n) AND gives the first tier (10% by default) — otherwise a partner's price would equal a customer's.
+// The claim is atomic: a second tap or a second administrator changes nothing and refunds nothing twice.
+export async function requestsList() {
+  const rows = await all(sql`SELECT r.id, r.username, r.time, r.Description AS note, r.status, u.Balance AS balance, u.agent AS agent FROM Requestagent r LEFT JOIN user u ON u.id = r.id WHERE r.status = 'waiting' ORDER BY CAST(r.time AS INTEGER) DESC LIMIT 100`)
+  return rows.map((r) => ({ id: String(r.id), username: String(r.username ?? ''), at: Number(r.time) || 0, note: String(r.note ?? '').slice(0, 300), balance: Number(r.balance) || 0 }))
+}
+export async function welcomePct() { return (await tiersGet())[0].pct }
+
+/** decision: 'accept' | 'reject' → {ok, already?, refunded?, pct?}; sends the partner a short respectful message */
+export async function requestDecide(id, decision, { type = 'n' } = {}) {
+  id = String(id)
+  const req = await one(sql`SELECT * FROM Requestagent WHERE id = ${id}`)
+  if (!req) return { ok: false, error: 'درخواست پیدا نشد' }
+  if (req.status !== 'waiting') return { ok: true, already: true }
+  if (decision === 'accept') {
+    const claim = await run(sql`UPDATE Requestagent SET status = 'accept', type = ${type} WHERE id = ${id} AND status = 'waiting'`)
+    if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }
+    const pct = await welcomePct()
+    await run(sql`UPDATE user SET agent = ${type}, expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
+    await sendmessage(id, `درود 🌿\nدرخواست همکاری شما تأیید شد. از این پس قیمت همکار برای شما فعال است (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).\nبرای شروع، ربات را باز کنید و از منوی خرید استفاده کنید. اگر سؤالی داشتید همین‌جا بنویسید. سپاسگزارم.`, null, 'HTML')
+    return { ok: true, pct }
+  }
+  const claim = await run(sql`UPDATE Requestagent SET status = 'reject' WHERE id = ${id} AND status = 'waiting'`)
+  if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }
+  const fee = Number((await one(sql`SELECT agentreqprice AS f FROM setting LIMIT 1`))?.f) || 0
+  const u = await one(sql`SELECT Balance FROM user WHERE id = ${id}`)
+  if (u && fee > 0) await run(sql`UPDATE user SET Balance = ${Math.trunc(Number(u.Balance) || 0) + fee} WHERE id = ${id}`)
+  await sendmessage(id, `درود. درخواست همکاری شما در حال حاضر تأیید نشد.${fee > 0 ? ' هزینهٔ درخواست به کیف پول شما برگشت.' : ''}\nاگر می‌خواهید دوباره بررسی شود، با پشتیبانی در ارتباط باشید. سپاسگزارم.`, null, 'HTML')
+  return { ok: true, refunded: fee }
+}

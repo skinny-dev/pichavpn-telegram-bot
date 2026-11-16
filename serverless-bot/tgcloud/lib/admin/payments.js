@@ -4,6 +4,7 @@ import { sendmessage, Editmessagetext, telegram } from '../tg.js'
 import { step } from '../bot.js'
 import { directPayment } from '../directpay.js'
 import { receiptsClose } from '../receipts.js'
+import { welcomePct } from '../partners.js'
 import { keyboardAdmin, backAdmin } from './keyboards.js'
 import { sprintf, numberFormat, intval, J } from '../php.js'
 
@@ -181,7 +182,7 @@ export const adminAgentRoutes = [
     if (req.status === 'reject' || req.status === 'accept') { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
     const claim = await run(sql`UPDATE Requestagent SET status = 'accept', type = 'n' WHERE id = ${id} AND status NOT IN ('reject', 'accept')`)
     if (Number(claim?.rowsAffected ?? 0) === 0) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
-    await run(sql`UPDATE user SET agent = 'n', expire = NULL WHERE id = ${id}`)
+    await run(sql`UPDATE user SET agent = 'n', expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(await welcomePct())} ELSE pricediscount END WHERE id = ${id}`) // the first tier: otherwise a partner pays the customer price
     await sendmessage(id, T.users?.agent?.requestApproved ?? 'درخواست نمایندگی شما تأیید شد.', null, 'HTML')
     await sendmessage(c.from_id, A.userAgented ?? '✅ کاربر نماینده شد', keyboardAdmin(c), 'HTML')
     const label = agentLabels(T).n

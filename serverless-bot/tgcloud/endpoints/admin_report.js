@@ -348,8 +348,8 @@ TOOLS.partner_ready = (() => {
     add('a PARTNER price list exists (products with agent «n»)', count('n') > 0, `${count('n')} plans for partners, ${count('f')} for customers` + (count('n') === 0 ? ' — a partner would see NO plans to buy' : ''))
     add('an ADVANCED partner (n2, credit) price list exists, or n2 is not offered', count('n2') > 0 ? true : null, `${count('n2')} plans for n2`)
     const set = (await one(sql`SELECT bulkbuy, agentreqprice, keyboardmain FROM setting LIMIT 1`)) || {}
-    let btn = false; try { const k = JSON.parse(set.keyboardmain).keyboard; for (const row of Array.isArray(k) ? k : Object.values(k || {})) for (const b of Array.isArray(row) ? row : Object.values(row || {})) if (b && /نمایندگی|همکار/.test(String(b.text))) btn = true } catch { /* keep false */ }
-    add('the «درخواست نمایندگی» button is on the customer keyboard', btn, btn ? 'visible' : 'not found in keyboardmain (customers cannot ask)')
+    let btn = false; try { const k = JSON.parse(set.keyboardmain).keyboard; for (const row of Array.isArray(k) ? k : Object.values(k || {})) for (const b of Array.isArray(row) ? row : Object.values(row || {})) if (b && b.text === 'text_requestagent') btn = true } catch { /* keep false */ }
+    add('the «درخواست نمایندگی» button is on the customer keyboard', btn, btn ? 'visible' : 'key text_requestagent not found in keyboardmain')
     add('bulk purchase is enabled', set.bulkbuy !== 'offbulk', String(set.bulkbuy ?? ''))
     add('the request fee is set (0 = free request)', true, String(set.agentreqprice ?? '0') + ' toman (refunded on reject)')
     const partners = await all(sql`SELECT agent, COUNT(*) AS n, SUM(CASE WHEN expire IS NOT NULL AND expire != '' AND expire != '0' THEN 1 ELSE 0 END) AS with_expiry FROM user WHERE agent IN ('n', 'n2') GROUP BY agent`)
@@ -363,6 +363,9 @@ TOOLS.partner_ready = (() => {
     out.partner_prices = rows.map((r) => ({ plan: String(r.name).split(/\s*[—|-]\s*/)[0], gb: r.gb, partner_toman: r.partner, retail_toman: r.retail || null, off_pct: r.retail ? Math.round((1 - r.partner / r.retail) * 100) : null, margin_pct: r.partner > 0 ? Math.round(((r.partner - r.gb * cost) / r.partner) * 100) : null }))
     const low = out.partner_prices.filter((r) => r.margin_pct !== null && r.margin_pct < 25)
     add('no partner plan is sold below a 25% margin', low.length === 0, low.length ? low.map((r) => `${r.plan}: ${r.margin_pct}%`).join(', ') : 'ok')
+    const discounted = await one(sql`SELECT COUNT(*) AS n FROM user WHERE agent = 'n' AND CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) > 0`)
+    const advantage = Number(discounted?.n ?? 0) > 0 || out.partner_prices.some((r) => r.off_pct > 0 && r.off_pct >= 8)
+    add('a partner pays LESS than a customer (a list below retail, or a tier discount on the partner)', advantage, advantage ? `${discounted?.n ?? 0} partners have a tier discount` : 'partners pay the retail price today: accept requests through the panel (first tier 10%) or set a discount on the Partners page')
     out.tiers_mode = (await kvGet('partners:mode')) === 'live' ? 'live' : 'simulation'
     out.verdict = out.checks.every((c) => c.ok !== 'MISSING') ? 'ready for a first partner' : 'NOT ready: fix the MISSING items first'
     return out

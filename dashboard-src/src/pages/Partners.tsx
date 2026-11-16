@@ -19,6 +19,38 @@ interface State { mode: 'sim' | 'live'; tiers: Tier[]; maxPct: number; downgrade
 const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : 'ناموفق بود')
 const ACTION: Record<string, string> = { up: 'ارتقا', down: 'تنزل', warn: 'هشدار', manual: 'دستی', level: 'تغییر سطح' }
 
+
+interface Req { id: string; username: string; at: number; note: string; balance: number }
+const when = (t: number) => (t ? new Intl.DateTimeFormat('fa-IR-u-ca-persian', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(new Date(t * 1000)) : '—')
+
+function Requests() {
+  const qc = useQueryClient()
+  const { data } = useQuery({ queryKey: ['partner-requests'], queryFn: () => api<{ requests: Req[]; welcome_pct: number }>('partner_requests'), refetchInterval: 60000 })
+  const act = useMutation({
+    mutationFn: (b: { id: string; decision: 'accept' | 'reject'; type?: 'n' | 'n2' }) => api<{ already?: boolean; pct?: number; refunded?: number }>('partner_request', { body: b }),
+    onSuccess: (r, b) => { toast.success(r.already ? 'قبلاً بررسی شده بود' : b.decision === 'accept' ? `تأیید شد؛ ${fmtNum(r.pct ?? 0)}٪ زیر لیست` : 'رد شد'); qc.invalidateQueries({ queryKey: ['partner-requests'] }); qc.invalidateQueries({ queryKey: ['partners'] }) },
+    onError: err,
+  })
+  const list = data?.requests ?? []
+  if (!list.length) return null
+  return (
+    <Card><CardHeader><CardTitle className="text-base">درخواست‌های همکاری ({fmtNum(list.length)})</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="requests">
+      <div className="text-xs text-muted-foreground">با «تأیید»، کاربر همکار می‌شود و پلهٔ اول ({fmtNum(data?.welcome_pct ?? 0)}٪ زیر لیست) را می‌گیرد و پیام تأیید دریافت می‌کند. «رد»: هزینهٔ درخواست (اگر بوده) فقط یک‌بار برمی‌گردد.</div>
+      {list.map((r) => (
+        <div key={r.id} className="rounded-lg border p-2" data-testid="request">
+          <div className="flex flex-wrap items-center gap-2"><span className="font-medium">@{r.username || r.id}</span><span className="text-xs text-muted-foreground">{when(r.at)}</span></div>
+          {r.note && <div className="mt-1 text-xs text-muted-foreground">{r.note}</div>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => act.mutate({ id: r.id, decision: 'accept' })} disabled={act.isPending}>تأیید (همکار)</Button>
+            <Button size="sm" variant="outline" onClick={() => confirm('سطح اعتباری: خرید اعتباری فعال می‌شود. ادامه؟') && act.mutate({ id: r.id, decision: 'accept', type: 'n2' })} disabled={act.isPending}>تأیید (اعتباری)</Button>
+            <Button size="sm" variant="ghost" onClick={() => confirm('رد شود؟') && act.mutate({ id: r.id, decision: 'reject' })} disabled={act.isPending}>رد</Button>
+          </div>
+        </div>
+      ))}
+    </CardContent></Card>
+  )
+}
+
 function Tiers({ st }: { st: State }) {
   const qc = useQueryClient()
   const [rows, setRows] = useState<Tier[]>(st.tiers)
@@ -99,6 +131,7 @@ export default function Partners() {
           {plan.map((c) => <div key={c.id + c.action}>@{c.username || c.id}: {ACTION[c.action]} {fmtNum(c.from)}٪ ← {fmtNum(c.to)}٪ ({c.name})</div>)}
         </CardContent></Card>
       )}
+      <Requests />
       <Tiers key={JSON.stringify(data.tiers)} st={data} />
       <div className="space-y-2">{data.partners.length === 0 ? <div className="text-sm text-muted-foreground">هنوز همکاری ثبت نشده است.</div> : data.partners.map((p) => <Row key={p.id + p.pct + String(p.locked) + p.level} p={p} tiers={data.tiers} maxPct={data.maxPct} />)}</div>
       {data.log.length > 0 && <Card><CardHeader><CardTitle className="text-base">آخرین تغییرها</CardTitle></CardHeader><CardContent className="space-y-1 text-xs">{data.log.map((l, i) => <div key={i}>@{l.username || l.id} · {ACTION[l.action] ?? l.action} {l.from !== undefined ? `${fmtNum(l.from)}٪ ← ` : ''}{typeof l.to === 'number' ? `${fmtNum(l.to)}٪` : l.to}</div>)}</CardContent></Card>}
