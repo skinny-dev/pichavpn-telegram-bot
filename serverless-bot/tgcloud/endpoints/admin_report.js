@@ -301,6 +301,41 @@ TOOLS.renewals = (() => {
   return main
 })()
 
+TOOLS.customer = (() => {
+  // Everything about one customer's services, in one place (read-only): his services and what they were bought as, every change of time/volume, his recent payments,
+  // and what the VPN panel says about his services right now.
+  const tsOf = (s) => { s = String(s ?? ''); if (/^\d{9,}$/.test(s)) return Number(s); const m = /^(\d{4})[/-](\d{2})[/-](\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 - 12600 : 0 }
+  const fmt = (t) => (t ? new Date((t + 12600) * 1000).toISOString().slice(0, 16).replace('T', ' ') : null)
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const user = String(input?.user ?? '').replace(/\D/g, '')
+    if (!user) return { usage: `npx tgcloud run endpoints/admin_report '{"tool":"customer","user":"<numeric telegram id>"}'` }
+    const t = Math.floor(Date.now() / 1000)
+    const u = await one(sql`SELECT id, username, agent, Balance, register, limit_usertest FROM user WHERE id = ${user}`)
+    const invs = await all(sql`SELECT username, name_product, Service_time, Volume, price_product, time_sell, Status, Service_location, note FROM invoice WHERE id_user = ${user} ORDER BY CAST(time_sell AS INTEGER) DESC LIMIT 8`)
+    const other = await all(sql`SELECT username, type, value, time, price, status FROM service_other WHERE id_user = ${user} ORDER BY id DESC LIMIT 10`)
+    const pays = await all(sql`SELECT time, price, Payment_Method AS m, payment_Status AS s, id_invoice FROM Payment_report WHERE id_user = ${user} ORDER BY id DESC LIMIT 8`)
+    const out = { found: !!u, user: u ? { agent: u.agent, balance: Number(u.Balance), registered: fmt(Number(u.register)), tests_used: u.limit_usertest } : null }
+    out.services = []
+    for (const i of invs) {
+      const row = { service: i.username, product: i.name_product, plan_days: Number(i.Service_time), plan_gb: Number(i.Volume), bought: fmt(Number(i.time_sell)), toman_k: Math.round(Number(i.price_product) / 1000), status: i.Status, panel: i.Service_location }
+      if (out.services.length < 3 && !/تست/.test(String(i.name_product))) {
+        try {
+          const du = await dataUser(i.Service_location, i.username)
+          if (du && du.status !== 'Unsuccessful') { const ex = Number(du.expire || 0); row.panel_now = { end: ex ? fmt(ex) : 'unlimited', days_left: ex ? Math.round((ex - t) / 86400 * 10) / 10 : null, status: du.status, used_gb: Math.round(Number(du.used_traffic || 0) / 1073741824 * 10) / 10, limit_gb: Math.round(Number(du.data_limit || 0) / 1073741824 * 10) / 10 } }
+          else row.panel_now = 'unreachable: ' + String(du?.msg ?? '').slice(0, 60)
+        } catch (e) { row.panel_now = 'error: ' + String(e?.message ?? e).slice(0, 60) }
+      }
+      out.services.push(row)
+    }
+    out.changes = other.map((r) => { let v = {}; try { v = JSON.parse(r.value) || {} } catch { v = {} } return { when: String(r.time), type: r.type, service: r.username, status: r.status, toman_k: Math.round(Number(r.price) / 1000), days: v.Service_time ?? v.time ?? undefined, gb: v.volumebuy ?? v.volume ?? undefined, end_before: v.oldtime ? fmt(Number(v.oldtime)) : undefined } })
+    out.payments = pays.map((r) => ({ when: String(r.time), method: r.m, status: r.s, toman_k: Math.round(Number(r.price) / 1000), kind: String(r.id_invoice ?? '').split('|')[0].slice(0, 22) }))
+    out.how_to_read = 'services = what he bought (plan_days is what the PRODUCT gave); panel_now = the real end date at the VPN panel; changes = renewals / extra time / extra volume; payments = what he paid.'
+    return out
+  }
+  return main
+})()
+
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const fn = TOOLS[String(input?.tool ?? '')]
