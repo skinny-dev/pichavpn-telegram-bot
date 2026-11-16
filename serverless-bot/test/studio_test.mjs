@@ -1,7 +1,7 @@
 // The Studio: calendar drafts follow the tone rules, CTA rules, schedule; the simulation can never reach the channel or customers.
 //   node --no-warnings --import ./register.mjs studio_test.mjs <export dir>
 import { seed } from './seed.mjs'
-import { db, calls } from 'sdk'
+import { db, calls, replies, BotApiError } from 'sdk'
 import { sql } from 'sdk/db'
 let fails = 0
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' ' + extra}`); if (!ok) fails++ }
@@ -100,5 +100,33 @@ const imp = (await call('studio_import', { posts: [{ id: 'imp1', title: 'خبر'
 check('imported posts are drafts, never scheduled', imp.imported === 1 && (await S.postsGet()).find((p) => p.id === 'imp1').status === 'draft')
 check('a support-only admin cannot use the studio', (await handle('studio_state', {}, {}, '1')).status === 401)
 
+// 9) why does a post not reach the channel? the check says, and «send now» does not wait for the schedule
+await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_test', mode: 'live' })
+replies.getChat = () => ({ title: 'کانال پیچا', type: 'channel' })
+replies.getChatMember = () => ({ status: 'administrator', can_post_messages: true })
+const c1 = (await call('studio_channel_check', { which: 'main' })).body
+check('channel check: reachable, the bot is an admin who can post', c1.ok === true && c1.title === 'کانال پیچا' && c1.botStatus === 'administrator', JSON.stringify(c1))
+replies.getChatMember = () => ({ status: 'member' })
+const c2 = (await call('studio_channel_check', { which: 'main' })).body
+check('channel check: a bot that is not an admin is told so, in plain words', c2.ok === false && /ادمین/.test(c2.error), JSON.stringify(c2))
+replies.getChatMember = () => ({ status: 'administrator', can_post_messages: false })
+check('channel check: an admin without the post right is told so', /اجازه/.test((await call('studio_channel_check', { which: 'main' })).body.error))
+replies.getChat = () => { throw new BotApiError(400, 'Bad Request: chat not found', 'getChat') }
+check('channel check: a wrong name says the channel was not found', /پیدا نشد/.test((await call('studio_channel_check', { which: 'main' })).body.error))
+delete replies.getChat; delete replies.getChatMember
+// send now: works without waiting, needs confirmation, and a Telegram failure is shown instead of vanishing
+await call('studio_save', { id: 'now1', title: 'الان', kind: 'tip', text: 'درود. نکته.', cta: [{ key: 'test' }], audience: 'channel', when: Math.floor(Date.now() / 1000) + 3 * 3600, status: 'scheduled' })
+check('send now needs confirmation', (await call('studio_send_now', { id: 'now1' })).status === 409)
+calls.length = 0
+const sn = (await call('studio_send_now', { id: 'now1', confirm: true })).body
+check('send now goes to the live channel at once, even when the schedule is hours away', sn.mode === 'sent' && JSON.stringify(calls).includes('@pichanet_chan') && (await S.postsGet()).find((p) => p.id === 'now1').status === 'sent', JSON.stringify(sn))
+check('a sent post cannot be sent again', (await call('studio_send_now', { id: 'now1', confirm: true })).status === 404)
+await call('studio_save', { id: 'now2', title: 'خطا', kind: 'tip', text: 'درود. نکته.', cta: [{ key: 'test' }], audience: 'channel', when: Math.floor(Date.now() / 1000) + 3600, status: 'scheduled' })
+replies.sendmessage = () => { throw new BotApiError(403, 'Forbidden: bot is not a member of the channel chat', 'sendMessage') }
+const bad2 = (await call('studio_send_now', { id: 'now2', confirm: true })).body
+const p2 = (await S.postsGet()).find((p) => p.id === 'now2')
+check('a Telegram failure is reported with its reason and the post goes back to a draft with a note', bad2.result?.[0]?.ok === false && /not a member/.test(bad2.result[0].error) && p2.status === 'draft' && /not a member/.test(p2.note), JSON.stringify({ bad2, note: p2.note }))
+delete replies.sendmessage
+await call('studio_settings', { mode: 'sim' })
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)

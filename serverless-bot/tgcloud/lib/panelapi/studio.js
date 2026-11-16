@@ -1,7 +1,7 @@
 // Studio routes of the Mini App (studio_*): calendar, posts, test sends, settings. See lib/studio.js and docs/STUDIO.md.
 import { kvSet } from '../db.js'
 import { fail, str } from './util.js'
-import { MODES, KINDS, CTA, DEFAULT_CTA, lint, normalize, postsGet, postsSet, libGet, settingsGet, occasionsBetween, seedDrafts, sendTest, tehranParts } from '../studio.js'
+import { MODES, KINDS, CTA, DEFAULT_CTA, lint, normalize, postsGet, postsSet, libGet, settingsGet, occasionsBetween, seedDrafts, sendTest, tehranParts, publishNow, channelCheck } from '../studio.js'
 
 const iso = (t) => new Date(t * 1000).toISOString().slice(0, 10)
 const day = 86400
@@ -44,6 +44,17 @@ export async function route(name, q, body, admin) {
     case 'studio_save': return save(body)
     case 'studio_status': return status(body)
     case 'studio_delete': { await postsSet((await postsGet()).filter((p) => p.id !== body.id)); return { ok: true } }
+    case 'studio_send_now': {
+      if (!body.confirm) fail('تأیید ارسال لازم است', 409)
+      const r = await publishNow(String(body.id))
+      if (!r.ok) fail(r.error, 404)
+      return r
+    }
+    case 'studio_channel_check': {
+      const st = await settingsGet(), chat = body.which === 'test' ? st.testChannel : st.channel
+      if (!chat) fail('کانال ثبت نشده است', 409)
+      return { ok: true, ...(await channelCheck(chat)) }
+    }
     case 'studio_test': {
       const p = normalize(body.post || {}, {})
       const l = lint(p)

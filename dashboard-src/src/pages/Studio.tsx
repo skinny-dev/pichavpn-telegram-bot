@@ -183,14 +183,19 @@ function Calendar({ st, onOpen, onSeed, seeding }: { st: State; onOpen: (p: Post
 function Queue({ st, onOpen }: { st: State; onOpen: (p: Post) => void }) {
   const qc = useQueryClient()
   const cancel = useMutation({ mutationFn: (id: string) => api('studio_status', { body: { id, status: 'cancelled' } }), onSuccess: () => qc.invalidateQueries({ queryKey: ['studio'] }), onError: err })
-  const list = st.posts.filter((p) => p.status !== 'draft')
+  const sendNow = useMutation({
+    mutationFn: (id: string) => api<{ mode?: string; result?: { ok: boolean; error?: string }[]; error?: string }>('studio_send_now', { body: { id, confirm: true } }),
+    onSuccess: (r) => { const bad = (r.result ?? []).find((x) => !x.ok); if (bad) toast.error('ارسال نشد: ' + (bad.error || 'خطای تلگرام')); else toast.success(r.mode === 'sent' ? 'به کانال اصلی رفت' : r.mode === 'tested' ? 'به کانال تست رفت' : 'در حالت شبیه‌سازی برای ادمین‌ها فرستاده شد'); qc.invalidateQueries({ queryKey: ['studio'] }) }, onError: err,
+  })
+  const list = st.posts.filter((p) => p.status !== 'draft' || p.note)
   if (!list.length) return <div className="text-sm text-muted-foreground">هنوز پستی زمان‌بندی نشده است.</div>
   return (
     <div className="space-y-2">
       {list.map((p) => (
         <Card key={p.id}><CardContent className="flex items-center gap-2 p-3 text-sm">
-          <button type="button" className="flex-1 text-right" onClick={() => onOpen(p)}><div className="font-medium">{p.title || p.id}</div><div className="text-xs text-muted-foreground">{p.when ? jalaliOf(p.when) : ''}</div></button>
+          <button type="button" className="flex-1 text-right" onClick={() => onOpen(p)}><div className="font-medium">{p.title || p.id}</div><div className="text-xs text-muted-foreground">{p.when ? jalaliOf(p.when) : ''}</div>{p.note && <div className="text-xs text-red-600">{p.note}</div>}</button>
           <Badge variant={STATUS[p.status]?.tone}>{STATUS[p.status]?.label}</Badge>
+          {(p.status === 'scheduled' || p.status === 'draft') && <Button size="sm" variant="outline" disabled={sendNow.isPending} data-testid="send-now" onClick={() => { if (window.confirm(st.settings.mode === 'live' ? 'همین الان به کانال اصلی ارسال می‌شود. ادامه؟' : st.settings.mode === 'test' ? 'همین الان به کانال تست ارسال می‌شود. ادامه؟' : 'در حالت شبیه‌سازی فقط برای ادمین‌ها فرستاده می‌شود. ادامه؟')) sendNow.mutate(p.id) }}>ارسال همین الان</Button>}
           {p.status === 'scheduled' && <Button size="sm" variant="ghost" onClick={() => cancel.mutate(p.id)}>لغو</Button>}
         </CardContent></Card>
       ))}
@@ -207,6 +212,11 @@ function Settings({ st }: { st: State }) {
   const after = () => qc.invalidateQueries({ queryKey: ['studio'] })
   const mode = useMutation({ mutationFn: (m: string) => api('studio_settings', { body: { mode: m } }), onSuccess: after, onError: err })
   const ch = useMutation({ mutationFn: () => api('studio_settings', { body: { channel, testChannel } }), onSuccess: () => { toast.success('ذخیره شد'); after() }, onError: err })
+  const [check, setCheck] = useState<Record<string, { ok: boolean; title?: string; error?: string; botStatus?: string }>>({})
+  const chk = useMutation({
+    mutationFn: (which: string) => api<{ ok: boolean; title?: string; error?: string; botStatus?: string }>('studio_channel_check', { body: { which } }).then((r) => ({ which, r })),
+    onSuccess: ({ which, r }) => setCheck((c) => ({ ...c, [which]: r })), onError: err,
+  })
   const libSet = useMutation({ mutationFn: () => api('studio_lib_set', { body: { name, value } }), onSuccess: () => { setName(''); setValue(''); after() }, onError: err })
   const libDel = useMutation({ mutationFn: (n: string) => api('studio_lib_delete', { body: { name: n } }), onSuccess: after, onError: err })
   return (
@@ -219,7 +229,12 @@ function Settings({ st }: { st: State }) {
         <div className="text-xs text-muted-foreground">{MODE_HELP[st.settings.mode]}</div>
         <div><Label>کانال تست (@name یا شناسهٔ عددی)</Label><Input dir="ltr" value={testChannel} onChange={(e) => setTestChannel(e.target.value)} /></div>
         <div><Label>کانال اصلی</Label><Input dir="ltr" value={channel} onChange={(e) => setChannel(e.target.value)} /></div>
-        <Button onClick={() => ch.mutate()}>ذخیره کانال‌ها</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => ch.mutate()}>ذخیره کانال‌ها</Button>
+          <Button variant="outline" data-testid="check-main" disabled={chk.isPending} onClick={() => chk.mutate('main')}>بررسی کانال اصلی</Button>
+          <Button variant="outline" disabled={chk.isPending} onClick={() => chk.mutate('test')}>بررسی کانال تست</Button>
+        </div>
+        {Object.entries(check).map(([w, r]) => <div key={w} className={`text-xs ${r.ok ? 'text-green-600' : 'text-red-600'}`}>{w === 'main' ? 'اصلی' : 'تست'}: {r.ok ? `✅ «${r.title}» · ربات ${r.botStatus} و می‌تواند ارسال کند` : `❌ ${r.error}`}</div>)}
         <div className="text-xs text-muted-foreground">ربات باید در هر دو کانال ادمین باشد و اجازهٔ ارسال پیام داشته باشد.</div>
       </CardContent></Card>
       <Card><CardHeader><CardTitle className="text-base">کتابخانهٔ تصویر</CardTitle></CardHeader><CardContent className="space-y-2 text-sm">

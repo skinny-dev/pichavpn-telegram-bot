@@ -163,7 +163,7 @@ export async function deliver(post, chats, { preview = true } = {}) {
     const params = m.photo ? { chat_id, photo: m.photo, caption: head + m.text, parse_mode: 'HTML' } : { chat_id, text: head + m.text, parse_mode: 'HTML', link_preview_options: JSON.stringify({ is_disabled: true }) }
     if (m.reply_markup.inline_keyboard.length) params.reply_markup = JSON.stringify(m.reply_markup)
     const r = await richOrPlain((d) => telegram(m.photo ? 'sendphoto' : 'sendmessage', d), params)
-    sent.push({ chat_id, ok: !!(r && r.ok !== false) })
+    sent.push({ chat_id, ok: !!(r && r.ok !== false), ...(r && r.ok === false ? { error: String(r.description ?? '').slice(0, 160) } : {}) })
   }
   return { sent, missingImage: m.missingImage }
 }
@@ -171,25 +171,57 @@ export async function deliver(post, chats, { preview = true } = {}) {
 /** a test send of the post to the administrator who is composing it (always allowed) */
 export const sendTest = (post, tgId) => deliver(post, [String(tgId)], { preview: true })
 
-/** the scheduled-post job: one due post per run. Not live → a simulated send to the administrators; live → the channel. */
-export async function studioTick() {
-  const list = await postsGet()
-  const due = list.filter((p) => p.status === 'scheduled' && p.when && p.when <= now()).sort((a, b) => a.when - b.when)[0]
-  if (!due) return { sent: 0 }
+/** publish one post now (shared by the scheduled job and the «send now» button). Not live → a simulated send to the administrators; live → the channel. */
+async function publishOne(list, due) {
   const s = await settingsGet()
-  if (lint(due).errors.length) { due.status = 'draft'; due.note = 'بازگشت به پیش‌نویس: ' + lint(due).errors[0]; await postsSet(list); return { sent: 0 } }
+  if (lint(due).errors.length) { due.status = 'draft'; due.note = 'بازگشت به پیش‌نویس: ' + lint(due).errors[0]; await postsSet(list); return { sent: 0, error: due.note } }
   const target = due.audience !== 'channel' ? '' : s.mode === 'live' ? s.channel : s.mode === 'test' ? s.testChannel : ''
+  let result = []
   if (target) {
     const r = await deliver(due, [target], { preview: false })
+    result = r.sent
     due.status = r.sent.every((x) => x.ok) ? (s.mode === 'live' ? 'sent' : 'tested') : 'draft'
-    if (due.status === 'draft') due.note = 'ارسال به کانال ناموفق بود؛ ربات ادمین کانال است و اجازهٔ ارسال دارد؟'
+    if (due.status === 'draft') due.note = 'ارسال به کانال ناموفق بود: ' + (r.sent.find((x) => !x.ok)?.error || 'ربات ادمین کانال است و اجازهٔ ارسال دارد؟')
+    else delete due.note
   } else {
     await deliver(due, await adminIds(), { preview: true })
     due.status = 'simulated'
   }
   due.sentAt = now()
   await postsSet(list)
-  return { sent: 1, id: due.id, mode: due.status }
+  return { sent: 1, id: due.id, mode: due.status, target, result }
+}
+
+/** the scheduled-post job: one due post per run */
+export async function studioTick() {
+  const list = await postsGet()
+  const due = list.filter((p) => p.status === 'scheduled' && p.when && p.when <= now()).sort((a, b) => a.when - b.when)[0]
+  if (!due) return { sent: 0 }
+  return publishOne(list, due)
+}
+
+/** the «send now» button: a scheduled or draft post goes out at once, and the answer says exactly what Telegram replied */
+export async function publishNow(id) {
+  const list = await postsGet()
+  const p = list.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'پست پیدا نشد' }
+  if (!['scheduled', 'draft'].includes(p.status)) return { ok: false, error: 'این پست قبلاً ارسال یا لغو شده است' }
+  return { ok: true, ...(await publishOne(list, p)) }
+}
+
+/** is the channel reachable: it exists, the bot is in it, and may post */
+export async function channelCheck(chat) {
+  const out = { chat, ok: false }
+  const me = await telegram('getMe', {})
+  const g = await telegram('getChat', { chat_id: chat })
+  if (!g || g.ok === false) return { ...out, error: 'کانال پیدا نشد: ' + String(g?.description ?? '') + ' (نام یا شناسه را بررسی کنید)' }
+  out.title = g.result?.title ?? ''; out.type = g.result?.type ?? ''
+  const m = await telegram('getChatMember', { chat_id: chat, user_id: me?.result?.id })
+  const st = m?.result?.status
+  out.botStatus = st ?? String(m?.description ?? 'unknown')
+  if (st !== 'administrator' && st !== 'creator') return { ...out, error: 'ربات ادمین این کانال نیست؛ آن را با دسترسی «ارسال پیام» ادمین کنید' }
+  if (st === 'administrator' && out.type === 'channel' && m.result.can_post_messages === false) return { ...out, error: 'ربات ادمین است ولی اجازه‌ی «ارسال پیام» ندارد' }
+  return { ...out, ok: true }
 }
 
 /** the seed: a draft per occasion from `from` to `to` that has none yet; returns how many were created */
