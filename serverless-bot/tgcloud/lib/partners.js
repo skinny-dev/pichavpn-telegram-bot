@@ -5,7 +5,7 @@
 // Never touched automatically: credit partners (n2), partners an administrator has LOCKED (a manual price), and partners whose agent expiry has passed.
 import { all, one, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage } from './tg.js'
-import { welcomeGive } from './partnereco.js'
+import { welcomeGive } from './partnerhub.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 const DAY = 86400

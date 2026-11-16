@@ -20,7 +20,6 @@ import { adminPulseRoutes } from './admin/pulse.js'
 import { adminMenuRoutes } from './admin/menu.js'
 import { starsRoutes } from './routes/stars.js'
 import { miscRoutes } from './routes/misc.js'
-import { hubRoutes } from './routes/partnerhub.js'
 import { lateRoutes } from './routes/late.js'
 
 export const routes = [
@@ -35,7 +34,6 @@ export const routes = [
   ...buyRoutes,
   ...bulkRoutes,
   ...payRoutes,
-  ...hubRoutes,
   ...miscRoutes,
   ...careRoutes,
   ...fitRoutes,

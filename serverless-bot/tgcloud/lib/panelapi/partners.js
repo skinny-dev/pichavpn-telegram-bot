@@ -2,8 +2,7 @@
 import { kvSet, run, sql } from '../db.js'
 import { fail } from './util.js'
 import * as P from '../partners.js'
-import { notifyPartners, noticesGet } from '../partnerhub.js'
-import { economics, giftAdd, welcomeGet } from '../partnereco.js'
+import { notifyPartners, noticesGet, economics, giftAdd, welcomeGet } from '../partnerhub.js'
 
 export async function route(name, q, b) {
   switch (name) {

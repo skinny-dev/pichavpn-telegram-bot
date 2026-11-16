@@ -7,7 +7,7 @@ import { backuserKb } from '../keyboards.js'
 import { dataUser, extend as panelExtend } from '../panel.js'
 import {
   savedata, userData, keyboardProduct, keyboardCategory, rowsBeforeBack, keyboardTimeCategory, customPlanPrice, customPricePrompt,
-  promoInvoiceParts, promoQuote, promoApplyQuote, deductBalance, addBalance, stepPaymentKb, agentValue,
+  promoInvoiceParts, promoQuote, promoApplyQuote, deductBalance, addBalance, stepPaymentKb, agentValue, productName
 } from '../catalog.js'
 import { jdate, phpRound } from '../fmt.js'
 import { sprintf, strtr, numberFormat, intval, time, randomHex, J, eq, phpJson } from '../php.js'
@@ -166,7 +166,7 @@ export const extendRoutes = [
     if (intval(user.pricediscount) !== 0) raw = phpRound(Number(product.price_product) - (Number(product.price_product) * Number(user.pricediscount)) / 100, 0)
     else raw = product.price_product
     let priceText = numberFormat(Number(raw))
-    let name = product.name_product
+    let name = productName(product.name_product, product, raw)
     const pp = await promoInvoiceParts(product, raw)
     if (pp) { priceText = pp.price; name = pp.name }
     const q = await promoQuote(product)
@@ -217,7 +217,7 @@ export const extendRoutes = [
     info.price_product = phpRound(pr - (Number(d.price) / 100) * pr)
     if (intval(info.Service_time) === 0) info.Service_time = T.users.status.unlimited
     if (info.price_product < 0) info.price_product = 0
-    const text = sprintf(T.users.extend.invoiceCreated2, inv.username, info.name_product, info.price_product, info.Service_time, info.Volume_constraint, info.note, user.Balance)
+    const text = sprintf(T.users.extend.invoiceCreated2, inv.username, productName(info.name_product, info, info.price_product), info.price_product, info.Service_time, info.Volume_constraint, info.note, user.Balance)
     await sendmessage(c.from_id, text, J({ inline_keyboard: [[{ text: T.users.extend.confirm, callback_data: 'confirmserdiscount' }]] }), 'HTML')
     await run(sql`UPDATE user SET Processing_value_four = ${'dis_' + c.text + '_' + pstr(info.price_product)} WHERE id = ${c.from_id}`)
     await step(c, 'home')
@@ -304,7 +304,7 @@ export const extendRoutes = [
     const done = J({ inline_keyboard: [[{ text: T.users.status.backlist, callback_data: 'backorder' }], [{ text: T.users.status.backservice, callback_data: 'product_' + inv.id_invoice }]] })
     const after = numberFormat(Number((await one(sql`SELECT Balance FROM user WHERE id = ${c.from_id}`))?.Balance ?? 0), 0)
     const before = numberFormat(Number(user.Balance), 0)
-    await sendmessage(c.from_id, sprintf(T.users.extend.success, inv.username, prod.name_product, numberFormat(price)), done, 'HTML')
+    await sendmessage(c.from_id, sprintf(T.users.extend.success, inv.username, productName(prod.name_product, prod, price), numberFormat(price)), done, 'HTML')
     const kb = J({ inline_keyboard: [[{ text: T.Admin.manageUser.manageUserBtn, callback_data: 'manageuser_' + c.from_id }]] })
     await report(c, 'otherservice', sprintf(T.Admin.reportgroup.renewed, c.from_id, c.username, inv.username, c.first_name, inv.Service_location, prod.name_product, prod.Volume_constraint, prod.Service_time, prod.price_product, before, after, jdate('Y/m/d H:i:s')), { reply_markup: kb })
     return true

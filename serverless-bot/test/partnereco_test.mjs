@@ -7,7 +7,7 @@ let fails = 0
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' ' + extra}`); if (!ok) fails++ }
 await seed(process.argv[2])
 await import('../tgcloud/lib/bot.js')
-const Eco = await import('../tgcloud/lib/partnereco.js')
+const Eco = await import('../tgcloud/lib/partnerhub.js')
 const P = await import('../tgcloud/lib/partners.js')
 const S = await import('../tgcloud/lib/panelapi/stats.js')
 const ep = (await import('../tgcloud/endpoints/panel.js')).default

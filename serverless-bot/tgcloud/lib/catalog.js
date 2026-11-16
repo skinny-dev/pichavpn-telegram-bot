@@ -125,6 +125,24 @@ export function promoApplyQuote(product, quote, now = time()) {
   return p
 }
 
+// ---------------------------------------------------------------- dynamic product names
+// A product NAME may carry tokens that are filled in for whoever looks at it, so a partner's price (or any price change) is never stale in the text:
+//   {price} = the viewer's final price (number, no unit) · {volume} / {traffic} / {traffic_volume} = GB · {days} / {time} = days
+const NAME_TOKENS = /\{(price|volume|traffic|traffic_volume|days|time)\}/gi
+export const hasNameTokens = (s) => /\{(price|volume|traffic|traffic_volume|days|time)\}/i.test(String(s ?? ''))
+export function productName(name, product = {}, price = product.price_product) {
+  const s = String(name ?? '')
+  if (!hasNameTokens(s)) return s
+  const num0 = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
+  const lim = (v) => (num0(v) === 0 ? 'نامحدود' : String(Math.round(num0(v) * 100) / 100))
+  return s.replace(NAME_TOKENS, (m, k) => {
+    k = k.toLowerCase()
+    if (k === 'price') return numberFormat(num0(price))
+    if (k === 'days' || k === 'time') return lim(product.Service_time)
+    return lim(product.Volume_constraint)
+  })
+}
+
 // ---------------------------------------------------------------- keyboards
 /** KeyboardProduct(): rows = the product rows the PHP query returned */
 export async function keyboardProduct(c, location, rows, pricediscount, datakeyboard, statuscustom = false, backuser = 'backuser', valuetow = null, customvolume = 'customsellvolume') {
@@ -142,9 +160,16 @@ export async function keyboardProduct(c, location, rows, pricediscount, datakeyb
       if (countorder === null) countorder = Number((await one(sql`SELECT COUNT(*) AS n FROM invoice WHERE Status != 'Unpaid' AND id_user = ${c.from_id}`)).n)
       if (countorder !== 0) continue
     }
-    if (intval(pricediscount) !== 0) r.price_product = num(r.price_product) - (num(r.price_product) * num(pricediscount)) / 100
+    const discounted = intval(pricediscount) !== 0
+    if (discounted) r.price_product = num(r.price_product) - (num(r.price_product) * num(pricediscount)) / 100
     const namekeyboard = r.name_product + ' - ' + numberFormat(r.price_product) + T.common.labels.toman
-    if (showPrice === 'onshowprice') r.name_product = namekeyboard
+    const bare = promoStripPrice(r.name_product)
+    const tokens = hasNameTokens(r.name_product), hadPrice = /\{price\}/i.test(r.name_product)
+    if (tokens) { // dynamic name: filled in for this viewer; the price is appended only when the shop shows prices and the name has no {price}
+      r.name_product = productName(r.name_product, r, r.price_product)
+      if (showPrice === 'onshowprice' && !hadPrice) r.name_product += ' - ' + numberFormat(r.price_product) + T.common.labels.toman
+    } else if (discounted && bare !== r.name_product) r.name_product = bare + ' — ' + numberFormat(r.price_product) + T.common.labels.toman // an old name with the retail price written into its text: the partner's price replaces it
+    else if (showPrice === 'onshowprice') r.name_product = namekeyboard
     if ((r.status_product === 'disable' || soldOut.includes(categoryOffKey(r.category))) && datakeyboard.startsWith('prodcutservice')) {
       kb.inline_keyboard.push([{ text: r.name_product + ' | ' + T.keyboard.productSoldOut, callback_data: 'productsoldout' }])
       continue

@@ -7,7 +7,7 @@ import { checkActiveBtn, backuserKb, panelLists } from '../keyboards.js'
 import { dataUser, createUserFor } from '../panel.js'
 import {
   savedata, userData, keyboardProduct, keyboardCategory, keyboardTimeCategory, customPlanPrice, customPricePrompt,
-  promoInvoiceParts, promoQuote, promoApplyQuote, deductBalance, addBalance, stepPaymentKb, soldOutCategoryKeys, categoryOffKey,
+  promoInvoiceParts, promoQuote, promoApplyQuote, deductBalance, addBalance, stepPaymentKb, soldOutCategoryKeys, categoryOffKey, productName
 } from '../catalog.js'
 import { generateUsername, usernameMethodKey, sendMessageService } from '../service.js'
 import { jdate, phpRound } from '../fmt.js'
@@ -306,7 +306,7 @@ export const buyRoutes = [
     const q = await promoQuote(info)
     if (q) await savedata(c, 'save', 'promo_quote', q)
     let textin = strtr(T.textbot.preInvoice, {
-      '{username}': username, '{name_product}': pp ? pp.name : info.name_product, '{Service_time}': info.Service_time, '{note}': info.note ?? '',
+      '{username}': username, '{name_product}': pp ? pp.name : productName(info.name_product, info, info.price_product), '{Service_time}': info.Service_time, '{note}': info.note ?? '',
       '{price}': price, '{Volume}': info.Volume_constraint, '{userBalance}': numberFormat(n(user.Balance)),
     })
     if (intval(info.Volume_constraint) === 0) textin = textin.split(T.common.units.gb).join('')
@@ -358,7 +358,7 @@ export const buyRoutes = [
     }
     const notif = JSON.stringify({ volume: false, time: false })
     await run(sql`INSERT OR IGNORE INTO invoice (id_user, id_invoice, username, time_sell, Service_location, name_product, price_product, Volume, Service_time, Status, note, refral, notifctions)
-      VALUES (${c.from_id}, ${invoiceId}, ${username}, ${time()}, ${panel.name_panel}, ${info.name_product}, ${pstr(price)}, ${info.Volume_constraint}, ${info.Service_time}, 'unpaid', ${ud.nameconfig ?? null}, ${user.affiliates ?? null}, ${notif})`)
+      VALUES (${c.from_id}, ${invoiceId}, ${username}, ${time()}, ${panel.name_panel}, ${productName(info.name_product, info, price)}, ${pstr(price)}, ${info.Volume_constraint}, ${info.Service_time}, 'unpaid', ${ud.nameconfig ?? null}, ${user.affiliates ?? null}, ${notif})`)
     if (n(price) > n(user.Balance) && user.agent !== 'n2' && intval(price) !== 0) {
       let rest = n(price) - n(user.Balance)
       if (rest <= 1) rest = 0
@@ -409,6 +409,7 @@ export const buyRoutes = [
     if (panel.type === 'WGDashboard') after = T.textbot.wgDashboard
     if (panel.type === 'ibsng' || panel.type === 'mikrotik') after = T.textbot.afterPayIbsng
     const shown = { ...info }
+    shown.name_product = productName(info.name_product, info, price)
     if (intval(shown.Service_time) === 0) shown.Service_time = T.users.status.unlimited
     if (intval(shown.Volume_constraint) === 0) shown.Volume_constraint = T.users.status.unlimited
     let msg = after.split('{username}').join(`<code>${out.username}</code>`).split('{name_service}').join(shown.name_product).split('{location}').join(panel.name_panel)
@@ -496,7 +497,7 @@ export const buyRoutes = [
     if (looseZero(info.Service_time)) info.Service_time = T.users.status.unlimited
     if (intval(info.Volume_constraint) === 0) info.Volume_constraint = T.users.status.unlimited
     if (price < 0) price = 0
-    const textin = sprintf(T.users.sell.preInvoice, user.Processing_value_tow, info.name_product, info.Service_time, main, price, info.Volume_constraint, user.Balance)
+    const textin = sprintf(T.users.sell.preInvoice, user.Processing_value_tow, productName(info.name_product, info, price), info.Service_time, main, price, info.Volume_constraint, user.Balance)
     const kb = J({ inline_keyboard: [[{ text: T.keyboard.payAndGetService, callback_data: 'confirmandgetserviceDiscount' }], [{ text: T.users.backbtn, callback_data: 'backuser' }]] })
     await run(sql`UPDATE user SET Processing_value_four = ${c.text + '_' + pstr(price)} WHERE id = ${c.from_id}`)
     await sendmessage(c.from_id, textin, kb, 'HTML')

@@ -4,7 +4,7 @@ import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
 import { step, shop } from '../bot.js'
 import { backuserKb, panelLists } from '../keyboards.js'
 import { dataUser, createUserFor } from '../panel.js'
-import { keyboardProduct, customPlanPrice, customPricePrompt, deductBalance, addBalance, stepPaymentKb } from '../catalog.js'
+import { keyboardProduct, productName, customPlanPrice, customPricePrompt, deductBalance, addBalance, stepPaymentKb } from '../catalog.js'
 import { generateUsername, usernameMethodKey, sendMessageService } from '../service.js'
 import { jdate } from '../fmt.js'
 import { sprintf, strtr, numberFormat, intval, time, randomHex, J, eq, phpJson } from '../php.js'
@@ -142,7 +142,7 @@ export const bulkRoutes = [
     if (looseZero(info.Volume_constraint)) info.Volume_constraint = T.users.status.unlimited
     if (looseZero(info.Service_time)) info.Service_time = T.users.status.unlimited
     const price = intval(info.price_product) * intval(user.Processing_value_four)
-    const text = sprintf(T.users.sell.preInvoice2, username, info.name_product, info.Service_time, numberFormat(price), info.Volume_constraint, numberFormat(n(user.Balance)), user.Processing_value_four)
+    const text = sprintf(T.users.sell.preInvoice2, username, productName(info.name_product, info, intval(user.pricediscount) !== 0 ? n(info.price_product) - (n(info.price_product) * n(user.pricediscount)) / 100 : info.price_product), info.Service_time, numberFormat(price), info.Volume_constraint, numberFormat(n(user.Balance)), user.Processing_value_four)
     await sendmessage(c.from_id, text, J({ inline_keyboard: [[{ text: T.keyboard.payAndGetService, callback_data: 'confirmandgetservice' }], [{ text: T.users.backbtn, callback_data: 'backuser' }]] }), 'HTML')
     await step(c, 'payments')
     return true
@@ -205,12 +205,12 @@ export const bulkRoutes = [
         return true
       }
       await run(sql`INSERT OR IGNORE INTO invoice (id_user, id_invoice, username, time_sell, Service_location, name_product, price_product, Volume, Service_time, Status, notifctions)
-        VALUES (${c.from_id}, ${invoiceId}, ${uname}, ${time()}, ${user.Processing_value}, ${info.name_product}, ${info.price_product}, ${info.Volume_constraint}, ${info.Service_time}, 'active', ${notif})`)
+        VALUES (${c.from_id}, ${invoiceId}, ${uname}, ${time()}, ${user.Processing_value}, ${productName(info.name_product, info, single)}, ${info.price_product}, ${info.Volume_constraint}, ${info.Service_time}, 'active', ${notif})`)
       const link = panel.sublink === 'onsublink' ? out.subscription_url : ''
       const configs = panel.config === 'onconfig' && Array.isArray(out.configs) ? out.configs.join('') : ''
       let after = panel.type === 'Manualsale' ? T.textbot.manual : T.textbot.afterPay
       if (panel.type === 'WGDashboard') after = T.users.sell.created2
-      const msg = after.split('{username}').join(`<code>${out.username}</code>`).split('{name_service}').join(info.name_product).split('{location}').join(panel.name_panel)
+      const msg = after.split('{username}').join(`<code>${out.username}</code>`).split('{name_service}').join(productName(info.name_product, info, single)).split('{location}').join(panel.name_panel)
         .split('{day}').join(String(info.Service_time)).split('{volume}').join(String(info.Volume_constraint)).split('{config}').join(`<code>${link}</code>`)
         .split('{links}').join(`<code>${configs}</code>`).split('{links2}').join(link)
       await sendMessageService(c, panel, out.configs, link, out.username, helpKb, msg, invoiceId, null, out.wireguard ?? [])

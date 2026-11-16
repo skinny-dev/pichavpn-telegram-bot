@@ -1,7 +1,7 @@
 // index.php lines 5918–6652: referral page and membership gift, agents (extra volume for a panel user, panel,
 // custom name, request to become an agent), message to the admins, lucky wheel, price commands, renew list, apps, notes.
 import { brandSettings, brandEligibility, brandSet } from '../partners.js'
-import { HUB } from './partnerhub.js'
+import { reportText, customersPage, isPartner } from '../partnerhub.js'
 import { sleep } from '../timer.js'
 import { one, all, run, sql, kvGet } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
@@ -20,6 +20,37 @@ const truthy = (s) => s !== '' && s !== '0' && s !== null && s !== undefined && 
 const agentOf = (json, agent) => { try { const d = JSON.parse(json); return d && typeof d === 'object' ? d[agent] ?? null : null } catch { return null } }
 const report = (c, thread, text) => (String(c.setting.Channel_Report ?? '').length > 0 ? telegram('sendmessage', { chat_id: c.setting.Channel_Report, message_thread_id: c.topics[thread], text, parse_mode: 'HTML' }) : null)
 const LIVE = `(status = 'active' OR status = 'end_of_time' OR status = 'end_of_volume' OR status = 'sendedwarn' OR Status = 'send_on_hold')`
+
+// the partner corner of the bot (report, customers, priority support): only partners (agent n / n2)
+const HUB = { report: '📊 گزارش من', customers: '👥 مشتری‌های من', support: '🎧 پشتیبانی ویژه' }
+const back = J({ inline_keyboard: [[{ text: '↩️ بازگشت', callback_data: 'agentpanel' }]] })
+const send = (c, text, kb) => (c.datain && c.message_id ? Editmessagetext(c.from_id, c.message_id, text, kb, 'HTML') : sendmessage(c.from_id, text, kb, 'HTML'))
+
+const hubRoutes = [
+  async (c) => {
+    if (!(c.text === HUB.report || c.datain === 'agentreport')) return false
+    if (!isPartner(c.user)) { await sendmessage(c.from_id, 'این بخش مخصوص همکاران است.', null, 'HTML'); return true }
+    await send(c, await reportText(c.user), J({ inline_keyboard: [[{ text: HUB.customers, callback_data: 'pcust_need_1' }], [{ text: '↩️ بازگشت', callback_data: 'agentpanel' }]] }))
+    return true
+  },
+  async (c) => {
+    const m = /^pcust_(need|all)_(\d+)$/.exec(c.datain || '')
+    if (!(m || c.text === HUB.customers)) return false
+    if (!isPartner(c.user)) { await sendmessage(c.from_id, 'این بخش مخصوص همکاران است.', null, 'HTML'); return true }
+    const r = await customersPage(c.user, m ? m[1] : 'need', m ? Number(m[2]) : 1)
+    await send(c, r.text, J(r.kb))
+    return true
+  },
+  async (c) => {
+    if (!(c.text === HUB.support || c.datain === 'agentsupport')) return false
+    if (!isPartner(c.user)) { await sendmessage(c.from_id, 'این بخش مخصوص همکاران است.', null, 'HTML'); return true }
+    const deps = await all(sql`SELECT * FROM departman`)
+    const rows = deps.map((r) => [{ text: r.name_departman, callback_data: `departman_${r.id}` }])
+    rows.push([{ text: '↩️ بازگشت', callback_data: 'agentpanel' }])
+    await send(c, 'درود 🌿\n⭐ پیام‌های همکاران با <b>اولویت</b> بررسی می‌شود. بخش مورد نظر را انتخاب کنید و پیام را بنویسید.', J({ inline_keyboard: rows }))
+    return true
+  },
+]
 
 /** $keyboardagent of keyboard.php + the partner corner (report, customers, wallet, priority support) */
 export async function keyboardAgent(c) {
@@ -44,6 +75,7 @@ async function renewList(c, page) {
 const sanitizeName = (s) => ["'", '"', '<', '>', '--', '#', ';', '\\', '%', '(', ')'].reduce((a, ch) => a.split(ch).join(''), String(s))
 
 export const miscRoutes = [
+  ...hubRoutes,
   // the referral page
   async (c) => {
     const T = c.T, user = c.user
