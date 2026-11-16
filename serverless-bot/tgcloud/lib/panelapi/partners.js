@@ -1,5 +1,5 @@
 // Partner routes of the Mini App (partner_*): see lib/partners.js and docs/PARTNER_PROGRAM.md.
-import { kvSet } from '../db.js'
+import { kvSet, run, sql } from '../db.js'
 import { fail } from './util.js'
 import * as P from '../partners.js'
 
@@ -7,7 +7,21 @@ export async function route(name, q, b) {
   switch (name) {
     case 'partner_state': return {
       ok: true, now: Math.floor(Date.now() / 1000), mode: await P.modeGet(), tiers: await P.tiersGet(), maxPct: P.MAX_PCT, downgradeMonths: P.DOWNGRADE_AFTER_MONTHS,
-      partners: await P.partnersList(), log: (await P.logGet()).slice(0, 30),
+      partners: await P.partnersList(), brand: await P.brandSettings(), log: (await P.logGet()).slice(0, 30),
+    }
+    case 'partner_brand_state': return { ok: true, ...(await P.brandSettings()), allowed: await P.brandAllowed(), tiers: await P.tiersGet() }
+    case 'partner_brand_settings': {
+      if ('on' in b) await kvSet('partner:brand_on', b.on ? '1' : '0')
+      if ('minTier' in b) { const t = (await P.tiersGet()).find((x) => x.id === String(b.minTier)); if (!t) fail('پلهٔ نامعتبر', 400); await kvSet('partner:brand_min', t.id) }
+      return { ok: true, ...(await P.brandSettings()) }
+    }
+    case 'partner_brand': {
+      const id = String(b.id)
+      if (b.action === 'clear') { await run(sql`UPDATE user SET namecustom = NULL WHERE id = ${id}`); return { ok: true } }
+      if (b.action === 'allow' || b.action === 'disallow') { const l = (await P.brandAllowed()).filter((x) => x !== id); if (b.action === 'allow') l.push(id); await kvSet('partner:brand_ok', JSON.stringify(l)); return { ok: true } }
+      if (b.action === 'set') { const r = await P.brandSet(id, b.name); if (!r.ok) fail(r.error, 409); return { ok: true, name: r.name } }
+      fail('عمل نامعتبر', 400)
+      break
     }
     case 'partner_requests': return { ok: true, requests: await P.requestsList(), welcome_pct: await P.welcomePct() }
     case 'partner_request': {

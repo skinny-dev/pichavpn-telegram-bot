@@ -13,9 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface Tier { id: string; name: string; gb: number; pct: number }
-interface Partner { id: string; username: string; level: 'n' | 'n2'; pct: number; tierName: string; earnedName: string; earnedPct: number; gb30: number; orders30: number; spent30: number; balance: number; locked: boolean; below: number; toNext: number; nextName: string; expired: boolean }
+interface Partner { brand: string; brandOk: boolean; brandAllowed: boolean; id: string; username: string; level: 'n' | 'n2'; pct: number; tierName: string; earnedName: string; earnedPct: number; gb30: number; orders30: number; spent30: number; balance: number; locked: boolean; below: number; toNext: number; nextName: string; expired: boolean }
 interface Change { id: string; username: string; action: 'up' | 'down' | 'warn'; from: number; to: number; name: string }
-interface State { mode: 'sim' | 'live'; tiers: Tier[]; maxPct: number; downgradeMonths: number; partners: Partner[]; log: { t: number; id: string; username?: string; action: string; from?: number; to: number | string }[] }
+interface BrandSt { on: boolean; minTier: string; minName: string; minPct: number; minGb: number }
+interface State { brand: BrandSt; mode: 'sim' | 'live'; tiers: Tier[]; maxPct: number; downgradeMonths: number; partners: Partner[]; log: { t: number; id: string; username?: string; action: string; from?: number; to: number | string }[] }
 const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : 'ناموفق بود')
 const ACTION: Record<string, string> = { up: 'ارتقا', down: 'تنزل', warn: 'هشدار', manual: 'دستی', level: 'تغییر سطح' }
 
@@ -51,6 +52,24 @@ function Requests() {
   )
 }
 
+function Brand({ st }: { st: State }) {
+  const qc = useQueryClient()
+  const after = () => qc.invalidateQueries({ queryKey: ['partners'] })
+  const save = useMutation({ mutationFn: (b: object) => api('partner_brand_settings', { body: b }), onSuccess: after, onError: err })
+  return (
+    <Card><CardHeader><CardTitle className="text-base">نام برند در سرویس‌ها</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="brand">
+      <div className="text-xs text-muted-foreground">وقتی روشن باشد، همکارِ واجد شرایط سرویس‌هایش را با نام خودش می‌سازد: <span dir="ltr">acme_a1b2</span> به‌جای <span dir="ltr">pichavpn_a1b2</span>. نام فقط لاتین، یکتا و هرگز نام ما نیست.</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant={st.brand.on ? 'default' : 'outline'} data-testid="brand-on" onClick={() => save.mutate({ on: !st.brand.on })}>{st.brand.on ? 'روشن است' : 'خاموش است'}</Button>
+        <span className="text-xs">حداقل پله:</span>
+        <Select value={st.brand.minTier} onValueChange={(v) => save.mutate({ minTier: v })}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+          <SelectContent>{st.tiers.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({fmtNum(t.gb)} گیگ)</SelectItem>)}</SelectContent></Select>
+        <span className="text-xs text-muted-foreground">سطح اعتباری همیشه مجاز است؛ بقیه را می‌توان دستی مجاز کرد.</span>
+      </div>
+    </CardContent></Card>
+  )
+}
+
 function Tiers({ st }: { st: State }) {
   const qc = useQueryClient()
   const [rows, setRows] = useState<Tier[]>(st.tiers)
@@ -74,7 +93,7 @@ function Tiers({ st }: { st: State }) {
   )
 }
 
-function Row({ p, tiers, maxPct }: { p: Partner; tiers: Tier[]; maxPct: number }) {
+function Row({ p, tiers, maxPct, st }: { p: Partner; tiers: Tier[]; maxPct: number; st: State }) {
   const qc = useQueryClient()
   const [pct, setPct] = useState(String(p.pct))
   const after = () => qc.invalidateQueries({ queryKey: ['partners'] })
@@ -94,6 +113,14 @@ function Row({ p, tiers, maxPct }: { p: Partner; tiers: Tier[]; maxPct: number }
       <div className="grid grid-cols-3 gap-2 text-xs"><div><div className="text-muted-foreground">۳۰ روز</div>{fmtNum(p.gb30)} گیگ</div><div><div className="text-muted-foreground">خرید</div>{fmtToman(p.spent30)}</div><div><div className="text-muted-foreground">موجودی</div>{fmtToman(p.balance)}</div></div>
       <div><div className="h-1.5 overflow-hidden rounded bg-muted"><div className="h-full bg-primary" style={{ width: progress + '%' }} /></div>
         <div className="mt-1 text-xs text-muted-foreground">{p.nextName ? `${fmtNum(p.toNext)} گیگ تا ${p.nextName}` : 'بالاترین پله'} · سطح کسب‌شده: {p.earnedName} ({fmtNum(p.earnedPct)}٪)</div></div>
+      {st.brand.on && (
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="partner-brand">
+          <span className="text-muted-foreground">نام برند:</span>{p.brand ? <span dir="ltr" className="font-mono">{p.brand}_</span> : <span>—</span>}
+          {p.brand && <Badge variant={p.brandOk ? 'success' : 'secondary'}>{p.brandOk ? 'فعال در سرویس‌ها' : 'واجد شرایط نیست'}</Badge>}
+          <Button size="sm" variant="ghost" onClick={() => api('partner_brand', { body: { id: p.id, action: p.brandAllowed ? 'disallow' : 'allow' } }).then(() => qc.invalidateQueries({ queryKey: ['partners'] }))}>{p.brandAllowed ? 'لغو اجازهٔ دستی' : 'اجازهٔ دستی'}</Button>
+          {p.brand && <Button size="sm" variant="ghost" onClick={() => api('partner_brand', { body: { id: p.id, action: 'clear' } }).then(() => qc.invalidateQueries({ queryKey: ['partners'] }))}>پاک کردن نام</Button>}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Input dir="ltr" className="w-20" inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value.replace(/[^\d.]/g, ''))} />
         <span className="text-xs">٪ (حداکثر {fmtNum(maxPct)})</span>
@@ -132,8 +159,9 @@ export default function Partners() {
         </CardContent></Card>
       )}
       <Requests />
+      <Brand st={data} />
       <Tiers key={JSON.stringify(data.tiers)} st={data} />
-      <div className="space-y-2">{data.partners.length === 0 ? <div className="text-sm text-muted-foreground">هنوز همکاری ثبت نشده است.</div> : data.partners.map((p) => <Row key={p.id + p.pct + String(p.locked) + p.level} p={p} tiers={data.tiers} maxPct={data.maxPct} />)}</div>
+      <div className="space-y-2">{data.partners.length === 0 ? <div className="text-sm text-muted-foreground">هنوز همکاری ثبت نشده است.</div> : data.partners.map((p) => <Row key={p.id + p.pct + String(p.locked) + p.level + p.brand + String(p.brandAllowed)} p={p} tiers={data.tiers} maxPct={data.maxPct} st={data} />)}</div>
       {data.log.length > 0 && <Card><CardHeader><CardTitle className="text-base">آخرین تغییرها</CardTitle></CardHeader><CardContent className="space-y-1 text-xs">{data.log.map((l, i) => <div key={i}>@{l.username || l.id} · {ACTION[l.action] ?? l.action} {l.from !== undefined ? `${fmtNum(l.from)}٪ ← ` : ''}{typeof l.to === 'number' ? `${fmtNum(l.to)}٪` : l.to}</div>)}</CardContent></Card>}
     </div>
   )

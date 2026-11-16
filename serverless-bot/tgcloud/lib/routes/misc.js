@@ -1,5 +1,6 @@
 // index.php lines 5918–6652: referral page and membership gift, agents (extra volume for a panel user, panel,
 // custom name, request to become an agent), message to the admins, lucky wheel, price commands, renew list, apps, notes.
+import { brandSettings, brandEligibility, brandSet } from '../partners.js'
 import { sleep } from '../timer.js'
 import { one, all, run, sql, kvGet } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
@@ -183,13 +184,30 @@ export const miscRoutes = [
   },
   async (c) => {
     if (!(c.text === c.T.users.agent.customnameusername || c.datain === 'selectname')) return false
-    await sendmessage(c.from_id, c.T.users.selectusername, backuserKb(c), 'html')
+    const st = await brandSettings()
+    if (st.on) { // the brand name of a partner: only for partners who reached the level (or were allowed)
+      const e = await brandEligibility(c.user)
+      if (!e.ok) {
+        const why = e.why === 'not_partner' ? 'این امکان مخصوص همکاران است.' : `این امکان وقتی برای شما فعال می‌شود که حجم خرید ۳۰ روز اخیرتان به سطح «${st.minName}» (${st.minGb} گیگ) برسد، یا با پشتیبانی هماهنگ کنید.`
+        await sendmessage(c.from_id, `درود 🌿\n${why}`, backuserKb(c), 'HTML')
+        return true
+      }
+      await sendmessage(c.from_id, `درود 🌿\nنام برند خود را به لاتین بنویسید (۳ تا ۱۶ حرف یا عدد، بدون فاصله؛ مثال: acmephone).\nنام کاربری سرویس‌هایی که می‌سازید به این شکل می‌شود: <code>acmephone_a1b2</code>${c.user.namecustom ? `\nنام فعلی شما: <code>${String(c.user.namecustom).replace(/[<>&]/g, '')}</code>` : ''}`, backuserKb(c), 'HTML')
+    } else await sendmessage(c.from_id, c.T.users.selectusername, backuserKb(c), 'html')
     await step(c, 'selectusernamecustom')
     return true
   },
   async (c) => {
     if (c.user.step !== 'selectusernamecustom') return false
     const T = c.T
+    if ((await brandSettings()).on) {
+      if (!(await brandEligibility(c.user)).ok) { await step(c, 'home'); return true }
+      const r = await brandSet(c.from_id, c.text)
+      if (!r.ok) { await sendmessage(c.from_id, `${r.error}`, backuserKb(c), 'HTML'); return true }
+      await sendmessage(c.from_id, `✅ نام برند شما ثبت شد: <code>${r.name}</code>\nاز این پس سرویس‌هایی که می‌سازید با <code>${r.name}_</code> شروع می‌شود. سپاسگزارم.`, await keyboardAgent(c), 'HTML')
+      await step(c, 'home')
+      return true
+    }
     if (!/^(?!_)[a-z][a-z\d_]{2,32}(?<!_)$/i.test(c.text)) { await sendmessage(c.from_id, T.users.invalidusername, backuserKb(c), 'HTML'); return true }
     await sendmessage(c.from_id, T.users.agent.usernameSaved, await keyboardAgent(c), 'html')
     await run(sql`UPDATE user SET namecustom = ${c.text} WHERE id = ${c.from_id}`)

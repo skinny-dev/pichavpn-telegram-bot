@@ -67,7 +67,8 @@ const logAdd = async (e) => kvSet('partner:log', JSON.stringify([{ t: now(), ...
 /** every partner with the numbers the panel and the automation need */
 export async function partnersList(at = now()) {
   const tiers = await tiersGet(), locks = await locksGet(), below = parse(await kvGet('partner:below'), {})
-  const rows = await all(sql`SELECT id, username, agent, pricediscount, Balance, expire, register FROM user WHERE agent IN ('n', 'n2') ORDER BY CAST(register AS INTEGER) DESC`)
+  const rows = await all(sql`SELECT id, username, agent, pricediscount, Balance, expire, register, namecustom FROM user WHERE agent IN ('n', 'n2') ORDER BY CAST(register AS INTEGER) DESC`)
+  const brandAllow = await brandAllowed()
   const out = []
   for (const u of rows) {
     const v = await volume30(u.id, at)
@@ -78,6 +79,7 @@ export async function partnersList(at = now()) {
     out.push({
       id: String(u.id), username: String(u.username ?? ''), level: u.agent, pct, tier: cur?.id ?? null, tierName: cur?.name ?? (pct ? 'دستی' : '—'), earned: earned.id, earnedName: earned.name, earnedPct: earned.pct,
       gb30: Math.round(v.gb * 10) / 10, orders30: v.orders, spent30: v.spent, balance: Number(u.Balance) || 0, locked: !!locks[u.id], below: below[u.id] || 0,
+      brand: String(u.namecustom ?? ''), brandOk: (await brandEligibility(u)).ok, brandAllowed: brandAllow.includes(String(u.id)),
       toNext: next ? Math.max(0, Math.ceil(next.gb - v.gb)) : 0, nextName: next?.name ?? '', expired: !!expired, expire: Number(u.expire) || 0,
     })
   }
@@ -187,4 +189,49 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
   if (u && fee > 0) await run(sql`UPDATE user SET Balance = ${Math.trunc(Number(u.Balance) || 0) + fee} WHERE id = ${id}`)
   await sendmessage(id, `درود. درخواست همکاری شما در حال حاضر تأیید نشد.${fee > 0 ? ' هزینهٔ درخواست به کیف پول شما برگشت.' : ''}\nاگر می‌خواهید دوباره بررسی شود، با پشتیبانی در ارتباط باشید. سپاسگزارم.`, null, 'HTML')
   return { ok: true, refunded: fee }
+}
+
+// ---------- the partner's own brand in the service names: «acme_a1b2» instead of «pichavpn_a1b2»
+// Off by default (kv `partner:brand_on`). A partner qualifies when his tier reaches `partner:brand_min` (default: the second tier, bronze), or an
+// administrator allows him by hand, or he is a credit partner (n2). The name is Latin letters/digits, unique, never a name of ours.
+const BRAND_BLOCKED = /picha|pichavpn|pichanet|admin|support|official|system|root|null|none|test|vpn|bot|telegram/
+export function brandNameCheck(raw) {
+  const name = String(raw ?? '').trim().toLowerCase()
+  if (!/^[a-z][a-z0-9]{2,15}$/.test(name)) return { ok: false, error: 'نام باید ۳ تا ۱۶ حرف لاتین یا عدد باشد و با حرف شروع شود (بدون فاصله و خط تیره).' }
+  if (BRAND_BLOCKED.test(name)) return { ok: false, error: 'این نام مجاز نیست (نام یا نشانی از پیچا، ادمین و پشتیبانی، یا واژهٔ عمومی).' }
+  return { ok: true, name }
+}
+export async function brandSettings() {
+  const tiers = await tiersGet()
+  const minId = (await kvGet('partner:brand_min')) || tiers[1]?.id || tiers[0].id
+  const min = tiers.find((t) => t.id === minId) || tiers[1] || tiers[0]
+  return { on: (await kvGet('partner:brand_on')) === '1', minTier: min.id, minName: min.name, minPct: min.pct, minGb: min.gb }
+}
+export const brandAllowed = async () => parse(await kvGet('partner:brand_ok'), [])
+/** {ok, why}: may this user (a row of `user`) use a brand name? */
+export async function brandEligibility(u) {
+  const st = await brandSettings()
+  if (!st.on) return { ok: false, why: 'off' }
+  if (!u || !['n', 'n2'].includes(u.agent)) return { ok: false, why: 'not_partner' }
+  if (u.agent === 'n2') return { ok: true }
+  if ((await brandAllowed()).includes(String(u.id))) return { ok: true }
+  if ((Number(u.pricediscount) || 0) >= st.minPct) return { ok: true }
+  return { ok: false, why: 'tier', need: st }
+}
+/** the prefix to use for this user's services, or '' (then the shop's prefix is used) */
+export async function brandFor(u) {
+  const name = String(u?.namecustom ?? '').trim().toLowerCase()
+  if (!name || !brandNameCheck(name).ok) return ''
+  return (await brandEligibility(u)).ok ? name : ''
+}
+/** the partner sets (or an administrator sets for him) a brand name: unique among users and never a prefix of ours */
+export async function brandSet(userId, raw) {
+  const c = brandNameCheck(raw)
+  if (!c.ok) return c
+  const taken = await one(sql`SELECT id FROM user WHERE LOWER(namecustom) = ${c.name} AND id != ${String(userId)} LIMIT 1`)
+  if (taken) return { ok: false, error: 'این نام قبلاً توسط همکار دیگری گرفته شده است؛ نام دیگری انتخاب کنید.' }
+  const shop = await all(sql`SELECT namecustom FROM marzban_panel`)
+  if (shop.some((r) => String(r.namecustom ?? '').trim().toLowerCase() === c.name)) return { ok: false, error: 'این نام مجاز نیست.' }
+  await run(sql`UPDATE user SET namecustom = ${c.name} WHERE id = ${String(userId)}`)
+  return { ok: true, name: c.name }
 }

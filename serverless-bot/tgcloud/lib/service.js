@@ -6,6 +6,7 @@ import { checkActiveBtn, keyboardConfig } from './keyboards.js'
 import { sendWireguardFiles } from './wg.js'
 import { qrPng } from './qr.js'
 import { randomHex } from './php.js'
+import { brandFor } from './partners.js'
 
 const USERNAME_KEYS = ['usernameSequential', 'numericIdRandom', 'customUsername', 'customUsernameRandom', 'customTextRandom', 'customTextSequential', 'numericIdSequential', 'agentCustomTextSequential']
 /** usernameMethodKey(): stored key, or its label in the texts */
@@ -31,6 +32,15 @@ export async function generateUsername(T, fromId, method, username, randomString
   randomString = String(randomString ?? '').trim()
   if (randomString === '') randomString = randomHex(4)
   const fallback = `${fromId}_${randomString}`
+  const brand = await brandFor(user) // an eligible partner with an approved brand name: «acme_a1b2» instead of the shop's prefix
+  const free = async (prefix, rand) => { // a branded name must be unique: ask again (4 hex characters are few for a busy partner)
+    for (let i = 0; i < 8; i++) {
+      const cand = `${prefix}_${rand}`.toLowerCase()
+      if (!(await one(sql`SELECT 1 AS x FROM invoice WHERE LOWER(username) = ${cand} LIMIT 1`))) return rand
+      rand = randomHex(2 + Math.floor(i / 3))
+    }
+    return rand
+  }
   const s = (v) => (v === null || v === undefined ? '' : String(v))
   let g
   switch (usernameMethodKey(T, method)) {
@@ -39,8 +49,8 @@ export async function generateUsername(T, fromId, method, username, randomString
       g = `${s(username)}_${s(user.number_username)}`; break
     case 'customUsername': g = s(text); break
     case 'customUsernameRandom': g = `${s(text)}_${rand7()}`; break
-    case 'customTextRandom': g = `${s(namecustom)}_${randomString}`; break
-    case 'customTextSequential': g = `${s(namecustom)}_${s(setting.numbercount)}`; break
+    case 'customTextRandom': g = brand ? `${brand}_${await free(brand, randomString)}` : `${s(namecustom)}_${randomString}`; break
+    case 'customTextSequential': g = `${brand || s(namecustom)}_${s(setting.numbercount)}`; break
     case 'numericIdSequential': g = `${fromId}_${s(user.number_username)}`; break
     case 'agentCustomTextSequential': g = usernamecustom === 'none' ? `${s(namecustom)}_${s(setting.numbercount)}` : `${s(usernamecustom)}_${s(user.number_username)}`; break
     default: g = fallback
