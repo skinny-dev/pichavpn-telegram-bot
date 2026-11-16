@@ -70,7 +70,7 @@ const row = await db.get(sql`SELECT * FROM DiscountSell WHERE codeDiscount = 'TE
 check('code: the row exists with the percent, the limit and first-purchase only', row && row.price === '20' && row.limitDiscount === '50' && row.usefirst === '1' && row.useuser === '1' && row.code_product === 'all')
 check('code: it carries the real deadline', Number(row.time) === c.endsAt)
 l4 = await E.eventsGet(); l4.find((x) => x.id === code.id).endsAt = T - 1; await E.eventsSet(l4); await E.eventsTick()
-check('code: it expires by itself', Number((await db.get(sql`SELECT time FROM DiscountSell WHERE codeDiscount = 'TEST20'`)).time) < T)
+check('code: it expires by itself', Number((await db.get(sql`SELECT time FROM DiscountSell WHERE codeDiscount = 'TEST20'`)).time) < Math.floor(Date.now() / 1000))
 
 const panels0 = JSON.stringify(await db.all(sql`SELECT name_panel, time_usertest, val_usertest FROM marzban_panel ORDER BY name_panel`))
 const te = (await call('event_save', { event: ev({ name: 'تست بلندتر', type: 'test_extension', startsAt: T + 80 * DAY, endsAt: T + 83 * DAY, group: 't', params: { hours: 72, mb: 1500 } }), approve: true })).body.event
