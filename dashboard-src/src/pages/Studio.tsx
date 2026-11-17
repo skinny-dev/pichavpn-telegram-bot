@@ -13,7 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
-interface Cta { key: string; url?: string; label?: string; code?: string }
+interface Cta { key: string; url?: string; label?: string; code?: string; style?: string }
+const COLORS: [string, string, string][] = [['', 'خودکار (اولی آبی)', 'bg-slate-500'], ['primary', 'آبی اصلی', 'bg-sky-500'], ['success', 'سبز', 'bg-green-500'], ['danger', 'قرمز', 'bg-red-500'], ['default', 'معمولی', 'bg-slate-300']]
 interface Lint { errors: string[]; warnings: string[] }
 interface Post { id: string; title: string; kind: string; occasion: string; text: string; image: string; cta: Cta[]; audience: 'channel' | 'bot' | 'both' | 'admins'; toChannel?: boolean; toBot?: boolean; when: number; status: string; auto: boolean; note: string; offerEnds: number; lint: Lint; day: string }
 interface Occ { id: string; date: string; jy: number; jm: number; jd: number; kind: string; title: string; note: string }
@@ -57,7 +58,7 @@ function Preview({ p, st, preview }: { p: Post; st: State; preview?: string }) {
       </div>
       <div className="mt-1 space-y-1">
         {rows.map((r, i) => (
-          <div key={i} className="flex gap-1">{r.map((b, j) => <div key={j} className="flex-1 rounded-lg bg-[#2b5278]/60 px-2 py-2 text-center text-sm">{label(b)}</div>)}</div>
+          <div key={i} className="flex gap-1">{r.map((b, j) => { const eff = b.style ? (b.style === 'default' ? '' : b.style) : i * 2 + j === 0 ? 'primary' : ''; return <div key={j} data-style={eff || 'default'} className={cn('flex-1 rounded-lg px-2 py-2 text-center text-sm', eff === 'primary' ? 'bg-sky-600' : eff === 'success' ? 'bg-green-600' : eff === 'danger' ? 'bg-red-600' : 'bg-[#2b5278]/60')}>{label(b)}</div> })}</div>
         ))}
       </div>
     </div>
@@ -145,6 +146,15 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
                 </div></div>
             ))}
           </div>
+          {cur.cta.length > 0 && <div className="mt-3 space-y-1" data-testid="button-colors">
+            <Label className="text-xs">رنگ دکمه‌ها</Label>
+            {cur.cta.map((b, i) => (
+              <div key={b.key} className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="w-24 truncate">{fa(i + 1)}. {st.cta[b.key]?.label ?? b.key}</span>
+                {COLORS.map(([v, label, dot]) => <button key={v} type="button" data-testid={`color-${b.key}-${v || 'auto'}`} onClick={() => upd(b.key, { style: v || undefined })} className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5', (b.style || '') === v ? 'border-primary ring-1 ring-primary' : 'bg-background')}><span className={cn('inline-block size-2.5 rounded-full', dot)} />{label}</button>)}
+              </div>
+            ))}
+          </div>}
           {cur.cta.filter((b) => st.cta[b.key]?.custom).map((b) => <Input key={b.key} dir="ltr" className="mt-2" placeholder="https://…" value={b.url || ''} onChange={(e) => upd(b.key, { url: e.target.value })} />)}
           {cur.cta.filter((b) => st.cta[b.key]?.copy).map((b) => <Input key={b.key} dir="ltr" className="mt-2" placeholder="کد تخفیف واقعی" value={b.code || ''} onChange={(e) => upd(b.key, { code: e.target.value })} />)}
         </div>

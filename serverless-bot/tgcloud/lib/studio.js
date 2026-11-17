@@ -13,6 +13,8 @@ const parse = (s, d) => { try { const v = JSON.parse(s); return v ?? d } catch {
 export const KINDS = { greeting: 'تبریک مناسبت', tip: 'آموزش / حل مشکل', status: 'وضعیت و قطعی', offer: 'پیشنهاد واقعی', product: 'محصول / مقایسه', news: 'خبر + راه‌حل', trust: 'اعتماد / تجربه', engage: 'تعامل', cat: 'گربه‌ای' }
 
 // ---------- CTA catalog (docs/CTA_BUTTONS.md). `start` = deep-link parameter; `ready` = the bot already understands it (else the button is flagged).
+/** Telegram's button colours: primary (blue), success (green), danger (red); 'default' = the plain look. Not set → the first button is primary, the others plain. */
+export const STYLES = ['primary', 'success', 'danger', 'default']
 export const CTA = {
   buy: { label: '🛒 خرید اشتراک', group: 'تبدیل', start: 'buy', ready: true },
   test: { label: '🎁 تست رایگان', group: 'تبدیل', start: 'usertest', ready: true },
@@ -122,7 +124,7 @@ export async function settingsGet() {
 }
 
 export function normalize(p, old = {}) {
-  const cta = (Array.isArray(p.cta) ? p.cta : []).map((b) => ({ key: String(b.key), ...(b.url ? { url: String(b.url) } : {}), ...(b.label ? { label: String(b.label).slice(0, 40) } : {}), ...(b.code ? { code: String(b.code).slice(0, 40) } : {}) }))
+  const cta = (Array.isArray(p.cta) ? p.cta : []).map((b) => ({ key: String(b.key), ...(b.url ? { url: String(b.url) } : {}), ...(b.label ? { label: String(b.label).slice(0, 40) } : {}), ...(b.code ? { code: String(b.code).slice(0, 40) } : {}), ...(STYLES.includes(b.style) ? { style: b.style } : {}) }))
   // who gets it: the channel and/or every user of the bot (two ticks); neither → only the administrators (a preview). Older posts carry the single `audience` word.
   const wantsOf = (o) => ({ c: o.toChannel ?? (o.audience === undefined ? undefined : o.audience === 'channel' || o.audience === 'both'), b: o.toBot ?? (o.audience === undefined ? undefined : o.audience === 'bot' || o.audience === 'both') })
   const np = wantsOf(p), op = wantsOf(old)
@@ -141,14 +143,18 @@ export function normalize(p, old = {}) {
 export const startLink = (bot, post, key) => `https://t.me/${bot}?start=${('ch_' + post.id.replace(/[^A-Za-z0-9]/g, '') + '_' + key).slice(0, 64)}`
 export function buildMessage(post, bot, lib = {}) {
   const rows = []
+  let n = 0
   for (const b of post.cta || []) {
     const d = CTA[b.key]
     if (!d) continue
     const text = b.label || d.label
-    if (d.copy) { if (b.code) rows.push([{ text, copy_text: { text: b.code } }]); continue }
-    if (d.custom) { rows.push([{ text, url: b.url }]); continue }
-    if (d.share) { rows.push([{ text, url: `https://t.me/share/url?url=${encodeURIComponent(startLink(bot, post, 'ref'))}` }]); continue }
-    rows.push([{ text, url: startLink(bot, post, b.key) }])
+    const style = STYLES.includes(b.style) ? (b.style === 'default' ? undefined : b.style) : n === 0 ? 'primary' : undefined // the first button is the main action (Telegram's main colour) unless a colour is chosen
+    n++
+    const put = (btn) => rows.push([style ? { ...btn, style } : btn])
+    if (d.copy) { if (b.code) put({ text, copy_text: { text: b.code } }); continue }
+    if (d.custom) { put({ text, url: b.url }); continue }
+    if (d.share) { put({ text, url: `https://t.me/share/url?url=${encodeURIComponent(startLink(bot, post, 'ref'))}` }); continue }
+    put({ text, url: startLink(bot, post, b.key) })
   }
   const kb = []
   for (let i = 0; i < rows.length; i += 2) kb.push(rows.slice(i, i + 2).flat())

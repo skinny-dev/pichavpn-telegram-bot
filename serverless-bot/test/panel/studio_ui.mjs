@@ -65,6 +65,10 @@ check('the audience is two tick-boxes: channel and the bot', (await page.getByTe
 await page.getByTestId('to-bot').check()
 check('ticking the bot shows that its users are reached only in live mode', (await page.getByTestId('bot-note').count()) === 1)
 await page.getByTestId('to-bot').uncheck()
+check('every chosen button has a colour picker', (await page.getByTestId('button-colors').count()) === 1)
+await page.getByTestId('color-test-danger').click(); await page.waitForTimeout(200)
+check('picking red colours that button in the preview', (await page.getByTestId('preview').locator('[data-style=danger]').count()) === 1)
+await page.getByTestId('color-test-auto').click()
 check('the composer has «send now» next to the other buttons', (await page.getByTestId('editor-send-now').count()) === 1)
 if (shots) await page.screenshot({ path: path.join(shots, 'studio_composer.png'), fullPage: true })
 // an invalid text shows the error live, and scheduling is refused
