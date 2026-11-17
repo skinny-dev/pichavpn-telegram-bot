@@ -19,15 +19,20 @@ const total = Number((await db.get(sql`SELECT COUNT(*) AS n FROM user WHERE User
 await msg(5550001, 'سلام به همه')
 calls.length = 0
 await msg(5550001, '1')
-check('first batch sent', sent('سلام به همه').length === 25, String(sent('سلام به همه').length))
+check('one run sends as many batches as fit in the time budget (a run used to send only 25: thousands of users took hours)', sent('سلام به همه').length === total && !sent('سلام به همه').some(([, p]) => String(p.chat_id) === '8005'), `${sent('سلام به همه').length}/${total}`)
 check('it has the buy button', JSON.stringify(sent('سلام به همه')[0]?.[1].reply_markup).includes('"buy"'))
-check('a job is waiting', !!(await db.get(sql`SELECT value FROM kv WHERE key = 'broadcast:job'`)))
-await cb(5550001, 'continue_sendmessage')
-await cb(5550001, 'continue_sendmessage')
-await cb(5550001, 'continue_sendmessage')
-check('everyone got it once, the blocked user did not', sent('سلام به همه').length === total && !sent('سلام به همه').some(([, p]) => String(p.chat_id) === '8005'), `${sent('سلام به همه').length} of ${total}`)
 check('the job finished', !(await db.get(sql`SELECT value FROM kv WHERE key = 'broadcast:job'`)))
 check('admin told it is done', calls.some(([m, p]) => m.toLowerCase() === 'sendmessage' && String(p.chat_id) === '5550001' && /✅ \d+ · ❌ \d+/.test(String(p.text))))
+// a zero budget = exactly one batch of 25 per call (the safety valve), and it continues from where it stopped
+const { broadcastStart, broadcastTick } = await import('../tgcloud/lib/broadcast.js')
+const { systemContext } = await import('../tgcloud/lib/bot.js')
+const cc = { ...(await systemContext()), from_id: '5550001' }
+await broadcastStart(cc, { type: 'text', text: 'بودجه صفر' }, 0)
+calls.length = 0
+const more1 = await broadcastTick(cc, true, 0)
+check('budget 0: one batch of 25 and the job stays', more1 === true && sent('بودجه صفر').length === 25 && !!(await db.get(sql`SELECT value FROM kv WHERE key = 'broadcast:job'`)))
+await broadcastTick(cc, true, 0); await broadcastTick(cc, true, 0); await broadcastTick(cc, true, 0)
+check('…and the next calls carry on without sending anyone twice', sent('بودجه صفر').length === total && new Set(sent('بودجه صفر').map(([, p]) => p.chat_id)).size === total)
 await msg(5550001, '/sendall'); await msg(5550001, 'دومی'); await msg(5550001, '0')
 await cb(5550001, 'cancel_sendmessage')
 check('cancel removes the job', !(await db.get(sql`SELECT value FROM kv WHERE key = 'broadcast:job'`)))

@@ -2,6 +2,8 @@
 //   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
+import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
+import { broadcastTick } from '../lib/broadcast.js'
 import { dataUser } from '../lib/panel.js'
 import { all, kvGet, kvSet, one, run, sql } from '../lib/db.js'
 import { productName, hasNameTokens } from '../lib/php.js'
@@ -548,6 +550,10 @@ TOOLS.studio = (() => {
     out.channel = s.channel || 'NOT SET'
     out.test_channel = s.testChannel || 'not set'
     out.bot_username = s.bot || 'not set'
+    if (input?.pump_broadcast) { // send for up to ~25 seconds right now (run it again until broadcast_running is false)
+      const c = { ...(await systemContext()), from_id: 0 }
+      out.pumped = { more: await broadcastTick(c, true, 25000) }
+    }
     if (input?.cancel_broadcast) { await kvSet('broadcast:job', ''); out.broadcast_cancelled = true }
     const rawJob = await kvGet('broadcast:job')
     let job = null

@@ -17,8 +17,8 @@ export async function broadcastStart(c, draft, button) {
   return job
 }
 
-/** send the next batch; returns true while there is more to send */
-export async function broadcastTick(c, force = false) {
+/** one batch of BATCH users; returns true while there is more to send. The progress message is NOT touched here (the caller does it once). */
+async function broadcastBatch(c) {
   const raw = await kvGet('broadcast:job')
   if (!raw) return false
   const job = JSON.parse(raw)
@@ -39,9 +39,23 @@ export async function broadcastTick(c, force = false) {
     return false
   }
   await kvSet('broadcast:job', JSON.stringify(job))
-  const left = Math.max(0, job.total - job.sent - job.failed)
-  await Editmessagetext(job.admin, job.message_id, c.T.Admin.messageBulk.progress.replace('%s', String(left)), J({ inline_keyboard: [[{ text: c.T.keyboard.cancelOperation, callback_data: 'cancel_sendmessage' }, { text: '▶️ ادامه ارسال', callback_data: 'continue_sendmessage' }]] }))
   return true
+}
+
+/** send as many batches as fit in the time budget (a cron run used to send ONE batch of 25 — thousands of users took hours); true while there is more */
+export async function broadcastTick(c, force = false, budgetMs = 8000) {
+  const t0 = Date.now()
+  let more = false
+  do { more = await broadcastBatch(c) } while (more && Date.now() - t0 < budgetMs)
+  if (more) {
+    const raw = await kvGet('broadcast:job')
+    if (raw) {
+      const job = JSON.parse(raw)
+      const left = Math.max(0, job.total - job.sent - job.failed)
+      await Editmessagetext(job.admin, job.message_id, c.T.Admin.messageBulk.progress.replace('%s', String(left)), J({ inline_keyboard: [[{ text: c.T.keyboard.cancelOperation, callback_data: 'cancel_sendmessage' }, { text: '▶️ ادامه ارسال', callback_data: 'continue_sendmessage' }]] }))
+    }
+  }
+  return more
 }
 
 export const broadcastCancel = async () => { await kvDel('broadcast:job') }

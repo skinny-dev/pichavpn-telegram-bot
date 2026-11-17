@@ -173,6 +173,12 @@ await kvSet('broadcast:job', JSON.stringify({ type: 'text', text: '<b>درود</
 const bj = await AR({ tool: 'studio' }, {})
 check('studio tool: a running broadcast is shown with its progress', bj.broadcast_running === true && bj.broadcast.sent === 10 && bj.broadcast.total === 40 && /درود/.test(bj.broadcast.preview), JSON.stringify(bj.broadcast))
 const cj = await AR({ tool: 'studio', cancel_broadcast: true }, {})
+const bigJob = { type: 'text', text: 'ارسال بزرگ', sent: 0, failed: 0, total: 3, last_id: 0, markup: null, admin: '5550001', message_id: 0 }
+await kvSet('broadcast:job', JSON.stringify(bigJob))
+calls.length = 0
+const pump = await AR({ tool: 'studio', pump_broadcast: true }, {})
+check('studio tool: "pump_broadcast" sends for ~25 s right now and reports whether there is more', pump.pumped && pump.pumped.more === false && pump.broadcast_running === false && calls.filter(([m, p]) => /sendmessage/i.test(m) && /ارسال بزرگ/.test(String(p.text))).length >= 3, JSON.stringify(pump.pumped))
+await kvSet('broadcast:job', JSON.stringify({ type: 'text', text: '<b>درود</b> پیام همگانی', sent: 10, failed: 1, total: 40, last_id: 77, markup: null, admin: 1, message_id: 0 }))
 check('studio tool: a stuck broadcast can be cancelled', cj.broadcast_cancelled === true && cj.broadcast_running === false)
 check('studio tool: a Mini App call is refused', await AR({ tool: 'studio' }, { initData: { user: { id: 1 } } }).then(() => false, () => true))
 await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
