@@ -469,7 +469,9 @@ TOOLS.emoji = (() => {
           const key = norm(st.emoji)
           if (raw.map[key] === undefined) { raw.map[key] = String(st.custom_emoji_id); added++ }
         }
-        raw.packs = [...new Set([...(raw.packs ?? []), name])]
+        // the PHP script keeps `packs` as an object (name → info), older files as a list: keep whichever it is
+        if (Array.isArray(raw.packs)) { if (!raw.packs.includes(name)) raw.packs.push(name) }
+        else { if (!raw.packs || typeof raw.packs !== 'object') raw.packs = {}; raw.packs[name] = raw.packs[name] ?? { imported: 'cloud', emoji: seen } }
         out0.import.push({ pack: name, emoji_in_pack: seen, added })
       }
       if (packs.length && input.on === undefined) raw.enabled = true // importing a pack means you want it
@@ -479,7 +481,7 @@ TOOLS.emoji = (() => {
       if (input.catalog !== undefined) raw.catalog = !!input.catalog
       await kvSet('storage:premium_emoji.json', JSON.stringify(raw))
       await emojiUnblock() // a Telegram refusal from before Premium was on must not keep the layer off
-      out0.saved = { enabled: raw.enabled, emoji_in_map: Object.keys(raw.map).length, packs: raw.packs, buttons: !!raw.buttons, reply_buttons: !!raw.reply_buttons, catalog: !!raw.catalog }
+      out0.saved = { enabled: raw.enabled, emoji_in_map: Object.keys(raw.map).length, packs: Array.isArray(raw.packs) ? raw.packs : Object.keys(raw.packs ?? {}), buttons: !!raw.buttons, reply_buttons: !!raw.reply_buttons, catalog: !!raw.catalog }
     }
     if (input?.unblock) { await emojiUnblock(); resetEmojiCache() }
     resetEmojiCache()
