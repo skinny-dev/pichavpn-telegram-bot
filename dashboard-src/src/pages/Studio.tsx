@@ -255,8 +255,18 @@ function Settings({ st }: { st: State }) {
     mutationFn: (which: string) => api<{ ok: boolean; title?: string; error?: string; botStatus?: string }>('studio_channel_check', { body: { which } }).then((r) => ({ which, r })),
     onSuccess: ({ which, r }) => setCheck((c) => ({ ...c, [which]: r })), onError: err,
   })
+  const [json, setJson] = useState('')
+  const imp = useMutation({
+    mutationFn: () => { let posts: unknown; try { const v = JSON.parse(json); posts = Array.isArray(v) ? v : v.posts } catch { throw new ApiError('JSON معتبر نیست', 400) } return api<{ imported: number; posts: { id: string; lint: { errors: string[] } }[] }>('studio_import', { body: { posts } }) },
+    onSuccess: (r) => { const bad = r.posts.filter((p) => p.lint.errors.length).length; toast.success(`${fa(r.imported)} پیش‌نویس وارد شد${bad ? ` (${fa(bad)} با خطای لحن)` : ''}`); setJson(''); after() }, onError: err,
+  })
   return (
     <div className="space-y-4">
+      <Card><CardHeader><CardTitle className="text-base">ورود پست‌ها (JSON)</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="import">
+        <div className="text-xs text-muted-foreground">پست‌هایی که بیرون نوشته‌اید (مثلاً با Claude) را اینجا بچسبانید. همیشه به‌صورت پیش‌نویس وارد می‌شوند و هیچ‌وقت زمان‌بندی یا ارسال نمی‌شوند؛ پستی که شناسه‌اش تکراری باشد رد می‌شود.</div>
+        <textarea dir="ltr" rows={4} className="w-full rounded-md border bg-background p-2 text-xs" placeholder='{"posts":[{"id":"…","title":"…","text":"…","cta":[{"key":"test"}]}]}' value={json} onChange={(e) => setJson(e.target.value)} data-testid="import-json" />
+        <Button size="sm" disabled={!json.trim() || imp.isPending} data-testid="import-go" onClick={() => imp.mutate()}>{imp.isPending ? <Loader2 className="size-4 animate-spin" /> : 'وارد کردن به‌عنوان پیش‌نویس'}</Button>
+      </CardContent></Card>
       <Card><CardHeader><CardTitle className="text-base">حالت ارسال</CardTitle></CardHeader><CardContent className="space-y-3 text-sm">
         <Select value={st.settings.mode} onValueChange={(m) => (m !== 'live' || confirm('پست‌های تأییدشده به کانال اصلی می‌روند. ادامه؟')) && mode.mutate(m)}>
           <SelectTrigger data-testid="mode"><SelectValue /></SelectTrigger>

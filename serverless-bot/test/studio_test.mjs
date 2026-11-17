@@ -129,6 +129,16 @@ check('a Telegram failure is reported with its reason and the post goes back to 
 delete replies.sendmessage
 await call('studio_settings', { mode: 'sim' })
 
+// 12) the daily content (growth/content/daily_7.json): imports as drafts, every one passes the tone and CTA rules and fits a photo caption
+const fsm = await import('node:fs')
+const daily = JSON.parse(fsm.readFileSync(new URL('../../growth/content/daily_7.json', import.meta.url), 'utf8'))
+const di = (await call('studio_import', daily)).body
+check('daily content: 7 posts import as drafts with no tone error', di.imported === 7 && di.posts.every((p) => p.lint.errors.length === 0), JSON.stringify(di.posts.map((p) => p.lint.errors)))
+const dp = (await S.postsGet()).filter((p) => p.id.startsWith('daily-'))
+check('daily content: drafts only (never scheduled), each has buttons, the first is the main one', dp.length === 7 && dp.every((p) => p.status === 'draft' && p.cta.length >= 2) && S.buildMessage(dp[0], 'b', {}).reply_markup.inline_keyboard[0][0].style === 'primary')
+check('daily content: every post fits under a photo (1024 characters)', dp.every((p) => !S.lint(p).errors.some((e) => /بلندتر/.test(e)) && [...p.text.replace(/<[^>]+>/g, '')].length <= 1024))
+check('daily content: importing the same file twice adds nothing', (await call('studio_import', daily)).body.imported === 0)
+
 // 11) the audience is two ticks: the channel and / or every user of the bot
 const nz = (o) => S.normalize(o, {})
 check('audience: two ticks decide it (both / channel / bot / admins only), and the old single word still works', nz({ toChannel: true, toBot: true }).audience === 'both' && nz({ toChannel: true, toBot: false }).audience === 'channel' && nz({ toChannel: false, toBot: true }).audience === 'bot' && nz({ toChannel: false, toBot: false }).audience === 'admins' && nz({ audience: 'admins' }).toChannel === false && nz({ audience: 'channel' }).toBot === false && nz({}).toChannel === true && S.wantsBot({ audience: 'both' }) && S.wantsChannel({ audience: 'both' }))
