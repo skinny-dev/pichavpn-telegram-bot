@@ -1,5 +1,8 @@
 // Studio routes of the Mini App (studio_*): calendar, posts, test sends, settings. See lib/studio.js and docs/STUDIO.md.
 import { kvSet } from '../db.js'
+import { InputFile } from 'sdk'
+import { b64ToBytes } from '../b64.js'
+import { telegram } from '../tg.js'
 import { fail, str } from './util.js'
 import { MODES, KINDS, CTA, DEFAULT_CTA, lint, normalize, postsGet, postsSet, libGet, settingsGet, occasionsBetween, seedDrafts, sendTest, tehranParts, publishNow, channelCheck } from '../studio.js'
 
@@ -44,6 +47,22 @@ export async function route(name, q, body, admin) {
     case 'studio_save': return save(body)
     case 'studio_status': return status(body)
     case 'studio_delete': { await postsSet((await postsGet()).filter((p) => p.id !== body.id)); return { ok: true } }
+    case 'studio_upload': { // the picture goes to Telegram (to the administrator's own chat); its file_id is what the post keeps — no library
+      const f = body.file
+      if (!f || !f.data) fail('تصویری انتخاب نشده است', 400)
+      const mime = String(f.mime || '')
+      if (!/^image\/(png|jpeg|jpg|webp)$/i.test(mime)) fail('فقط تصویر PNG، JPG یا WEBP', 415)
+      if (Math.floor((String(f.data).length * 3) / 4) > 5 * 1024 * 1024) fail('حجم تصویر باید کمتر از ۵ مگابایت باشد', 413)
+      let bytes
+      try { bytes = b64ToBytes(String(f.data)) } catch { fail('فایل تصویر خراب است', 400) }
+      const ext = /png/i.test(mime) ? 'png' : /webp/i.test(mime) ? 'webp' : 'jpg'
+      const r = await telegram('sendphoto', { chat_id: admin.id_admin, photo: new InputFile(bytes, 'post.' + ext, { type: mime }), caption: '🖼 تصویر پست ذخیره شد (فقط برای شما)' })
+      if (r.ok === false) fail('تلگرام تصویر را نپذیرفت: ' + String(r.description ?? ''), 502)
+      const sizes = r.result?.photo
+      const id = Array.isArray(sizes) && sizes.length ? sizes[sizes.length - 1].file_id : ''
+      if (!id) fail('شناسهٔ تصویر از تلگرام نیامد', 502)
+      return { ok: true, image: id }
+    }
     case 'studio_send_now': {
       if (!body.confirm) fail('تأیید ارسال لازم است', 409)
       const r = await publishNow(String(body.id))

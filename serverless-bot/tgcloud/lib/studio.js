@@ -148,7 +148,8 @@ export function buildMessage(post, bot, lib = {}) {
   }
   const kb = []
   for (let i = 0; i < rows.length; i += 2) kb.push(rows.slice(i, i + 2).flat())
-  const img = post.image ? lib[post.image] || (/^(https?:\/\/)/.test(post.image) ? post.image : '') : ''
+  // an image is: a library name (older posts) · a https link · or a Telegram file_id (what the upload button stores)
+  const img = post.image ? lib[post.image] || (/^(https?:\/\/)/.test(post.image) ? post.image : /^[A-Za-z0-9_-]{30,}$/.test(post.image) ? post.image : '') : ''
   return { text: post.text, photo: img, reply_markup: { inline_keyboard: kb }, missingImage: !!post.image && !img }
 }
 

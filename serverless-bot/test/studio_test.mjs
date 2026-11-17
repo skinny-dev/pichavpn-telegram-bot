@@ -128,5 +128,21 @@ const p2 = (await S.postsGet()).find((p) => p.id === 'now2')
 check('a Telegram failure is reported with its reason and the post goes back to a draft with a note', bad2.result?.[0]?.ok === false && /not a member/.test(bad2.result[0].error) && p2.status === 'draft' && /not a member/.test(p2.note), JSON.stringify({ bad2, note: p2.note }))
 delete replies.sendmessage
 await call('studio_settings', { mode: 'sim' })
+
+// 10) the picture: straight to Telegram, the post keeps the file_id (no library)
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64').toString('base64')
+replies.sendphoto = (p) => ({ message_id: 9, chat: { id: Number(p.chat_id) }, photo: [{ file_id: 'SMALL_' + 'x'.repeat(40), width: 90, height: 90 }, { file_id: 'BIGFILEID_' + 'a'.repeat(50), width: 1280, height: 1280 }] })
+calls.length = 0
+const up = await call('studio_upload', { file: { name: 'a.png', mime: 'image/png', data: png } })
+check('upload: the picture is sent to the administrator and the LARGEST size file_id comes back', up.status === 200 && up.body.image.startsWith('BIGFILEID_') && calls.some(([m, p]) => /sendphoto/i.test(m) && String(p.chat_id) === String(ADMIN)), JSON.stringify(up.body))
+check('upload: no picture / a non-image / a huge file are refused', (await call('studio_upload', {})).status === 400 && (await call('studio_upload', { file: { name: 'a.pdf', mime: 'application/pdf', data: png } })).status === 415 && (await call('studio_upload', { file: { name: 'a.png', mime: 'image/png', data: 'A'.repeat(7 * 1024 * 1024) } })).status === 413)
+check('upload: a Telegram refusal is shown', await (async () => { replies.sendphoto = () => { throw new BotApiError(400, 'Bad Request: wrong file', 'sendPhoto') }; const r = await call('studio_upload', { file: { name: 'a.png', mime: 'image/png', data: png } }); delete replies.sendphoto; return r.status === 502 && /wrong file/.test(JSON.stringify(r.body)) })())
+await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_test', mode: 'live' })
+await call('studio_save', { id: 'img1', title: 'عکس', kind: 'tip', text: 'درود. نکته.', image: up.body.image, cta: [{ key: 'test' }], audience: 'channel', when: Math.floor(Date.now() / 1000) + 3600, status: 'scheduled' })
+calls.length = 0
+const sn2 = (await call('studio_send_now', { id: 'img1', confirm: true })).body
+check('a post whose image is a file_id is sent as a PHOTO to the channel', sn2.mode === 'sent' && calls.some(([m, p]) => /sendphoto/i.test(m) && p.photo === up.body.image && String(p.chat_id) === '@pichanet_chan'), JSON.stringify(calls.map(([m]) => m)))
+check('…and it is not reported as a missing image', !(await S.postsGet()).find((p) => p.id === 'img1').note)
+await call('studio_settings', { mode: 'sim' })
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)

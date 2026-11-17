@@ -59,7 +59,9 @@ await page.getByTestId('row').filter({ hasText: 'شب یلدا' }).first().click
 const prev = await page.getByTestId('preview').innerText()
 check('the composer opens Yalda with the preview text', prev.includes('درود') && prev.includes('یلدا'))
 check('the preview shows the CTA buttons', prev.includes('تست رایگان') && prev.includes('خرید اشتراک'))
-check('the lint tells that the image is missing from the library', prev.includes('در کتابخانه نیست'))
+check('a post whose image was never uploaded says so (no library any more)', (await page.getByTestId('no-image').count()) === 1 && !prev.includes('کتابخانه'))
+check('the composer has a picker for the picture, no library box', (await page.getByTestId('image-pick').count()) === 1 && (await page.getByTestId('image-file').count()) === 1 && !(await page.innerText('body')).includes('کتابخانهٔ تصویر'))
+check('the composer has «send now» next to the other buttons', (await page.getByTestId('editor-send-now').count()) === 1)
 if (shots) await page.screenshot({ path: path.join(shots, 'studio_composer.png'), fullPage: true })
 // an invalid text shows the error live, and scheduling is refused
 await page.getByTestId('text').fill('سلام دوستان')

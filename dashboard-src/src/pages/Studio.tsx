@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CalendarDays, Check, Loader2, Plus, Send, Trash2, TriangleAlert, X } from 'lucide-react'
-import { api, ApiError } from '@/lib/api'
+import { CalendarDays, Check, ImagePlus, Loader2, Plus, Send, Trash2, TriangleAlert, X } from 'lucide-react'
+import { api, apiForm, ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,14 +42,16 @@ function safeHtml(s: string) {
 
 const blank = (): Post => ({ id: '', title: '', kind: 'tip', occasion: '', text: 'درود 🌿\n\n', image: '', cta: [{ key: 'test' }], audience: 'channel', when: 0, status: 'draft', auto: false, note: '', offerEnds: 0, lint: { errors: [], warnings: [] }, day: '' })
 
-function Preview({ p, st }: { p: Post; st: State }) {
+/** is the post's image really there: a Telegram file_id (the upload button), a https link, or an old library name that still exists */
+const imageOk = (image: string, lib: string[]) => /^https?:\/\//.test(image) || /^[A-Za-z0-9_-]{30,}$/.test(image) || lib.includes(image)
+function Preview({ p, st, preview }: { p: Post; st: State; preview?: string }) {
   const rows: Cta[][] = []
   for (let i = 0; i < p.cta.length; i += 2) rows.push(p.cta.slice(i, i + 2))
   const label = (b: Cta) => b.label || st.cta[b.key]?.label || b.key
   return (
     <div className="mx-auto w-full max-w-sm rounded-2xl bg-[#0e1621] p-3 text-white" data-testid="preview">
       <div className="overflow-hidden rounded-xl bg-[#182533]">
-        {p.image && <div className="flex h-40 items-center justify-center bg-black text-xs text-sky-300" dir="ltr">🖼 {p.image}{st.lib.includes(p.image) ? '' : ' (در کتابخانه نیست)'}</div>}
+        {p.image && (preview ? <img src={preview} alt="" className="max-h-64 w-full object-cover" /> : imageOk(p.image, st.lib) ? <div className="flex h-40 items-center justify-center bg-black text-xs text-sky-300">🖼 تصویر پیوست است</div> : <div className="flex h-24 items-center justify-center bg-black px-3 text-center text-xs text-amber-300" data-testid="no-image">⚠️ هنوز تصویری انتخاب نشده؛ «انتخاب تصویر» را بزنید</div>)}
         <div dir="rtl" className="px-3 py-2 text-[15px] leading-7" dangerouslySetInnerHTML={{ __html: safeHtml(p.text) }} />
         <div className="px-3 pb-2 text-left text-[11px] text-slate-400" dir="ltr">{p.when ? jalaliOf(p.when) : 'بدون زمان'}</div>
       </div>
@@ -71,6 +73,16 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
   const when = fromLocal(date, time)
   const cur = { ...p, when }
   const set = (k: Partial<Post>) => setP((x) => ({ ...x, ...k }))
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState('')
+  const upload = useMutation({
+    mutationFn: async (f: File) => {
+      if (f.size > 5 * 1024 * 1024) throw new ApiError('حجم تصویر باید کمتر از ۵ مگابایت باشد', 413)
+      const fd = new FormData(); fd.append('file', f)
+      return { r: await apiForm<{ image: string }>('studio_upload', fd), f }
+    },
+    onSuccess: ({ r, f }) => { setPreview(URL.createObjectURL(f)); set({ image: r.image }); toast.success('تصویر پیوست شد') }, onError: err,
+  })
   const save = useMutation({
     mutationFn: (status: string) => api<{ post: Post }>('studio_save', { body: { ...cur, status } }),
     onSuccess: (r) => { toast.success(r.post.status === 'scheduled' ? 'زمان‌بندی شد' : 'ذخیره شد'); qc.invalidateQueries({ queryKey: ['studio'] }); onDone() },
@@ -80,6 +92,14 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
     mutationFn: () => api<{ sent: { ok: boolean }[]; missingImage: boolean }>('studio_test', { body: { post: cur } }),
     onSuccess: (r) => (r.sent.every((x) => x.ok) ? toast.success(r.missingImage ? 'فرستاده شد (بدون تصویر؛ در کتابخانه نیست)' : 'برای خودتان فرستاده شد') : toast.error('ارسال ناموفق بود')),
     onError: err,
+  })
+  // save the post as it is on the screen, then send it at once (to the channel of the current mode)
+  const sendNow = useMutation({
+    mutationFn: async () => {
+      const saved = await api<{ post: Post }>('studio_save', { body: { ...cur, status: 'draft' } })
+      return api<{ mode?: string; result?: { ok: boolean; error?: string }[] }>('studio_send_now', { body: { id: saved.post.id, confirm: true } })
+    },
+    onSuccess: (r) => { const bad = (r.result ?? []).find((x) => !x.ok); if (bad) toast.error('ارسال نشد: ' + (bad.error || 'خطای تلگرام')); else { toast.success(r.mode === 'sent' ? 'به کانال اصلی رفت' : r.mode === 'tested' ? 'به کانال تست رفت' : 'در حالت شبیه‌سازی برای ادمین‌ها فرستاده شد'); onDone() } qc.invalidateQueries({ queryKey: ['studio'] }) }, onError: err,
   })
   const del = useMutation({ mutationFn: () => api('studio_delete', { body: { id: p.id } }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['studio'] }); onDone() }, onError: err })
   const toggle = (key: string) => set({ cta: cur.cta.some((b) => b.key === key) ? cur.cta.filter((b) => b.key !== key) : [...cur.cta, { key }] })
@@ -101,10 +121,13 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
         </div>
         <div><Label>متن (قالب تلگرام: b، i، code، blockquote)</Label>
           <textarea dir="rtl" rows={8} className="w-full rounded-md border bg-background p-2 text-sm" value={p.text} onChange={(e) => set({ text: e.target.value })} data-testid="text" /></div>
-        <div><Label>تصویر (نام از کتابخانه یا لینک https)</Label>
-          <div className="flex gap-2"><Input dir="ltr" value={p.image} onChange={(e) => set({ image: e.target.value })} />
-            <Select value="" onValueChange={(v) => set({ image: v })}><SelectTrigger className="w-32"><SelectValue placeholder="کتابخانه" /></SelectTrigger>
-              <SelectContent>{st.lib.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}{!st.lib.length && <div className="p-2 text-xs text-muted-foreground">خالی</div>}</SelectContent></Select></div></div>
+        <div><Label>تصویر</Label>
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" data-testid="image-file" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload.mutate(f); e.target.value = '' }} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" disabled={upload.isPending} data-testid="image-pick" onClick={() => fileRef.current?.click()}>{upload.isPending ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />} {p.image ? 'تغییر تصویر' : 'انتخاب تصویر'}</Button>
+            {p.image && <><span className={imageOk(p.image, st.lib) ? 'text-xs text-green-600' : 'text-xs text-amber-600'}>{imageOk(p.image, st.lib) ? '✓ تصویر پیوست است' : '⚠️ تصویر ندارد'}</span><Button type="button" variant="ghost" size="sm" onClick={() => { set({ image: '' }); setPreview('') }}>حذف</Button></>}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">عکس مستقیم برای تلگرام فرستاده می‌شود؛ نیازی به کتابخانه نیست. PNG / JPG / WEBP، تا ۵ مگابایت.</div></div>
         <div>
           <Label>دکمه‌های CTA (دکمهٔ اول اصلی است؛ ۱ تا ۴)</Label>
           <div className="space-y-2">
@@ -128,7 +151,7 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
         {when > 0 && <div className="text-xs text-muted-foreground">{jalaliOf(when)}</div>}
       </div>
       <div className="space-y-3">
-        <Preview p={cur} st={st} />
+        <Preview p={cur} st={st} preview={preview} />
         {(l.errors.length > 0 || l.warnings.length > 0) && (
           <div className="space-y-1 text-sm" data-testid="lint">
             {l.errors.map((e) => <div key={e} className="flex gap-1 text-destructive"><X className="mt-0.5 size-4 shrink-0" />{e}</div>)}
@@ -140,6 +163,7 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
           <Button variant="outline" onClick={() => save.mutate('draft')} disabled={save.isPending}>ذخیره پیش‌نویس</Button>
           <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>{test.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} آزمایشی برای خودم</Button>
           <Button onClick={() => save.mutate('scheduled')} disabled={save.isPending}><Check className="size-4" /> تأیید و زمان‌بندی</Button>
+          <Button variant="secondary" disabled={sendNow.isPending || cur.lint.errors.length > 0} data-testid="editor-send-now" onClick={() => { if (window.confirm(st.settings.mode === 'live' ? 'همین الان به کانال اصلی ارسال می‌شود. ادامه؟' : st.settings.mode === 'test' ? 'همین الان به کانال تست ارسال می‌شود. ادامه؟' : 'در حالت شبیه‌سازی فقط برای ادمین‌ها فرستاده می‌شود. ادامه؟')) sendNow.mutate() }}>{sendNow.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} ارسال همین الان</Button>
           {p.id && <Button variant="ghost" onClick={() => confirm('این پست حذف شود؟') && del.mutate()}><Trash2 className="size-4" /></Button>}
         </div>
         <div className="text-xs text-muted-foreground">{st.settings.mode === 'live' ? '⚠️ حالت زنده: ' : st.settings.mode === 'test' ? '🧪 حالت تست: ' : '🧪 حالت شبیه‌سازی: '}{MODE_HELP[st.settings.mode]}</div>
@@ -207,8 +231,6 @@ function Settings({ st }: { st: State }) {
   const qc = useQueryClient()
   const [channel, setChannel] = useState(st.settings.channel)
   const [testChannel, setTestChannel] = useState(st.settings.testChannel)
-  const [name, setName] = useState('')
-  const [value, setValue] = useState('')
   const after = () => qc.invalidateQueries({ queryKey: ['studio'] })
   const mode = useMutation({ mutationFn: (m: string) => api('studio_settings', { body: { mode: m } }), onSuccess: after, onError: err })
   const ch = useMutation({ mutationFn: () => api('studio_settings', { body: { channel, testChannel } }), onSuccess: () => { toast.success('ذخیره شد'); after() }, onError: err })
@@ -217,8 +239,6 @@ function Settings({ st }: { st: State }) {
     mutationFn: (which: string) => api<{ ok: boolean; title?: string; error?: string; botStatus?: string }>('studio_channel_check', { body: { which } }).then((r) => ({ which, r })),
     onSuccess: ({ which, r }) => setCheck((c) => ({ ...c, [which]: r })), onError: err,
   })
-  const libSet = useMutation({ mutationFn: () => api('studio_lib_set', { body: { name, value } }), onSuccess: () => { setName(''); setValue(''); after() }, onError: err })
-  const libDel = useMutation({ mutationFn: (n: string) => api('studio_lib_delete', { body: { name: n } }), onSuccess: after, onError: err })
   return (
     <div className="space-y-4">
       <Card><CardHeader><CardTitle className="text-base">حالت ارسال</CardTitle></CardHeader><CardContent className="space-y-3 text-sm">
@@ -236,11 +256,6 @@ function Settings({ st }: { st: State }) {
         </div>
         {Object.entries(check).map(([w, r]) => <div key={w} className={`text-xs ${r.ok ? 'text-green-600' : 'text-red-600'}`}>{w === 'main' ? 'اصلی' : 'تست'}: {r.ok ? `✅ «${r.title}» · ربات ${r.botStatus} و می‌تواند ارسال کند` : `❌ ${r.error}`}</div>)}
         <div className="text-xs text-muted-foreground">ربات باید در هر دو کانال ادمین باشد و اجازهٔ ارسال پیام داشته باشد.</div>
-      </CardContent></Card>
-      <Card><CardHeader><CardTitle className="text-base">کتابخانهٔ تصویر</CardTitle></CardHeader><CardContent className="space-y-2 text-sm">
-        <div className="text-xs text-muted-foreground">نام لاتین + file_id تلگرام (تصویر را برای ربات بفرستید) یا لینک https.</div>
-        <div className="flex gap-2"><Input dir="ltr" placeholder="yalda-wide" value={name} onChange={(e) => setName(e.target.value)} /><Input dir="ltr" placeholder="file_id / https://…" value={value} onChange={(e) => setValue(e.target.value)} /><Button onClick={() => libSet.mutate()}><Plus className="size-4" /></Button></div>
-        <div className="flex flex-wrap gap-2">{st.lib.map((n) => <Badge key={n} variant="secondary" className="gap-1">{n}<button type="button" onClick={() => libDel.mutate(n)}><X className="size-3" /></button></Badge>)}</div>
       </CardContent></Card>
     </div>
   )
