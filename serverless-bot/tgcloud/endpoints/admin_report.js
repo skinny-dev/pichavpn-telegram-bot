@@ -9,7 +9,9 @@ import { healthGet } from '../lib/gatehealth.js'
 import { paychiBase, paychiCall, paychiKey } from '../lib/paychi.js'
 import { USE_SERVICES, catalogGet, rankFor, syncHosts } from '../lib/servers.js'
 import { tetraBase, tetraCall, tetraKey, tetraPickLink } from '../lib/tetraminator.js'
-import { telegram } from '../lib/tg.js'
+import { telegram, emojiUnblock } from '../lib/tg.js'
+import { emojiConfig, resetEmojiCache } from '../lib/emoji.js'
+import { loadTexts } from '../lib/texts.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
 
 const TOOLS = {}
@@ -433,6 +435,48 @@ TOOLS.product_names = (() => {
       return { ...out, applied: n, note: 'the old names are kept; undo with {"tool":"product_names","restore":true}' }
     }
     return { ...out, preview_only: true, items: items.map((i) => ({ id: i.id, agent: i.agent, old: i.old, new: i.new, customer_sees: i.customer_sees, partner_15pct_sees: i.partner_15pct_sees, warnings: i.warnings.length ? i.warnings : undefined, note: i.note || undefined })) }
+  }
+  return main
+})()
+
+// emoji: is premium (custom) emoji working everywhere? Config state, the 6-hour block Telegram can leave behind, which emoji used in the bot's texts and catalog have NO premium id yet,
+// and (probe) a real test message to the first administrator.
+//   npx tgcloud run endpoints/admin_report '{"tool":"emoji"}'                   → the audit
+//   npx tgcloud run endpoints/admin_report '{"tool":"emoji","unblock":true}'    → lifts the block (do this once Premium is on)
+//   npx tgcloud run endpoints/admin_report '{"tool":"emoji","probe":true}'      → sends a test message with premium emoji to the first administrator
+TOOLS.emoji = (() => {
+  const EMO = /\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*/gu
+  const norm = (e) => String(e).replace(/\uFE0F/g, '')
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    if (input?.unblock) { await emojiUnblock(); resetEmojiCache() }
+    resetEmojiCache()
+    const cfg = await emojiConfig()
+    const until = Number((await kvGet('custom_emoji_blocked_until')) || 0)
+    const out = {
+      config: { enabled: cfg.enabled, mapped_emoji: Object.keys(cfg.map).length, inline_button_icons: cfg.buttons, reply_button_icons: cfg.reply_buttons, catalog_labels: cfg.catalog },
+      blocked_by_telegram: until > Date.now() / 1000 ? `YES, for ${Math.round((until - Date.now() / 1000) / 60)} more minutes (Telegram refused custom emoji earlier) — run with "unblock":true` : 'no',
+    }
+    if (input?.unblock) out.unblocked = true
+    if (!cfg.enabled) out.problem = 'premium emoji is OFF in the config (storage:premium_emoji.json: enabled / map)'
+    // every text the customer can see: the bot's texts + the catalog
+    const seen = new Map(), add = (text, where) => { for (const m of String(text ?? '').match(EMO) ?? []) { const k = norm(m), r = seen.get(k) ?? { n: 0, where }; r.n++; seen.set(k, r) } }
+    let strings = 0
+    const walk = (v, path) => { if (typeof v === 'string') { strings++; add(v, path) } else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, path ? path + '.' + k : k) }
+    walk(await loadTexts(), '')
+    for (const [table, cols] of [['product', ['name_product', 'note']], ['category', ['remark']], ['help', ['category', 'Description_os']], ['departman', ['name_departman']], ['affiliates', ['description']]]) {
+      try { for (const r of await all(sql.raw(`SELECT ${cols.join(', ')} FROM ${table}`))) for (const c of cols) { strings++; add(r[c], table + '.' + c) } } catch { /* a table that is not there */ }
+    }
+    const covered = [...seen].filter(([e]) => cfg.map[e] !== undefined), missing = [...seen].filter(([e]) => cfg.map[e] === undefined).sort((a, b) => b[1].n - a[1].n)
+    out.texts = { strings_scanned: strings, distinct_emoji: seen.size, with_premium_id: covered.length, without_premium_id: missing.length }
+    out.add_these_to_the_map = missing.slice(0, 40).map(([e, r]) => ({ emoji: e, uses: r.n, example: r.where }))
+    if (input?.probe) {
+      const admin = await one(sql`SELECT id_admin FROM admin WHERE rule = 'administrator' LIMIT 1`)
+      const sample = [...cfg.map ? Object.keys(cfg.map) : []].slice(0, 6).join(' ')
+      const r = admin ? await telegram('sendmessage', { chat_id: admin.id_admin, text: `🧪 تست اموجی پرمیوم\n${sample}\n✅ ⭐ 🔥 💎`, parse_mode: 'HTML' }) : { ok: false, description: 'no administrator' }
+      out.probe = { sent: r.ok !== false, error: r.ok === false ? String(r.description ?? '') : undefined, note: 'در تلگرام باید این اموجی‌ها متحرک/پرمیوم دیده شوند؛ اگر ساده بودند، پرمیوم برای حساب مالک ربات فعال نیست یا شناسه‌ها اشتباه است' }
+    }
+    return out
   }
   return main
 })()

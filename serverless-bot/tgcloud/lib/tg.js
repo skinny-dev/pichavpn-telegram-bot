@@ -9,6 +9,8 @@ async function emojiBlocked() {
   if (blocked === null) blocked = Number((await kvGet('custom_emoji_blocked_until')) || 0) > Date.now() / 1000
   return blocked
 }
+/** the 6-hour block after a Telegram refusal: lifted by hand once Premium is on (admin_report emoji unblock) */
+export async function emojiUnblock() { blocked = false; await kvSet('custom_emoji_blocked_until', '0') }
 async function blockEmoji() {
   blocked = true
   await kvSet('custom_emoji_blocked_until', String(Math.floor(Date.now() / 1000) + 21600))
@@ -37,7 +39,7 @@ export async function telegram(method, datas = {}, allowFallback = true) {
   if ('message_thread_id' in datas && !(parseInt(datas.message_thread_id) > 0)) delete datas.message_thread_id
   const cfg = await emojiConfig()
   datas = prepareButtons(cfg, datas)
-  datas = await applyPayload(cfg, datas, method)
+  if (allowFallback) datas = await applyPayload(cfg, datas, method) // the retry (allowFallback false) is already plain: wrapping it again would just be refused again, so the fallback never worked
   let premium = null
   if (hasCustomEmoji(datas)) {
     premium = datas

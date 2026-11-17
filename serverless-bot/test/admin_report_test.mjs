@@ -10,7 +10,7 @@ await seed(process.argv[2])
 const h = (await import('../tgcloud/endpoints/admin_report.js')).default
 check('a Mini App call is refused', await h({ tool: 'diag' }, { initData: { user: { id: 1 } } }).then(() => false, () => true))
 const list = await h({}, {})
-check('without a tool it lists the tools', Array.isArray(list.tools) && list.tools.length === 11, JSON.stringify(list))
+check('without a tool it lists the tools', Array.isArray(list.tools) && list.tools.length === 12, JSON.stringify(list))
 await db.run(sql`DELETE FROM PaySetting WHERE NamePay IN ('tetraminator_api_key')`)
 const run = async (tool, extra = {}) => h({ tool, ...extra }, {})
 const diag = await run('diag'); check('diag: runtime, db speed, cron, gateways, mode', diag.runtime && diag.db_ms && diag.cron && diag.gateways && 'mode' in diag, Object.keys(diag).join())

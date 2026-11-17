@@ -160,7 +160,15 @@ export async function applyPayload(cfg, d, method = '') {
   method = String(method).toLowerCase()
   if (['answercallbackquery', 'answerinlinequery', 'answerprecheckoutquery', 'answershippingquery', 'setmycommands', 'setchatmenubutton'].includes(method)) return d
   d = { ...d }
-  if (isHtml(d)) for (const k of ['text', 'caption']) if (typeof d[k] === 'string') d[k] = wrapHtml(cfg, d[k])
+  if (isHtml(d)) {
+    for (const k of ['text', 'caption']) if (typeof d[k] === 'string') d[k] = wrapHtml(cfg, d[k])
+  } else if (!d.parse_mode) { // a message sent WITHOUT a parse mode (plain text) is escaped and sent as HTML, so its emoji become premium too; it reads exactly the same
+    for (const k of ['text', 'caption']) {
+      if (typeof d[k] !== 'string' || d[k] === '') continue
+      const e = htmlEsc(d[k]), w = wrapHtml(cfg, e)
+      if (w !== e) { d[k] = w; d.parse_mode = 'HTML' }
+    }
+  }
   if ((cfg.buttons || cfg.reply_buttons) && typeof d.reply_markup === 'string' && d.reply_markup !== '') {
     let m
     try { m = JSON.parse(d.reply_markup) } catch { m = null }
