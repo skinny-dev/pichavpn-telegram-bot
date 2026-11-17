@@ -548,7 +548,12 @@ TOOLS.studio = (() => {
     out.channel = s.channel || 'NOT SET'
     out.test_channel = s.testChannel || 'not set'
     out.bot_username = s.bot || 'not set'
-    out.broadcast_running = !!(await kvGet('broadcast:job'))
+    if (input?.cancel_broadcast) { await kvSet('broadcast:job', ''); out.broadcast_cancelled = true }
+    const rawJob = await kvGet('broadcast:job')
+    let job = null
+    try { job = rawJob ? JSON.parse(rawJob) : null } catch { job = null }
+    out.broadcast_running = !!job
+    if (job) out.broadcast = { type: job.type, preview: String(job.text ?? '').replace(/<[^>]+>/g, '').slice(0, 60), sent: job.sent, failed: job.failed, total: job.total, last_user_id: job.last_id, button: job.markup ? 'yes' : 'no', hint: 'advances ~25 users per cron run (each incoming update); cancel it with {"tool":"studio","cancel_broadcast":true}' }
     out.counts = posts.reduce((a, p) => { a[p.status] = (a[p.status] ?? 0) + 1; return a }, {})
     out.posts = posts.filter((p) => !p.occasion).sort((a, b) => (a.when || 9e12) - (b.when || 9e12)).map((p) => ({ id: p.id, title: p.title, status: p.status, when: when(p.when), in_the_past: !!p.when && p.when <= t && p.status === 'scheduled' ? 'due now: sent by the next cron run' : undefined, to: [wantsChannel(p) ? 'channel' : '', wantsBot(p) ? 'bot' : ''].filter(Boolean).join('+') || 'admins', note: p.note || undefined }))
     return out
