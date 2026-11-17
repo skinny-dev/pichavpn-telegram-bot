@@ -12,6 +12,8 @@ import { tetraBase, tetraCall, tetraKey, tetraPickLink } from '../lib/tetraminat
 import { telegram, emojiUnblock } from '../lib/tg.js'
 import { emojiConfig, resetEmojiCache } from '../lib/emoji.js'
 import { loadTexts } from '../lib/texts.js'
+import { route as studioRoute } from '../lib/panelapi/studio.js'
+import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
 
 const TOOLS = {}
@@ -519,6 +521,36 @@ TOOLS.emoji = (() => {
           : ents.length > 0 ? 'OK: Telegram accepted ' + ents.length + ' custom emoji → they show as premium'
             : 'Telegram IGNORED the custom emoji (sent fine, shown as ordinary emoji): this bot is not allowed to send premium emoji — the bot owner needs an active Telegram Premium, or the bot needs an extra @username bought on Fragment. Config and code are fine.'
     }
+    return out
+  }
+  return main
+})()
+
+// studio: what the Content Studio really holds (posts, mode, channel, running broadcast), and — without the Mini App — import posts and approve them.
+//   npx tgcloud run endpoints/admin_report '{"tool":"studio"}'                                   → the state
+//   … '{"tool":"studio","import":[…posts…],"startDate":"2026-11-18","time":"09:00"}'           → imports as drafts, one a day (add "toBot":false to skip the bot's users)
+//   … '{"tool":"studio","import":[…],"startDate":"…","approve":true}'                            → and schedules them (needs a future time; only when live do they go out)
+TOOLS.studio = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const admin = await one(sql`SELECT id_admin FROM admin WHERE rule = 'administrator' LIMIT 1`)
+    const out = {}
+    if (Array.isArray(input?.import) && input.import.length) {
+      const body = { posts: input.import, ...(input.startDate ? { startDate: input.startDate, time: input.time ?? '09:00' } : {}), ...('toChannel' in input ? { toChannel: input.toChannel } : {}), ...('toBot' in input ? { toBot: input.toBot } : {}) }
+      const r = await studioRoute('studio_import', {}, body, admin ?? {})
+      out.imported = r.imported
+      out.import_note = r.imported === 0 ? 'nothing new: these ids are already in the Studio (look at "posts" below)' : undefined
+      if (input.approve && r.imported) out.approved = await studioRoute('studio_approve_all', {}, { ids: r.posts.map((p) => p.id), confirm: true }, admin ?? {})
+    }
+    const s = await settingsGet(), posts = await postsGet(), t = Math.floor(Date.now() / 1000)
+    const when = (w) => (w ? new Date((w + 12600) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' Tehran' : 'no time')
+    out.mode = s.mode + (s.mode === 'live' ? ' (posts go out for real)' : s.mode === 'test' ? ' (only the test channel)' : ' (SIMULATION: nothing reaches the channel or the bot users)')
+    out.channel = s.channel || 'NOT SET'
+    out.test_channel = s.testChannel || 'not set'
+    out.bot_username = s.bot || 'not set'
+    out.broadcast_running = !!(await kvGet('broadcast:job'))
+    out.counts = posts.reduce((a, p) => { a[p.status] = (a[p.status] ?? 0) + 1; return a }, {})
+    out.posts = posts.filter((p) => !p.occasion).sort((a, b) => (a.when || 9e12) - (b.when || 9e12)).map((p) => ({ id: p.id, title: p.title, status: p.status, when: when(p.when), in_the_past: !!p.when && p.when <= t && p.status === 'scheduled' ? 'due now: sent by the next cron run' : undefined, to: [wantsChannel(p) ? 'channel' : '', wantsBot(p) ? 'bot' : ''].filter(Boolean).join('+') || 'admins', note: p.note || undefined }))
     return out
   }
   return main

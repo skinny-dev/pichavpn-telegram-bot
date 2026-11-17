@@ -155,6 +155,24 @@ await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
 await call('studio_import', daily)
 check('daily content: importing the same file twice adds nothing', (await call('studio_import', daily)).body.imported === 0)
 
+// 13) the CLI tool: shows the real state, imports and (only when asked) schedules the daily posts without the Mini App
+const AR = (await import('../tgcloud/endpoints/admin_report.js')).default
+await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
+await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_test', mode: 'sim' })
+const st0 = await AR({ tool: 'studio' }, {})
+check('studio tool: with nothing imported it says so and shows the mode (simulation = nothing goes out)', st0.posts.length === 0 && /SIMULATION/.test(st0.mode) && st0.channel === '@pichanet_chan')
+const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+const imp0 = await AR({ tool: 'studio', import: daily.posts, startDate: tomorrow, time: '09:00' }, {})
+check('studio tool: imports the seven as drafts, one a day at 09:00, to channel + bot', imp0.imported === 7 && imp0.posts.length === 7 && imp0.posts.every((p) => p.status === 'draft' && p.to === 'channel+bot') && imp0.posts[0].when.endsWith('09:00 Tehran') && imp0.posts[1].when.slice(0, 10) !== imp0.posts[0].when.slice(0, 10), JSON.stringify(imp0.posts[0]))
+const again = await AR({ tool: 'studio', import: daily.posts, startDate: tomorrow }, {})
+check('studio tool: importing again adds nothing and says why', again.imported === 0 && /already/.test(again.import_note))
+await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
+const ap2 = await AR({ tool: 'studio', import: daily.posts, startDate: tomorrow, time: '09:00', approve: true, toBot: false }, {})
+check('studio tool: "approve" schedules them; "toBot":false keeps the bot users out', ap2.approved.scheduled === 7 && ap2.posts.every((p) => p.status === 'scheduled' && p.to === 'channel'), JSON.stringify(ap2.approved))
+check('studio tool: a Mini App call is refused', await AR({ tool: 'studio' }, { initData: { user: { id: 1 } } }).then(() => false, () => true))
+await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
+await call('studio_import', daily)
+
 // 11) the audience is two ticks: the channel and / or every user of the bot
 const nz = (o) => S.normalize(o, {})
 check('audience: two ticks decide it (both / channel / bot / admins only), and the old single word still works', nz({ toChannel: true, toBot: true }).audience === 'both' && nz({ toChannel: true, toBot: false }).audience === 'channel' && nz({ toChannel: false, toBot: true }).audience === 'bot' && nz({ toChannel: false, toBot: false }).audience === 'admins' && nz({ audience: 'admins' }).toChannel === false && nz({ audience: 'channel' }).toBot === false && nz({}).toChannel === true && S.wantsBot({ audience: 'both' }) && S.wantsChannel({ audience: 'both' }))
