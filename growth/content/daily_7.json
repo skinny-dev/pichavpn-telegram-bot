@@ -16,7 +16,9 @@
       ],
       "text": "<b>♊️ با مشکلات اتصال به Gemini خداحافظی کن!</b>\n\n<blockquote>⚡️ دیگه نگران محدودیت‌ها و اختلالات اتصال به Gemini نباش! با پیچا VPN به‌راحتی به جمنای متصل شو و بدون دردسر از ابزارهای هوش مصنوعی استفاده کن.</blockquote>\n\n🌎 <b>لوکیشن‌های فعال:</b>\n<pre>لوکیشن       │ وضعیت\nآمریکا        │ فعال ✅\nتونل آمریکا   │ فعال ✅</pre>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#Gemini #هوش_مصنوعی #پیچا",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     },
     {
       "id": "daily-chatgpt",
@@ -34,7 +36,9 @@
       ],
       "text": "<b>🤖 ChatGPT و Claude هم باز نمی‌شوند؟</b>\n\n<blockquote>⚡️ برای کار، درس یا پروژه به ابزارهای هوش مصنوعی نیاز داری ولی اتصال مدام قطع می‌شود؟ با پیچا VPN راحت‌تر وصل شو و روی کارت تمرکز کن.</blockquote>\n\n🌎 <b>لوکیشن پیشنهادی:</b>\n<pre>کار           │ لوکیشن\nClaude و AI   │ 🇺🇸 🇩🇪</pre>\n\n<blockquote expandable>💡 اگر مطمئن نیستی کدام برای کارت بهتر است، دکمهٔ «بهترین سرور برای کارم» را بزن یا از تست رایگان شروع کن.</blockquote>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#ChatGPT #Claude #هوش_مصنوعی",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     },
     {
       "id": "daily-slow",
@@ -52,7 +56,9 @@
       ],
       "text": "<b>🐌 وصل می‌شود ولی سرعت پایین است؟</b>\n\n<blockquote>قبل از هر کاری این سه قدم را امتحان کن؛ بیشتر وقت‌ها مشکل با همین‌ها حل می‌شود.</blockquote>\n\n<pre>قدم │ کار\n۱ │ اتصال را قطع و دوباره وصل کن\n۲ │ اپ را به آخرین نسخه ببر\n۳ │ لوکیشن دیگری امتحان کن</pre>\n\n<blockquote expandable>اگر باز هم کند بود، نام سرویس و ساعت مشکل را به پشتیبانی بنویس تا دقیق‌تر بررسی کند.</blockquote>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#آموزش #سرعت #پیچا",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     },
     {
       "id": "daily-calls",
@@ -70,7 +76,9 @@
       ],
       "text": "<b>📞 تماس تصویری مدام قطع می‌شود؟</b>\n\n<blockquote>⚡️ برای واتساپ، تلگرام و تماس‌های تصویری‌شان یک لوکیشن مناسب‌تر است. با پیچا VPN راحت‌تر تماس بگیر و پیام بفرست.</blockquote>\n\n🌎 <b>لوکیشن پیشنهادی:</b>\n<pre>کار                    │ لوکیشن\nواتساپ، تلگرام و تماس │ 🇫🇮</pre>\n\n<blockquote expandable>🎯 با دکمهٔ «بهترین سرور برای کارم» نوع کارت را انتخاب کن تا پیشنهاد مناسب را ببینی. اگر روی اینترنت تو خوب نبود، پشتیبانی کمک می‌کند.</blockquote>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#واتساپ #تلگرام #تماس_تصویری",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     },
     {
       "id": "daily-remote",
@@ -88,7 +96,9 @@
       ],
       "text": "<b>💼 دورکاری و ابزارهای کاری بدون دردسر</b>\n\n<blockquote>⚡️ بعضی ابزارهای کاری مثل GitHub، Google Drive یا Zoom برای بعضی اتصال‌ها محدود می‌شوند. با پیچا VPN راحت‌تر به کارت برس.</blockquote>\n\n<pre>ابزار │ یادآوری\nGitHub │ قبل از جلسه تست کن\nZoom │ اتصال را از قبل بررسی کن</pre>\n\n<blockquote expandable>🧪 قبل از یک جلسه یا تحویل پروژه، یک بار با تست رایگان اتصال را امتحان کن؛ لحظهٔ آخر دردسر ندارد.</blockquote>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#دورکاری #فریلنسر #پیچا",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     },
     {
       "id": "daily-student",
@@ -106,7 +116,9 @@
       ],
       "text": "<b>🎓 دانشجویی؟ مقاله و دوره‌ها در دسترس‌تر</b>\n\n<blockquote>⚡️ برای Google Scholar، ژورنال‌ها و دوره‌های آنلاین اتصال پایدار لازم داری. با پیچا VPN راحت‌تر وصل شو.</blockquote>\n\n<pre>نیاز │ شروع پیشنهادی\nمقاله و ژورنال │ تست رایگان\nدورهٔ آنلاین │ آموزش اتصال</pre>\n\n<blockquote expandable>📚 اگر تازه شروع کرده‌ای، «آموزش اتصال» قدم‌به‌قدم نشانت می‌دهد چطور اپ را نصب و وصل شوی.</blockquote>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#دانشجو #تحصیل #پیچا",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     },
     {
       "id": "daily-video",
@@ -124,7 +136,9 @@
       ],
       "text": "<b>🎬 یوتیوب و استریم مدام می‌ایستد؟</b>\n\n<blockquote>⚡️ برای یوتیوب، توییچ و استریم‌ها لوکیشن مناسب فرق می‌کند. از این‌ها شروع کن و بهترینش را برای اینترنت خودت پیدا کن.</blockquote>\n\n🌎 <b>لوکیشن پیشنهادی:</b>\n<pre>کار                  │ لوکیشن\nیوتیوب، توییچ، استریم │ 🇩🇪 🇵🇱 🇳🇱</pre>\n\n<blockquote expandable>💬 اگر در ساعت‌های مشخصی کند می‌شود، ساعتش را به پشتیبانی بگو تا بررسی کند.</blockquote>\n\n📌 <b>خرید اشتراک و تمدید:</b>\n@pichanet_bot\n💬 <b>پشتیبانی:</b>\n@pichavpn_support\n\n#یوتیوب #توییچ #استریم",
       "kind": "tip",
-      "audience": "channel"
+      "audience": "both",
+      "toChannel": true,
+      "toBot": true
     }
   ]
 }

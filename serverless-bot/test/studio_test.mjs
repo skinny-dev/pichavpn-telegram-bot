@@ -136,7 +136,23 @@ const di = (await call('studio_import', daily)).body
 check('daily content: 7 posts import as drafts with no tone error', di.imported === 7 && di.posts.every((p) => p.lint.errors.length === 0), JSON.stringify(di.posts.map((p) => p.lint.errors)))
 const dp = (await S.postsGet()).filter((p) => p.id.startsWith('daily-'))
 check('daily content: drafts only (never scheduled), each has buttons, the first is the main one', dp.length === 7 && dp.every((p) => p.status === 'draft' && p.cta.length >= 2) && S.buildMessage(dp[0], 'b', {}).reply_markup.inline_keyboard[0][0].style === 'primary')
+check('daily content: every post goes to the channel AND the bot', dp.every((p) => p.toChannel === true && p.toBot === true && p.audience === 'both'))
+const ov = (await call('studio_import', { posts: [{ ...daily.posts[0], id: 'ov1' }], toBot: false })).body
+check('the import box can override the audience for all posts', (await S.postsGet()).find((p) => p.id === 'ov1').toBot === false)
 check('daily content: every post fits under a photo (1024 characters)', dp.every((p) => !S.lint(p).errors.some((e) => /بلندتر/.test(e)) && [...p.text.replace(/<[^>]+>/g, '')].length <= 1024))
+await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
+const tom = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)
+const sch = (await call('studio_import', { ...daily, startDate: tom, time: '09:00' })).body
+const whens = sch.posts.map((p) => p.when)
+const tehr = (t) => new Date((t + 12600) * 1000).toISOString()
+check('import with a start date: one post a day at 09:00 Tehran, in order, still drafts', whens.length === 7 && whens.every((w, i) => i === 0 || w - whens[i - 1] === 86400) && tehr(whens[0]).slice(0, 16) === tom + 'T09:00' && (await S.postsGet()).every((p) => p.status === 'draft'), JSON.stringify(whens.map(tehr)))
+check('approve all needs a confirmation', (await call('studio_approve_all', { ids: sch.posts.map((p) => p.id) })).status === 409)
+const ap = (await call('studio_approve_all', { ids: [...sch.posts.map((p) => p.id), 'nope'], confirm: true })).body
+check('approve all: the seven become scheduled; an unknown id is only reported', ap.scheduled === 7 && ap.skipped.length === 1 && (await S.postsGet()).filter((p) => p.status === 'scheduled').length === 7, JSON.stringify(ap))
+await call('studio_save', { id: 'late1', title: 'x', kind: 'tip', text: 'درود. نکته.', cta: [{ key: 'test' }], when: 5, status: 'draft' })
+check('approve all never schedules a post in the past or one that breaks the rules', (await call('studio_approve_all', { ids: ['late1'], confirm: true })).body.skipped[0].why === 'زمان آینده ندارد')
+await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
+await call('studio_import', daily)
 check('daily content: importing the same file twice adds nothing', (await call('studio_import', daily)).body.imported === 0)
 
 // 11) the audience is two ticks: the channel and / or every user of the bot

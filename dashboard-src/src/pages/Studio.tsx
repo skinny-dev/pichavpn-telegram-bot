@@ -256,16 +256,39 @@ function Settings({ st }: { st: State }) {
     onSuccess: ({ which, r }) => setCheck((c) => ({ ...c, [which]: r })), onError: err,
   })
   const [json, setJson] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [startTime, setStartTime] = useState('09:00')
+  const [aud, setAud] = useState<{ c: boolean | null; b: boolean | null }>({ c: null, b: null }) // null = as written in the file
+  const [imported, setImported] = useState<{ id: string; title: string; when: number; lint: { errors: string[] } }[]>([])
   const imp = useMutation({
-    mutationFn: () => { let posts: unknown; try { const v = JSON.parse(json); posts = Array.isArray(v) ? v : v.posts } catch { throw new ApiError('JSON معتبر نیست', 400) } return api<{ imported: number; posts: { id: string; lint: { errors: string[] } }[] }>('studio_import', { body: { posts } }) },
-    onSuccess: (r) => { const bad = r.posts.filter((p) => p.lint.errors.length).length; toast.success(`${fa(r.imported)} پیش‌نویس وارد شد${bad ? ` (${fa(bad)} با خطای لحن)` : ''}`); setJson(''); after() }, onError: err,
+    mutationFn: () => { let posts: unknown; try { const v = JSON.parse(json); posts = Array.isArray(v) ? v : v.posts } catch { throw new ApiError('JSON معتبر نیست', 400) } return api<{ imported: number; posts: { id: string; title: string; when: number; lint: { errors: string[] } }[] }>('studio_import', { body: { posts, startDate, time: startTime, ...(aud.c !== null ? { toChannel: aud.c } : {}), ...(aud.b !== null ? { toBot: aud.b } : {}) } }) },
+    onSuccess: (r) => { const bad = r.posts.filter((p) => p.lint.errors.length).length; toast.success(`${fa(r.imported)} پیش‌نویس وارد شد${bad ? ` (${fa(bad)} با خطای لحن)` : ''}`); setImported(r.posts); setJson(''); after() }, onError: err,
+  })
+  const approve = useMutation({
+    mutationFn: () => api<{ scheduled: number; skipped: { id: string; why: string }[] }>('studio_approve_all', { body: { ids: imported.map((p) => p.id), confirm: true } }),
+    onSuccess: (r) => { toast.success(`${fa(r.scheduled)} پست زمان‌بندی شد${r.skipped.length ? ` · ${fa(r.skipped.length)} رد شد` : ''}`); setImported([]); after() }, onError: err,
   })
   return (
     <div className="space-y-4">
       <Card><CardHeader><CardTitle className="text-base">ورود پست‌ها (JSON)</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="import">
         <div className="text-xs text-muted-foreground">پست‌هایی که بیرون نوشته‌اید (مثلاً با Claude) را اینجا بچسبانید. همیشه به‌صورت پیش‌نویس وارد می‌شوند و هیچ‌وقت زمان‌بندی یا ارسال نمی‌شوند؛ پستی که شناسه‌اش تکراری باشد رد می‌شود.</div>
         <textarea dir="ltr" rows={4} className="w-full rounded-md border bg-background p-2 text-xs" placeholder='{"posts":[{"id":"…","title":"…","text":"…","cta":[{"key":"test"}]}]}' value={json} onChange={(e) => setJson(e.target.value)} data-testid="import-json" />
-        <Button size="sm" disabled={!json.trim() || imp.isPending} data-testid="import-go" onClick={() => imp.mutate()}>{imp.isPending ? <Loader2 className="size-4 animate-spin" /> : 'وارد کردن به‌عنوان پیش‌نویس'}</Button>
+        <div className="flex flex-wrap items-end gap-2">
+          <div><Label className="text-xs">زمان‌بندی روزانه از (میلادی، اختیاری)</Label><Input type="date" dir="ltr" className="w-40" value={startDate} onChange={(e) => setStartDate(e.target.value)} data-testid="import-date" /></div>
+          <div><Label className="text-xs">ساعت (تهران)</Label><Input type="time" dir="ltr" className="w-28" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></div>
+          <Button size="sm" disabled={!json.trim() || imp.isPending} data-testid="import-go" onClick={() => imp.mutate()}>{imp.isPending ? <Loader2 className="size-4 animate-spin" /> : 'وارد کردن به‌عنوان پیش‌نویس'}</Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs" data-testid="import-audience">
+          <span>مخاطب همهٔ این پست‌ها:</span>
+          <label className="flex items-center gap-1"><input type="checkbox" checked={aud.c ?? true} onChange={(e) => setAud({ ...aud, c: e.target.checked })} /> کانال</label>
+          <label className="flex items-center gap-1"><input type="checkbox" checked={aud.b ?? false} onChange={(e) => setAud({ ...aud, b: e.target.checked })} /> ربات (همهٔ کاربران)</label>
+          <button type="button" className="text-muted-foreground underline" onClick={() => setAud({ c: null, b: null })}>همان‌طور که در فایل است</button>
+        </div>
+        <div className="text-xs text-muted-foreground">با تاریخ شروع، هر پست یک روز بعد از قبلی زمان پیشنهادی می‌گیرد (ولی هنوز پیش‌نویس است تا تأیید کنید).</div>
+        {imported.length > 0 && <div className="space-y-1 rounded-md border p-2" data-testid="imported">
+          {imported.map((p) => <div key={p.id} className="flex justify-between text-xs"><span>{p.title}</span><span className={p.lint.errors.length ? 'text-red-600' : 'text-muted-foreground'}>{p.lint.errors.length ? p.lint.errors[0] : p.when ? jalaliOf(p.when) : 'بدون زمان'}</span></div>)}
+          <Button size="sm" disabled={approve.isPending || imported.every((p) => !p.when)} data-testid="approve-all" onClick={() => { if (window.confirm(`${fa(imported.filter((p) => p.when && !p.lint.errors.length).length)} پست طبق زمان‌های بالا زمان‌بندی شود؟ (در حالت «زنده» به کانال می‌روند.)`)) approve.mutate() }}>{approve.isPending ? <Loader2 className="size-4 animate-spin" /> : 'تأیید و زمان‌بندی همه'}</Button>
+        </div>}
       </CardContent></Card>
       <Card><CardHeader><CardTitle className="text-base">حالت ارسال</CardTitle></CardHeader><CardContent className="space-y-3 text-sm">
         <Select value={st.settings.mode} onValueChange={(m) => (m !== 'live' || confirm('پست‌های تأییدشده به کانال اصلی می‌روند. ادامه؟')) && mode.mutate(m)}>

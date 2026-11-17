@@ -97,15 +97,35 @@ export async function route(name, q, body, admin) {
     case 'studio_lib_set': { const n = str(body.name).trim(), v = str(body.value).trim(); if (!/^[A-Za-z0-9_-]{1,40}$/.test(n) || !v) fail('نام (لاتین) و مقدار (file_id یا لینک https) لازم است', 400); const lib = await libGet(); lib[n] = v; await kvSet('studio:lib', JSON.stringify(lib)); return { ok: true } }
     case 'studio_lib_delete': { const lib = await libGet(); delete lib[str(body.name)]; await kvSet('studio:lib', JSON.stringify(lib)); return { ok: true } }
     case 'studio_import': {
-      // drafts written elsewhere (a Claude session): always imported as drafts, never scheduled
+      // drafts written elsewhere (a Claude session): always imported as drafts, never scheduled. With startDate (+ time) each post gets a PLANNED day (one a day, in order)
+      // — still a draft until a person approves it.
       const list = await postsGet(), out = []
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(str(body.startDate)) ? str(body.startDate) : '', hm = /^([01]\d|2[0-3]):[0-5]\d$/.test(str(body.time)) ? str(body.time) : '09:00'
+      let day = 0
       for (const raw of (Array.isArray(body.posts) ? body.posts : []).slice(0, 50)) {
-        const p = normalize({ ...raw, status: 'draft', auto: true }, {})
+        const p = normalize({ ...raw, status: 'draft', auto: true, ...('toChannel' in body ? { toChannel: !!body.toChannel } : {}), ...('toBot' in body ? { toBot: !!body.toBot } : {}) }, {}) // the import box can set the audience for all of them
         if (list.some((x) => x.id === p.id)) continue
-        list.push(p); out.push({ id: p.id, lint: lint(p) })
+        if (date) { const [y, m, d] = date.split('-').map(Number), [H, M] = hm.split(':').map(Number); p.when = Math.floor(Date.UTC(y, m - 1, d + day, H, M) / 1000) - 12600; day++ } // Tehran = UTC+3:30
+        list.push(p); out.push({ id: p.id, title: p.title, when: p.when, lint: lint(p) })
       }
       await postsSet(list)
       return { ok: true, imported: out.length, posts: out }
+    }
+    case 'studio_approve_all': { // one confirmed click for a batch of drafts that have a future time and pass the rules
+      if (!body.confirm) fail('تأیید لازم است', 409)
+      const list = await postsGet(), done = [], skipped = []
+      const t = Math.floor(Date.now() / 1000)
+      for (const id of (Array.isArray(body.ids) ? body.ids : []).map(String)) {
+        const p = list.find((x) => x.id === id)
+        if (!p) { skipped.push({ id, why: 'پیدا نشد' }); continue }
+        if (p.status !== 'draft') { skipped.push({ id, why: 'پیش‌نویس نیست' }); continue }
+        if (!p.when || p.when <= t) { skipped.push({ id, why: 'زمان آینده ندارد' }); continue }
+        const l = lint(p)
+        if (l.errors.length) { skipped.push({ id, why: l.errors[0] }); continue }
+        p.status = 'scheduled'; done.push(id)
+      }
+      await postsSet(list)
+      return { ok: true, scheduled: done.length, skipped }
     }
     default: fail('مسیر نامعتبر است', 404)
   }
