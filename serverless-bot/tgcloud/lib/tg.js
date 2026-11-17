@@ -4,15 +4,15 @@ import { api, BotApiError } from 'sdk'
 import { kvGet, kvSet } from './db.js'
 import { emojiConfig, prepareButtons, applyPayload, hasCustomEmoji, applyCustom, stripCustom } from './emoji.js'
 
-let blocked = null // Telegram refused custom emoji lately (6 h)
+let blocked = null, blockedAt = 0 // Telegram refused custom emoji lately (6 h)
 async function emojiBlocked() {
-  if (blocked === null) blocked = Number((await kvGet('custom_emoji_blocked_until')) || 0) > Date.now() / 1000
+  if (blocked === null || Date.now() - blockedAt > 60000) { blocked = Number((await kvGet('custom_emoji_blocked_until')) || 0) > Date.now() / 1000; blockedAt = Date.now() } // re-read each minute: an unblock reaches every running copy
   return blocked
 }
 /** the 6-hour block after a Telegram refusal: lifted by hand once Premium is on (admin_report emoji unblock) */
-export async function emojiUnblock() { blocked = false; await kvSet('custom_emoji_blocked_until', '0') }
+export async function emojiUnblock() { blocked = false; blockedAt = Date.now(); await kvSet('custom_emoji_blocked_until', '0') }
 async function blockEmoji() {
-  blocked = true
+  blocked = true; blockedAt = Date.now()
   await kvSet('custom_emoji_blocked_until', String(Math.floor(Date.now() / 1000) + 21600))
 }
 

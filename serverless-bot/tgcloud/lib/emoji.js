@@ -12,9 +12,9 @@ const DEFAULT_ALIASES = {
 const norm = (e) => String(e).replace(/️/g, '')
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-let cfgCache = null
+let cfgCache = null, cfgAt = 0
 export async function emojiConfig() {
-  if (cfgCache) return cfgCache
+  if (cfgCache && Date.now() - cfgAt < 60000) return cfgCache // a minute: a change made in the panel / by the tool reaches every running copy of the bot without a restart
   let cfg = { enabled: false, map: {}, regex: null, catalog: false, catalog_override: {}, buttons: false, reply_buttons: false }
   let raw = null
   try { raw = JSON.parse((await kvGet('storage:premium_emoji.json')) || 'null') } catch { raw = null }
@@ -39,7 +39,7 @@ export async function emojiConfig() {
       }
     }
   }
-  cfgCache = cfg
+  cfgCache = cfg; cfgAt = Date.now()
   return cfg
 }
 export function resetEmojiCache() { cfgCache = null }

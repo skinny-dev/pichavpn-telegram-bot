@@ -444,16 +444,49 @@ TOOLS.product_names = (() => {
 //   npx tgcloud run endpoints/admin_report '{"tool":"emoji"}'                   → the audit
 //   npx tgcloud run endpoints/admin_report '{"tool":"emoji","unblock":true}'    → lifts the block (do this once Premium is on)
 //   npx tgcloud run endpoints/admin_report '{"tool":"emoji","probe":true}'      → sends a test message with premium emoji to the first administrator
+//   npx tgcloud run endpoints/admin_report '{"tool":"emoji","import":"NewsEmoji","buttons":true,"reply":true,"catalog":true}'
+//        → reads the pack from Telegram, adds its emoji to the map, turns premium ON (and the button icons / bottom-menu icons / catalog labels you name). More packs: "import":["A","B"]. "on":false turns it off.
 TOOLS.emoji = (() => {
   const EMO = /\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*/gu
   const norm = (e) => String(e).replace(/\uFE0F/g, '')
   async function main(input, ctx) {
     if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const out0 = {}
+    if (input?.import !== undefined || input?.on !== undefined || input?.buttons !== undefined || input?.reply !== undefined || input?.catalog !== undefined) {
+      let raw = null
+      try { raw = JSON.parse((await kvGet('storage:premium_emoji.json')) || 'null') } catch { raw = null }
+      raw = { enabled: false, map: {}, packs: [], alias: {}, catalog: false, ...(raw && typeof raw === 'object' ? raw : {}) }
+      raw.map = raw.map && typeof raw.map === 'object' ? raw.map : {}
+      const packs = [].concat(input.import ?? []).map((x) => String(x).replace(/^.*addemoji\//, '').replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean)
+      out0.import = []
+      for (const name of packs) {
+        const r = await telegram('getStickerSet', { name })
+        if (!r || r.ok === false) { out0.import.push({ pack: name, error: String(r?.description ?? 'unknown') }); continue }
+        let added = 0, seen = 0
+        for (const st of r.result?.stickers ?? []) {
+          if (!st.custom_emoji_id || !st.emoji) continue
+          seen++
+          const key = norm(st.emoji)
+          if (raw.map[key] === undefined) { raw.map[key] = String(st.custom_emoji_id); added++ }
+        }
+        raw.packs = [...new Set([...(raw.packs ?? []), name])]
+        out0.import.push({ pack: name, emoji_in_pack: seen, added })
+      }
+      if (packs.length && input.on === undefined) raw.enabled = true // importing a pack means you want it
+      if (input.on !== undefined) raw.enabled = !!input.on
+      if (input.buttons !== undefined) raw.buttons = !!input.buttons
+      if (input.reply !== undefined) raw.reply_buttons = !!input.reply
+      if (input.catalog !== undefined) raw.catalog = !!input.catalog
+      await kvSet('storage:premium_emoji.json', JSON.stringify(raw))
+      await emojiUnblock() // a Telegram refusal from before Premium was on must not keep the layer off
+      out0.saved = { enabled: raw.enabled, emoji_in_map: Object.keys(raw.map).length, packs: raw.packs, buttons: !!raw.buttons, reply_buttons: !!raw.reply_buttons, catalog: !!raw.catalog }
+    }
     if (input?.unblock) { await emojiUnblock(); resetEmojiCache() }
     resetEmojiCache()
     const cfg = await emojiConfig()
     const until = Number((await kvGet('custom_emoji_blocked_until')) || 0)
     const out = {
+      ...out0,
       config: { enabled: cfg.enabled, mapped_emoji: Object.keys(cfg.map).length, inline_button_icons: cfg.buttons, reply_button_icons: cfg.reply_buttons, catalog_labels: cfg.catalog },
       blocked_by_telegram: until > Date.now() / 1000 ? `YES, for ${Math.round((until - Date.now() / 1000) / 60)} more minutes (Telegram refused custom emoji earlier) — run with "unblock":true` : 'no',
     }

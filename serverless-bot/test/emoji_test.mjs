@@ -46,5 +46,25 @@ check('the audit shows the config', a2.config.enabled === true && a2.config.mapp
 check('the audit lists emoji the bot uses that still have no premium id', a2.texts.strings_scanned > 500 && a2.texts.without_premium_id > 0 && a2.add_these_to_the_map.length > 0 && a2.add_these_to_the_map[0].uses >= a2.add_these_to_the_map.at(-1).uses, JSON.stringify(a2.texts))
 check('the probe sends a real test to the first administrator', (await h({ tool: 'emoji', probe: true }, {})).probe.sent === true)
 check('a Mini App call is refused', await h({ tool: 'emoji' }, { initData: { user: { id: 1 } } }).then(() => false, () => true))
+// import a pack straight from Telegram (no PHP server needed): ON, the map, the icons you name, and the cache refreshes by itself
+await kvSet('storage:premium_emoji.json', 'null'); E.resetEmojiCache()
+replies.getStickerSet = (p) => (p.name === 'NewsEmoji' ? { name: 'NewsEmoji', stickers: [{ emoji: '🔥', custom_emoji_id: '5111111111111111111' }, { emoji: '⭐', custom_emoji_id: '5222222222222222222' }, { emoji: '✔️', custom_emoji_id: '5333333333333333333' }, { emoji: '🛍', custom_emoji_id: '5444444444444444444' }, { emoji: '🔥', custom_emoji_id: '5999999999999999999' }, { emoji: 'x', is_x: 1 }] } : (() => { throw new BotApiError(400, 'Bad Request: STICKERSET_INVALID', 'getStickerSet') })())
+const im = await h({ tool: 'emoji', import: 'https://t.me/addemoji/NewsEmoji', buttons: true, reply: true, catalog: true }, {})
+check('import: the pack is read, its emoji are in the map, premium is ON with the icons asked for', im.import[0].emoji_in_pack === 5 && im.import[0].added === 4 && im.saved.enabled === true && im.saved.buttons && im.saved.reply_buttons && im.saved.catalog && im.saved.emoji_in_map === 4, JSON.stringify(im.import) + JSON.stringify(im.saved))
+check('import: the first emoji of a kind wins (a pack can repeat one)', JSON.parse((await db.get(sql`SELECT value FROM kv WHERE key = 'storage:premium_emoji.json'`)).value).map['🔥'] === '5111111111111111111')
+calls.length = 0; await sendmessage('7002', 'درود 🔥 ✅ 🛒', null)
+check('right after the import a message is premium (🔥, the alias ✅→✔ and 🛒→🛍), even without a parse mode', (last().text.match(/tg-emoji/g) || []).length >= 6, last().text)
+const bad = await h({ tool: 'emoji', import: 'NoSuchPack' }, {})
+check('an unknown pack is reported, nothing is broken', bad.import[0].error && /STICKERSET_INVALID/.test(bad.import[0].error) && bad.saved.enabled === true)
+const off = await h({ tool: 'emoji', on: false }, {})
+check('"on":false turns it off', off.saved.enabled === false && off.config.enabled === false)
+await h({ tool: 'emoji', on: true }, {})
+// a change made by another copy of the bot is seen within a minute (no restart)
+await kvSet('storage:premium_emoji.json', JSON.stringify({ enabled: false, map: { '🔥': '5111111111111111111' } }))
+const realNow = Date.now; Date.now = () => realNow() + 61000
+calls.length = 0; await sendmessage('7002', 'درود 🔥', null, 'HTML')
+Date.now = realNow
+check('the config cache refreshes by itself after a minute', !/tg-emoji/.test(last().text), last().text)
+delete replies.getStickerSet
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)
