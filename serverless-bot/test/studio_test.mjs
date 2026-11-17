@@ -47,7 +47,7 @@ check('lunar / religious wording is refused', L({ text: 'درود. ماه رمض
 check('a discount number outside an offer is refused', L({ text: 'درود. ۲۰٪ تخفیف' }).errors.length === 1)
 check('a real offer may carry a number (a warning if no deadline)', L({ kind: 'offer', text: 'درود. ۲۰٪ تخفیف' }).errors.length === 0 && L({ kind: 'offer', text: 'درود. ۲۰٪ تخفیف' }).warnings.length === 1)
 check('no CTA / five CTA are refused', L({ cta: [] }).errors.length === 1 && L({ cta: ['buy', 'test', 'help', 'fit', 'ref'].map((key) => ({ key })) }).errors.length === 1)
-check('a deep link the bot does not know yet is flagged, not blocked', L({ cta: [{ key: 'tariff' }] }).warnings.length === 1 && L({ cta: [{ key: 'tariff' }] }).errors.length === 0)
+check('a deep link the bot does not know yet is flagged, not blocked', L({ cta: [{ key: 'status' }] }).warnings.length === 1 && L({ cta: [{ key: 'status' }] }).errors.length === 0)
 check('a caption over 1024 characters with an image is refused', S.lint({ kind: 'tip', text: 'درود. ' + 'ا'.repeat(1100), image: 'x', cta: [{ key: 'test' }] }).errors.length === 1)
 
 // 4) the message

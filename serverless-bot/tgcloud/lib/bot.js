@@ -5,7 +5,7 @@ import { buildKeyboards, checkActiveBtn } from './keyboards.js'
 import { telegram, sendmessage, deletemessage, Editmessagetext } from './tg.js'
 import { entitiesToTags, restoreLabel } from './emoji.js'
 import { sprintf, strtr, numberFormat, convertPersianNumbers, crc32, dechex, time, intval, randomHex, J } from './php.js'
-import { kvGet } from './db.js'
+import { kvGet, kvSet } from './db.js'
 import { routes, adminRoutes } from './routes.js'
 import { pullRelay } from './relay.js'
 import { cronTick } from './cron.js'
@@ -170,7 +170,10 @@ async function main(c) {
   if (c.text.includes('/start ') && user.step !== 'gettextSystemMessage') {
     const affiliatesid = c.text.split(' ')[1]
     if (affiliatesid === 'fit') { await showFitMenu(c); await step(c, 'home'); return } // channel / message button: «best server for my use»
-    if (!['start', 'usertest', '/start', 'buy', 'help'].includes(affiliatesid)) {
+    const sa = await startAction(c, affiliatesid)
+    if (sa === 'fit') { await showFitMenu(c); await step(c, 'home'); return }
+    if (sa) c.text = sa // the same text the customer would have typed: the ordinary routes answer (buy menu, free test, help …)
+    else if (!['start', 'usertest', '/start', 'buy', 'help'].includes(affiliatesid)) {
       if (!/^\d+$/.test(affiliatesid ?? '') && (await referralCampaignAttach(c.from_id, affiliatesid)) !== null) {
         await sendStartMessage(c, c.from_id, c.keyboard)
         await step(c, 'home')
@@ -201,7 +204,7 @@ async function main(c) {
       }
       return
     }
-    c.text = affiliatesid
+    if (!sa) c.text = affiliatesid
   }
   if (intval(user.verify) === 0 && !c.isAdmin && S.verifystart === 'onverify') {
     await sendmessage(c.from_id, sprintf(T.users.account.notVerifiedNotice, S.id_support), null, 'html')
@@ -318,7 +321,21 @@ async function channelKeyboard(c, channels) {
   return J({ inline_keyboard: rows })
 }
 
-const RESERVED = ['start', 'usertest', 'buy', 'help', 'admin', 'test'] // referralReservedCodes()
+const RESERVED = ['start', 'usertest', 'buy', 'help', 'admin', 'test', 'tariff', 'plan', 'plan_top', 'wallet', 'support', 'extend', 'services', 'wheel', 'ref', 'status', 'fit'] // referralReservedCodes() + the action words below
+
+/** ?start=<word> and ?start=ch_<post>_<word> → what the customer would have typed ('fit' = the use-case menu). null = not an action (a referral code, an id …). A channel click is counted per post. */
+const START_WORDS = (T) => ({
+  buy: 'buy', plan: 'buy', plan_top: 'buy', usertest: 'usertest', test: 'usertest', help: 'help', fit: 'fit', status: 'fit',
+  tariff: T.textbot.tariffList, wallet: '/wallet', support: '/support', extend: T.textbot.extend, services: '/services', wheel: '/gift', ref: T.textbot.affiliates,
+})
+async function startAction(c, payload) {
+  const m = /^ch_([A-Za-z0-9]+)_([a-z0-9_]+)$/.exec(String(payload ?? ''))
+  const word = m ? m[2] : String(payload ?? '')
+  const act = START_WORDS(c.T)[word]
+  if (!act) return null
+  if (m) { try { const k = `care:n:ch:${m[1]}:${word}`; await kvSet(k, String((Number(await kvGet(k)) || 0) + 1)) } catch { /* counting never blocks the action */ } }
+  return act
+}
 async function referralCampaignAttach(userId, code) {
   code = String(code ?? '').trim().toLowerCase()
   if (!/^[a-z][a-z0-9_-]{2,39}$/.test(code) || RESERVED.includes(code)) return null
