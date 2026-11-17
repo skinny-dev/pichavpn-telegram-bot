@@ -18,7 +18,7 @@ const run = async (text) => { const id = await fresh(); calls.length = 0; await 
 
 const PAIRS = [
   ['buy', '/buy'], ['test', '/free'], ['help', '/help'], ['tariff', T.textbot.tariffList], ['wallet', '/wallet'], ['support', '/support'],
-  ['extend', T.textbot.extend], ['services', '/services'], ['ref', T.textbot.affiliates],
+  ['extend', T.textbot.extend], ['services', '/services'], ['ref', T.textbot.affiliates], ['agent', T.textbot.requestAgent],
 ]
 for (const [key, typed] of PAIRS) {
   const want = await run(typed), viaPost = await run('/start ch_p1_' + key)

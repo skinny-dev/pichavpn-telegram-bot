@@ -198,6 +198,22 @@ check('studio tool: a Mini App call is refused', await AR({ tool: 'studio' }, { 
 await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts'`)
 await call('studio_import', daily)
 
+// 14) the partner-launch post (growth/content/partner_launch.json): clean, fits a photo caption, blue «request» + green «contact» buttons, premium-ready HTML
+const launch = JSON.parse(fsm.readFileSync(new URL('../../growth/content/partner_launch.json', import.meta.url), 'utf8')).posts[0]
+const lp = S.normalize({ ...launch, status: 'draft' }, {})
+const lm = S.buildMessage(lp, 'pichanet_bot', {})
+const lb = lm.reply_markup.inline_keyboard.flat()
+check('partner launch post: passes the rules and fits under a photo', S.lint(lp).errors.length === 0 && [...lp.text.replace(/<[^>]+>/g, '')].length <= 1024)
+check('partner launch post: «درخواست همکاری» is blue (primary), «تماس با ما» is green (success), both deep-link to their real action', lb.length === 2 && lb[0].text === 'درخواست همکاری' && lb[0].style === 'primary' && /start=ch_partnerlaunch_agent$/.test(lb[0].url) && lb[1].text === 'تماس با ما' && lb[1].style === 'success' && /start=ch_partnerlaunch_support$/.test(lb[1].url), JSON.stringify(lb))
+check('partner launch post: channel only (a partnership pitch is not for every customer) unless ticked', lp.toChannel === true && lp.toBot === false)
+const E2 = await import('../tgcloud/lib/emoji.js')
+check('partner launch post: its emoji become premium when they are in the pack (🚀 💰 ⚡ 👥 🌍 🎁 🔹)', await (async () => {
+  await kvSet('storage:premium_emoji.json', JSON.stringify({ enabled: true, map: { '🚀': '5000000000000000011', '🔹': '5000000000000000012', '💰': '5000000000000000013' } })); E2.resetEmojiCache()
+  const w = E2.wrapHtml(await E2.emojiConfig(), lp.text)
+  await kvSet('storage:premium_emoji.json', 'null'); E2.resetEmojiCache()
+  return (w.match(/<tg-emoji/g) || []).length >= 9 && /<b>‼️/.test(w)
+})())
+
 // 11) the audience is two ticks: the channel and / or every user of the bot
 const nz = (o) => S.normalize(o, {})
 check('audience: two ticks decide it (both / channel / bot / admins only), and the old single word still works', nz({ toChannel: true, toBot: true }).audience === 'both' && nz({ toChannel: true, toBot: false }).audience === 'channel' && nz({ toChannel: false, toBot: true }).audience === 'bot' && nz({ toChannel: false, toBot: false }).audience === 'admins' && nz({ audience: 'admins' }).toChannel === false && nz({ audience: 'channel' }).toBot === false && nz({}).toChannel === true && S.wantsBot({ audience: 'both' }) && S.wantsChannel({ audience: 'both' }))

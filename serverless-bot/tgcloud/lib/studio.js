@@ -25,6 +25,7 @@ export const CTA = {
   support: { label: '💬 تماس با پشتیبانی', group: 'اعتماد و کمک', start: 'support', ready: true },
   help: { label: '📚 آموزش اتصال', group: 'اعتماد و کمک', start: 'help', ready: true },
   fit: { label: '🎯 بهترین سرور برای کارم', group: 'اعتماد و کمک', start: 'fit', ready: true },
+  agent: { label: '💼 درخواست همکاری', group: 'تبدیل', start: 'agent', ready: true },
   status: { label: '🟢 وضعیت سرورها', group: 'اعتماد و کمک', start: 'status', ready: false },
   extend: { label: '🔄 تمدید سرویس', group: 'نگهداشت', start: 'extend', ready: true },
   services: { label: '📦 سرویس‌های من', group: 'نگهداشت', start: 'services', ready: true },

@@ -321,12 +321,12 @@ async function channelKeyboard(c, channels) {
   return J({ inline_keyboard: rows })
 }
 
-const RESERVED = ['start', 'usertest', 'buy', 'help', 'admin', 'test', 'tariff', 'plan', 'plan_top', 'wallet', 'support', 'extend', 'services', 'wheel', 'ref', 'status', 'fit'] // referralReservedCodes() + the action words below
+const RESERVED = ['start', 'usertest', 'buy', 'help', 'admin', 'test', 'tariff', 'plan', 'plan_top', 'wallet', 'support', 'extend', 'services', 'wheel', 'ref', 'status', 'fit', 'agent'] // referralReservedCodes() + the action words below
 
 /** ?start=<word> and ?start=ch_<post>_<word> → what the customer would have typed ('fit' = the use-case menu). null = not an action (a referral code, an id …). A channel click is counted per post. */
 const START_WORDS = (T) => ({
   buy: 'buy', plan: 'buy', plan_top: 'buy', usertest: 'usertest', test: 'usertest', help: 'help', fit: 'fit', status: 'fit',
-  tariff: T.textbot.tariffList, wallet: '/wallet', support: '/support', extend: T.textbot.extend, services: '/services', wheel: '/gift', ref: T.textbot.affiliates,
+  agent: T.textbot.requestAgent, requestagent: T.textbot.requestAgent, tariff: T.textbot.tariffList, wallet: '/wallet', support: '/support', extend: T.textbot.extend, services: '/services', wheel: '/gift', ref: T.textbot.affiliates,
 })
 async function startAction(c, payload) {
   const m = /^ch_([A-Za-z0-9]+)_([a-z0-9_]+)$/.exec(String(payload ?? ''))
