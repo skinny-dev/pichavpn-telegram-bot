@@ -227,8 +227,9 @@ function Queue({ st, onOpen }: { st: State; onOpen: (p: Post) => void }) {
     mutationFn: (id: string) => api<{ mode?: string; result?: { ok: boolean; error?: string }[]; error?: string }>('studio_send_now', { body: { id, confirm: true } }),
     onSuccess: (r) => { const bad = (r.result ?? []).find((x) => !x.ok); if (bad) toast.error('ارسال نشد: ' + (bad.error || 'خطای تلگرام')); else toast.success(r.mode === 'sent' ? 'به کانال اصلی رفت' : r.mode === 'tested' ? 'به کانال تست رفت' : 'در حالت شبیه‌سازی برای ادمین‌ها فرستاده شد'); qc.invalidateQueries({ queryKey: ['studio'] }) }, onError: err,
   })
-  const list = st.posts.filter((p) => p.status !== 'draft' || p.note)
-  if (!list.length) return <div className="text-sm text-muted-foreground">هنوز پستی زمان‌بندی نشده است.</div>
+  // everything that is not a calendar seed: scheduled ones first (by time), then the drafts you wrote or imported — so imported posts are never hard to find
+  const list = st.posts.filter((p) => p.status !== 'cancelled' && (p.status !== 'draft' || !p.occasion || /^(ارسال|بازگشت)/.test(p.note))).sort((a, b) => (a.status === 'draft' ? 1 : 0) - (b.status === 'draft' ? 1 : 0) || (a.when || 9e12) - (b.when || 9e12))
+  if (!list.length) return <div className="text-sm text-muted-foreground">هنوز پستی نیست. در «تنظیمات ← ورود پست‌ها» پست‌های آماده را وارد کنید یا از تب «پست» یکی بسازید.</div>
   return (
     <div className="space-y-2">
       {list.map((p) => (
@@ -323,7 +324,7 @@ export default function Studio() {
       <div className="flex items-center justify-between"><h1 className="text-lg font-bold">استودیو محتوا</h1>
         <Badge variant={data.settings.mode === 'live' ? 'warning' : 'default'}>{MODE[data.settings.mode]}</Badge></div>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList><TabsTrigger value="calendar">تقویم</TabsTrigger><TabsTrigger value="post">پست</TabsTrigger><TabsTrigger value="queue">صف</TabsTrigger><TabsTrigger value="settings">تنظیمات</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="calendar">تقویم</TabsTrigger><TabsTrigger value="post">پست</TabsTrigger><TabsTrigger value="queue">صف و پیش‌نویس‌ها</TabsTrigger><TabsTrigger value="settings">تنظیمات</TabsTrigger></TabsList>
         <TabsContent value="calendar"><Calendar st={data} onOpen={open} onSeed={() => seed.mutate()} seeding={seed.isPending} /></TabsContent>
         <TabsContent value="post">
           {edit ? <Composer key={edit.id || 'new' + edit.occasion} st={data} post={edit} onDone={() => { setEdit(null); setTab('calendar') }} /> : <Button onClick={() => setEdit(blank())}><Plus className="size-4" /> پست جدید</Button>}
