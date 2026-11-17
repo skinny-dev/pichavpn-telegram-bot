@@ -2,7 +2,8 @@
 import { kvSet } from '../db.js'
 import { InputFile } from 'sdk'
 import { b64ToBytes } from '../b64.js'
-import { telegram } from '../tg.js'
+import { telegram, emojiUnblock } from '../tg.js'
+import { emojiImport, emojiProbe, emojiState, DEFAULT_PACK } from '../emoji.js'
 import { fail, str } from './util.js'
 import { MODES, KINDS, CTA, DEFAULT_CTA, lint, normalize, postsGet, postsSet, libGet, settingsGet, occasionsBetween, seedDrafts, sendTest, tehranParts, publishNow, channelCheck } from '../studio.js'
 
@@ -63,6 +64,20 @@ export async function route(name, q, body, admin) {
       if (!id) fail('شناسهٔ تصویر از تلگرام نیامد', 502)
       return { ok: true, image: id }
     }
+    case 'studio_emoji_state': return { ok: true, ...(await emojiState()) }
+    case 'studio_emoji_apply': { // «make everything premium»: the pack (default NewsEmoji) → the map, premium ON, button icons + bottom menu + catalog labels ON
+      if (!body.confirm) fail('تأیید لازم است', 409)
+      const r = await emojiImport(telegram, { packs: [str(body.pack) || DEFAULT_PACK], on: body.on === undefined ? true : !!body.on, buttons: body.buttons === undefined ? true : !!body.buttons, reply: body.reply === undefined ? true : !!body.reply, catalog: body.catalog === undefined ? true : !!body.catalog })
+      await emojiUnblock()
+      if (r.import[0]?.error) fail('پک خوانده نشد: ' + r.import[0].error, 502)
+      return { ok: true, ...r, state: await emojiState() }
+    }
+    case 'studio_emoji_set': { // switches only (no pack): on / buttons / reply / catalog / unblock
+      const r = await emojiImport(telegram, { on: 'on' in body ? !!body.on : undefined, buttons: 'buttons' in body ? !!body.buttons : undefined, reply: 'reply' in body ? !!body.reply : undefined, catalog: 'catalog' in body ? !!body.catalog : undefined })
+      if (body.unblock) await emojiUnblock()
+      return { ok: true, ...r, state: await emojiState() }
+    }
+    case 'studio_emoji_probe': return { ok: true, ...(await emojiProbe(telegram, admin.id_admin)) }
     case 'studio_send_now': {
       if (!body.confirm) fail('تأیید ارسال لازم است', 409)
       const r = await publishNow(String(body.id))
@@ -101,12 +116,15 @@ export async function route(name, q, body, admin) {
       // — still a draft until a person approves it.
       const list = await postsGet(), out = []
       const date = /^\d{4}-\d{2}-\d{2}$/.test(str(body.startDate)) ? str(body.startDate) : '', hm = /^([01]\d|2[0-3]):[0-5]\d$/.test(str(body.time)) ? str(body.time) : '09:00'
+      const replace = (Array.isArray(body.replace) ? body.replace : []).map(String)
       let day = 0
       for (const raw of (Array.isArray(body.posts) ? body.posts : []).slice(0, 50)) {
         const p = normalize({ ...raw, status: 'draft', auto: true, ...('toChannel' in body ? { toChannel: !!body.toChannel } : {}), ...('toBot' in body ? { toBot: !!body.toBot } : {}) }, {}) // the import box can set the audience for all of them
-        if (list.some((x) => x.id === p.id)) continue
+        const at = list.findIndex((x) => x.id === p.id)
+        if (at >= 0 && !(replace.includes(p.id) && list[at].status === 'draft')) continue // an existing post is only replaced when you NAME it in `replace` and it is still a draft (a scheduled or sent one is never touched)
         if (date) { const [y, m, d] = date.split('-').map(Number), [H, M] = hm.split(':').map(Number); p.when = Math.floor(Date.UTC(y, m - 1, d + day, H, M) / 1000) - 12600; day++ } // Tehran = UTC+3:30
-        list.push(p); out.push({ id: p.id, title: p.title, when: p.when, lint: lint(p) })
+        if (at >= 0) list[at] = p; else list.push(p)
+        out.push({ id: p.id, title: p.title, when: p.when, lint: lint(p), replaced: at >= 0 || undefined })
       }
       await postsSet(list)
       return { ok: true, imported: out.length, posts: out }

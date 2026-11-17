@@ -256,6 +256,12 @@ function Settings({ st }: { st: State }) {
     mutationFn: (which: string) => api<{ ok: boolean; title?: string; error?: string; botStatus?: string }>('studio_channel_check', { body: { which } }).then((r) => ({ which, r })),
     onSuccess: ({ which, r }) => setCheck((c) => ({ ...c, [which]: r })), onError: err,
   })
+  const emo = useQuery({ queryKey: ['studio-emoji'], queryFn: () => api<{ enabled: boolean; mapped: number; buttons: boolean; reply: boolean; catalog: boolean; blockedMinutes: number; pack: string }>('studio_emoji_state') })
+  const [probe, setProbe] = useState('')
+  const emoAfter = () => { qc.invalidateQueries({ queryKey: ['studio-emoji'] }) }
+  const emoApply = useMutation({ mutationFn: () => api<{ import: { pack: string; emoji_in_pack?: number; added?: number }[] }>('studio_emoji_apply', { body: { confirm: true } }), onSuccess: (r) => { toast.success(`پرمیوم برای همه‌چیز روشن شد (${fa(r.import[0]?.emoji_in_pack ?? 0)} اموجی از پک)`); emoAfter() }, onError: err })
+  const emoSet = useMutation({ mutationFn: (b: object) => api('studio_emoji_set', { body: b }), onSuccess: emoAfter, onError: err })
+  const emoProbe = useMutation({ mutationFn: () => api<{ verdict: string }>('studio_emoji_probe', { body: {} }), onSuccess: (r) => setProbe(r.verdict), onError: err })
   const [json, setJson] = useState('')
   const [startDate, setStartDate] = useState('')
   const [startTime, setStartTime] = useState('09:00')
@@ -271,6 +277,19 @@ function Settings({ st }: { st: State }) {
   })
   return (
     <div className="space-y-4">
+      <Card><CardHeader><CardTitle className="text-base">اموجی پرمیوم</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="emoji">
+        {emo.data ? <>
+          <div className="text-xs">{emo.data.enabled ? '✅ روشن' : '⛔ خاموش'} · {fa(emo.data.mapped)} اموجی در پک · آیکن دکمه‌ها {emo.data.buttons ? '✓' : '✗'} · منوی پایین {emo.data.reply ? '✓' : '✗'} · کاتالوگ {emo.data.catalog ? '✓' : '✗'}{emo.data.blockedMinutes ? ` · ⚠️ تلگرام ${fa(emo.data.blockedMinutes)} دقیقهٔ دیگر مسدود` : ''}</div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" data-testid="emoji-apply" disabled={emoApply.isPending} onClick={() => { if (window.confirm(`پک ${emo.data?.pack} از تلگرام خوانده می‌شود و پرمیوم برای متن پیام‌ها، دکمه‌ها، منوی پایین و کاتالوگ روشن می‌شود. ادامه؟`)) emoApply.mutate() }}>{emoApply.isPending ? <Loader2 className="size-4 animate-spin" /> : '✨ همه‌چیز را پرمیوم کن'}</Button>
+            <Button size="sm" variant="outline" onClick={() => emoSet.mutate({ on: !emo.data?.enabled })}>{emo.data.enabled ? 'خاموش کردن' : 'روشن کردن'}</Button>
+            <Button size="sm" variant="outline" onClick={() => emoSet.mutate({ unblock: true })}>رفع مسدودی تلگرام</Button>
+            <Button size="sm" variant="outline" data-testid="emoji-probe" disabled={emoProbe.isPending} onClick={() => emoProbe.mutate()}>ارسال تست به من</Button>
+          </div>
+          {probe && <div className="rounded-md border p-2 text-xs" data-testid="emoji-verdict">{probe}</div>}
+        </> : <Skeleton className="h-10 w-full" />}
+        <div className="text-xs text-muted-foreground">به‌صورت پیش‌فرض روشن است (پک NewsEmoji). اگر تلگرام این ربات را مجاز نداند، اموجی معمولی دیده می‌شود و «ارسال تست» دلیلش را می‌گوید.</div>
+      </CardContent></Card>
       <Card><CardHeader><CardTitle className="text-base">ورود پست‌ها (JSON)</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="import">
         <div className="text-xs text-muted-foreground">پست‌هایی که بیرون نوشته‌اید (مثلاً با Claude) را اینجا بچسبانید. همیشه به‌صورت پیش‌نویس وارد می‌شوند و هیچ‌وقت زمان‌بندی یا ارسال نمی‌شوند؛ پستی که شناسه‌اش تکراری باشد رد می‌شود.</div>
         <textarea dir="ltr" rows={4} className="w-full rounded-md border bg-background p-2 text-xs" placeholder='{"posts":[{"id":"…","title":"…","text":"…","cta":[{"key":"test"}]}]}' value={json} onChange={(e) => setJson(e.target.value)} data-testid="import-json" />

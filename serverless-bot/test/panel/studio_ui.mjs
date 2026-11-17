@@ -94,6 +94,8 @@ await page.getByRole('tab', { name: /صف/ }).click(); await page.waitForTimeout
 const qtext = await page.innerText('body')
 check('imported drafts show up in the queue tab with their planned day', qtext.includes('پست وارداتی الف') && qtext.includes('پست وارداتی ب'))
 check('…each with its «send now» button', (await page.getByTestId('send-now').count()) >= 2)
+await page.getByRole('tab', { name: /تنظیمات/ }).click(); await page.waitForTimeout(500)
+check('settings has the premium-emoji card with the «make everything premium» button', (await page.getByTestId('emoji').count()) === 1 && (await page.getByTestId('emoji-apply').count()) === 1 && (await page.getByTestId('emoji-probe').count()) === 1)
 await page.getByRole('tab', { name: /تقویم/ }).click(); await page.waitForTimeout(300)
 await browser.close(); server.close()
 process.exit(errors.length ? 1 : 0)

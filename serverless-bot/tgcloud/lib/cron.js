@@ -15,6 +15,7 @@ import { eventsTick } from './events.js'
 import { partnersTick } from './partners.js'
 import { gateHealthRun, notifyAdmins, NAMES } from './gatehealth.js'
 import { notifyPartners } from './partnerhub.js'
+import { emojiAutoSetup } from './emoji.js'
 import { modeGet as partnersMode, partnerEnd } from './partners.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
@@ -207,6 +208,7 @@ const JOBS = [
   ['events', 60, () => eventsTick()],
   ['partners', 3600, () => partnersTick()],
   ['gatehealth', 120, () => gateHealthRun(gateNotify)],
+  ['emojidefault', 3600, () => emojiAutoSetup(telegram)], // premium emoji are on by default: once, when nothing was ever set up
   ['notifications', 60, notifications],
   ['configtest', 120, configTest],
   ['payment_expire', 300, paymentExpire],

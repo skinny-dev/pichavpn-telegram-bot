@@ -257,3 +257,76 @@ export async function catalogLabel(kind, row, label) {
   const e = catalogEmoji(cfg, kind, row)
   return e === '' ? label : e + ' ' + label
 }
+
+
+// ---------------------------------------------------------------- setting premium emoji up (shared by the CLI tool, the panel button and the automatic default)
+export const DEFAULT_PACK = 'NewsEmoji'
+/** read pack(s) from Telegram with `send` (the common sender) and put their emoji in the config; flags: on, buttons, reply, catalog (undefined = leave as is) */
+export async function emojiImport(send, { packs = [], on, buttons, reply, catalog } = {}) {
+  let raw = null
+  try { raw = JSON.parse((await kvGet('storage:premium_emoji.json')) || 'null') } catch { raw = null }
+  raw = { enabled: false, map: {}, packs: [], alias: {}, catalog: false, ...(raw && typeof raw === 'object' ? raw : {}) }
+  raw.map = raw.map && typeof raw.map === 'object' ? raw.map : {}
+  const names = [].concat(packs).map((x) => String(x).replace(/^.*addemoji\//, '').replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean)
+  const imported = []
+  let seenTotal = 0
+  for (const name of names) {
+    const r = await send('getStickerSet', { name })
+    if (!r || r.ok === false) { imported.push({ pack: name, error: String(r?.description ?? 'unknown') }); continue }
+    let added = 0, seen = 0
+    for (const st of r.result?.stickers ?? []) {
+      if (!st.custom_emoji_id || !st.emoji) continue
+      seen++
+      const key = norm(st.emoji)
+      if (raw.map[key] === undefined) { raw.map[key] = String(st.custom_emoji_id); added++ }
+    }
+    // the PHP script keeps `packs` as an object (name → info), older files as a list: keep whichever it is
+    if (Array.isArray(raw.packs)) { if (!raw.packs.includes(name)) raw.packs.push(name) }
+    else { if (!raw.packs || typeof raw.packs !== 'object') raw.packs = {}; raw.packs[name] = raw.packs[name] ?? { imported: 'cloud', emoji: seen } }
+    seenTotal += seen
+    imported.push({ pack: name, emoji_in_pack: seen, added })
+  }
+  if (names.length && on === undefined && seenTotal > 0) raw.enabled = true // importing a pack means you want it (a pack with no emoji in it changes nothing)
+  if (on !== undefined) raw.enabled = !!on
+  if (buttons !== undefined) raw.buttons = !!buttons
+  if (reply !== undefined) raw.reply_buttons = !!reply
+  if (catalog !== undefined) raw.catalog = !!catalog
+  await kvSet('storage:premium_emoji.json', JSON.stringify(raw))
+  await kvSet('custom_emoji_blocked_until', '0') // a Telegram refusal from before Premium was on must not keep the layer off
+  cfgCache = null
+  return { import: imported, saved: { enabled: raw.enabled, emoji_in_map: Object.keys(raw.map).length, packs: Array.isArray(raw.packs) ? raw.packs : Object.keys(raw.packs ?? {}), buttons: !!raw.buttons, reply_buttons: !!raw.reply_buttons, catalog: !!raw.catalog } }
+}
+
+/** premium emoji are ON BY DEFAULT: when nothing was ever set up (no emoji in the map) the default pack is imported once with every icon on. Never overrides a choice (once done, or a config with emoji in it, it is left alone). */
+export async function emojiAutoSetup(send) {
+  if ((await kvGet('emoji:auto_done')) === '1') return { skipped: 'done' }
+  let raw = null
+  try { raw = JSON.parse((await kvGet('storage:premium_emoji.json')) || 'null') } catch { raw = null }
+  if (raw && raw.map && typeof raw.map === 'object' && Object.keys(raw.map).length > 0) { await kvSet('emoji:auto_done', '1'); return { skipped: 'already set up' } }
+  const r = await emojiImport(send, { packs: [DEFAULT_PACK], on: true, buttons: true, reply: true, catalog: true })
+  if (r.import[0]?.error || !(r.import[0]?.emoji_in_pack > 0)) return { skipped: 'pack not readable', error: r.import[0]?.error ?? 'no emoji in the pack' } // tried again next hour
+  await kvSet('emoji:auto_done', '1')
+  return { setup: r.saved }
+}
+
+/** a real test message; Telegram's answer says whether it KEPT the custom emoji (entities) or silently dropped them */
+export async function emojiProbe(send, chatId) {
+  const cfg = await emojiConfig()
+  const keys = Object.keys(cfg.map).slice(0, 6)
+  const r = chatId ? await send('sendmessage', { chat_id: String(chatId), text: `🧪 تست اموجی پرمیوم\n${keys.join(' ') || '🔥 ⭐'}\n✅ ⭐ 🔥 💎`, parse_mode: 'HTML' }) : { ok: false, description: 'no administrator' }
+  const kept = (r.result?.entities ?? []).filter((e) => e.type === 'custom_emoji').length
+  const layerOn = cfg.enabled && keys.length > 0
+  const verdict = r.ok === false ? 'the message was not sent: ' + String(r.description ?? '')
+    : !layerOn ? 'PREMIUM IS OFF or the map is empty in the cloud config → run the import'
+      : kept > 0 ? 'OK: Telegram accepted ' + kept + ' custom emoji → they show as premium'
+        : 'Telegram IGNORED the custom emoji (sent fine, shown as ordinary emoji): this bot is not allowed to send premium emoji — the bot owner needs an active Telegram Premium, or the bot needs an extra @username bought on Fragment. Config and code are fine.'
+  return { chat: String(chatId ?? ''), sent: r.ok !== false, error: r.ok === false ? String(r.description ?? '') : undefined, premium_layer_on: layerOn, custom_emoji_kept_by_telegram: kept, verdict }
+}
+
+/** the state the panel shows */
+export async function emojiState() {
+  resetEmojiCache()
+  const cfg = await emojiConfig()
+  const until = Number((await kvGet('custom_emoji_blocked_until')) || 0)
+  return { enabled: cfg.enabled, mapped: Object.keys(cfg.map).length, buttons: cfg.buttons, reply: cfg.reply_buttons, catalog: cfg.catalog, blockedMinutes: until > Date.now() / 1000 ? Math.round((until - Date.now() / 1000) / 60) : 0, pack: DEFAULT_PACK, autoDone: (await kvGet('emoji:auto_done')) === '1' }
+}

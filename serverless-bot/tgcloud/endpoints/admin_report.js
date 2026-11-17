@@ -12,7 +12,7 @@ import { paychiBase, paychiCall, paychiKey } from '../lib/paychi.js'
 import { USE_SERVICES, catalogGet, rankFor, syncHosts } from '../lib/servers.js'
 import { tetraBase, tetraCall, tetraKey, tetraPickLink } from '../lib/tetraminator.js'
 import { telegram, emojiUnblock } from '../lib/tg.js'
-import { emojiConfig, resetEmojiCache } from '../lib/emoji.js'
+import { emojiConfig, resetEmojiCache, emojiImport, emojiProbe } from '../lib/emoji.js'
 import { loadTexts } from '../lib/texts.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
@@ -457,35 +457,10 @@ TOOLS.emoji = (() => {
     if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
     const out0 = {}
     if (input?.import !== undefined || input?.on !== undefined || input?.buttons !== undefined || input?.reply !== undefined || input?.catalog !== undefined) {
-      let raw = null
-      try { raw = JSON.parse((await kvGet('storage:premium_emoji.json')) || 'null') } catch { raw = null }
-      raw = { enabled: false, map: {}, packs: [], alias: {}, catalog: false, ...(raw && typeof raw === 'object' ? raw : {}) }
-      raw.map = raw.map && typeof raw.map === 'object' ? raw.map : {}
-      const packs = [].concat(input.import ?? []).map((x) => String(x).replace(/^.*addemoji\//, '').replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean)
-      out0.import = []
-      for (const name of packs) {
-        const r = await telegram('getStickerSet', { name })
-        if (!r || r.ok === false) { out0.import.push({ pack: name, error: String(r?.description ?? 'unknown') }); continue }
-        let added = 0, seen = 0
-        for (const st of r.result?.stickers ?? []) {
-          if (!st.custom_emoji_id || !st.emoji) continue
-          seen++
-          const key = norm(st.emoji)
-          if (raw.map[key] === undefined) { raw.map[key] = String(st.custom_emoji_id); added++ }
-        }
-        // the PHP script keeps `packs` as an object (name → info), older files as a list: keep whichever it is
-        if (Array.isArray(raw.packs)) { if (!raw.packs.includes(name)) raw.packs.push(name) }
-        else { if (!raw.packs || typeof raw.packs !== 'object') raw.packs = {}; raw.packs[name] = raw.packs[name] ?? { imported: 'cloud', emoji: seen } }
-        out0.import.push({ pack: name, emoji_in_pack: seen, added })
-      }
-      if (packs.length && input.on === undefined) raw.enabled = true // importing a pack means you want it
-      if (input.on !== undefined) raw.enabled = !!input.on
-      if (input.buttons !== undefined) raw.buttons = !!input.buttons
-      if (input.reply !== undefined) raw.reply_buttons = !!input.reply
-      if (input.catalog !== undefined) raw.catalog = !!input.catalog
-      await kvSet('storage:premium_emoji.json', JSON.stringify(raw))
-      await emojiUnblock() // a Telegram refusal from before Premium was on must not keep the layer off
-      out0.saved = { enabled: raw.enabled, emoji_in_map: Object.keys(raw.map).length, packs: Array.isArray(raw.packs) ? raw.packs : Object.keys(raw.packs ?? {}), buttons: !!raw.buttons, reply_buttons: !!raw.reply_buttons, catalog: !!raw.catalog }
+      const r = await emojiImport(telegram, { packs: [].concat(input.import ?? []), on: input.on, buttons: input.buttons, reply: input.reply, catalog: input.catalog })
+      await emojiUnblock()
+      out0.import = r.import
+      out0.saved = r.saved
     }
     if (input?.unblock) { await emojiUnblock(); resetEmojiCache() }
     resetEmojiCache()
@@ -510,18 +485,8 @@ TOOLS.emoji = (() => {
     out.texts = { strings_scanned: strings, distinct_emoji: seen.size, with_premium_id: covered.length, without_premium_id: missing.length }
     out.add_these_to_the_map = missing.slice(0, 40).map(([e, r]) => ({ emoji: e, uses: r.n, example: r.where }))
     if (input?.probe) {
-      // a real test message; Telegram's answer says whether it KEPT the custom emoji (entities) or silently dropped them
       const admin = await one(sql`SELECT id_admin FROM admin WHERE rule = 'administrator' LIMIT 1`)
-      const keys = Object.keys(cfg.map).slice(0, 6)
-      const to = String(input.probe_chat ?? admin?.id_admin ?? '')
-      const r = to ? await telegram('sendmessage', { chat_id: to, text: `🧪 تست اموجی پرمیوم\n${keys.join(' ') || '🔥 ⭐'}\n✅ ⭐ 🔥 💎`, parse_mode: 'HTML' }) : { ok: false, description: 'no administrator' }
-      const ents = (r.result?.entities ?? []).filter((e) => e.type === 'custom_emoji')
-      const sentTags = cfg.enabled && keys.length > 0
-      out.probe = { chat: to, sent: r.ok !== false, error: r.ok === false ? String(r.description ?? '') : undefined, premium_layer_on: sentTags, custom_emoji_kept_by_telegram: ents.length }
-      out.probe.verdict = r.ok === false ? 'the message was not sent: ' + String(r.description ?? '')
-        : !sentTags ? 'PREMIUM IS OFF or the map is empty in the cloud config → run the import command (see "import")'
-          : ents.length > 0 ? 'OK: Telegram accepted ' + ents.length + ' custom emoji → they show as premium'
-            : 'Telegram IGNORED the custom emoji (sent fine, shown as ordinary emoji): this bot is not allowed to send premium emoji — the bot owner needs an active Telegram Premium, or the bot needs an extra @username bought on Fragment. Config and code are fine.'
+      out.probe = await emojiProbe(telegram, input.probe_chat ?? admin?.id_admin)
     }
     return out
   }
@@ -531,6 +496,7 @@ TOOLS.emoji = (() => {
 // studio: what the Content Studio really holds (posts, mode, channel, running broadcast), and — without the Mini App — import posts and approve them.
 //   npx tgcloud run endpoints/admin_report '{"tool":"studio"}'                                   → the state
 //   … '{"tool":"studio","import":[…posts…],"startDate":"2026-11-18","time":"09:00"}'           → imports as drafts, one a day (add "toBot":false to skip the bot's users)
+//   … add "replace":["id1","id2"] to overwrite those posts when they are still DRAFTS (e.g. a new version of the text)
 //   … '{"tool":"studio","import":[…],"startDate":"…","approve":true}'                            → and schedules them (needs a future time; only when live do they go out)
 TOOLS.studio = (() => {
   async function main(input, ctx) {
@@ -538,7 +504,7 @@ TOOLS.studio = (() => {
     const admin = await one(sql`SELECT id_admin FROM admin WHERE rule = 'administrator' LIMIT 1`)
     const out = {}
     if (Array.isArray(input?.import) && input.import.length) {
-      const body = { posts: input.import, ...(input.startDate ? { startDate: input.startDate, time: input.time ?? '09:00' } : {}), ...('toChannel' in input ? { toChannel: input.toChannel } : {}), ...('toBot' in input ? { toBot: input.toBot } : {}) }
+      const body = { posts: input.import, ...(Array.isArray(input.replace) ? { replace: input.replace } : {}), ...(input.startDate ? { startDate: input.startDate, time: input.time ?? '09:00' } : {}), ...('toChannel' in input ? { toChannel: input.toChannel } : {}), ...('toBot' in input ? { toBot: input.toBot } : {}) }
       const r = await studioRoute('studio_import', {}, body, admin ?? {})
       out.imported = r.imported
       out.import_note = r.imported === 0 ? 'nothing new: these ids are already in the Studio (look at "posts" below)' : undefined

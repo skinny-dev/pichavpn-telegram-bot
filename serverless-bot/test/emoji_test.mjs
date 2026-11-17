@@ -123,5 +123,40 @@ check('no source file talks to Telegram directly any more (only the common sende
   // lib/mode.js keeps ONE direct send as the last resort when the common sender cannot run
   return offenders.every((f) => f.endsWith('/lib/mode.js')) && offenders.length <= 1
 })())
+// ON BY DEFAULT: nothing ever set up → the default pack is imported once with every icon on; a choice is never overridden
+const kvDel = (k) => db.run(sql`DELETE FROM kv WHERE key = ${k}`)
+await kvDel('storage:premium_emoji.json'); await kvDel('emoji:auto_done'); E.resetEmojiCache()
+replies.getStickerSet = (p) => (p.name === 'NewsEmoji' ? { name: 'NewsEmoji', stickers: [{ emoji: '🔥', custom_emoji_id: '5111111111111111111' }, { emoji: '⭐', custom_emoji_id: '5222222222222222222' }] } : (() => { throw new BotApiError(400, 'Bad Request: STICKERSET_INVALID', 'getStickerSet') })())
+const auto = await E.emojiAutoSetup(telegram)
+const cfgA = JSON.parse((await db.get(sql`SELECT value FROM kv WHERE key = 'storage:premium_emoji.json'`)).value)
+check('default: with nothing set up, NewsEmoji is imported and EVERYTHING is on (text, button icons, bottom menu, catalog)', auto.setup && cfgA.enabled && cfgA.buttons && cfgA.reply_buttons && cfgA.catalog && cfgA.map['🔥'], JSON.stringify(auto))
+await h({ tool: 'emoji', on: false }, {})
+const auto2 = await E.emojiAutoSetup(telegram)
+check('default: it runs once; a later "off" by the owner is respected', auto2.skipped === 'done' && JSON.parse((await db.get(sql`SELECT value FROM kv WHERE key = 'storage:premium_emoji.json'`)).value).enabled === false)
+await kvDel('emoji:auto_done'); await kvSet('storage:premium_emoji.json', JSON.stringify({ enabled: false, map: { '💎': '5777777777777777777' } }))
+check('default: a config that already has emoji is left alone', (await E.emojiAutoSetup(telegram)).skipped === 'already set up' && JSON.parse((await db.get(sql`SELECT value FROM kv WHERE key = 'storage:premium_emoji.json'`)).value).enabled === false)
+await kvDel('storage:premium_emoji.json'); await kvDel('emoji:auto_done')
+delete replies.getStickerSet
+check('default: a pack that cannot be read is retried later (not marked done), nothing breaks', (await E.emojiAutoSetup(telegram)).skipped === 'pack not readable' && (await db.get(sql`SELECT value FROM kv WHERE key = 'emoji:auto_done'`)) == null)
+
+// the panel button
+const { handle } = await import('../tgcloud/lib/panelapi/index.js')
+await import('../tgcloud/lib/panelapi/modules.js')
+const ADMIN = (await db.get(sql`SELECT id_admin FROM admin WHERE rule = 'administrator' LIMIT 1`))?.id_admin
+const pcall = (r, body = {}) => handle(r, {}, body, ADMIN)
+replies.getStickerSet = (p) => ({ name: p.name, stickers: [{ emoji: '🔥', custom_emoji_id: '5111111111111111111' }, { emoji: '⭐', custom_emoji_id: '5222222222222222222' }, { emoji: '🛍', custom_emoji_id: '5444444444444444444' }] })
+check('panel: the state shows whether premium is on', (await pcall('studio_emoji_state')).body.enabled === false)
+check('panel: «make everything premium» needs a confirmation', (await pcall('studio_emoji_apply')).status === 409)
+const ap = (await pcall('studio_emoji_apply', { confirm: true })).body
+check('panel: one button imports the pack and turns EVERYTHING on', ap.ok && ap.state.enabled && ap.state.mapped >= 3 && ap.state.buttons && ap.state.reply && ap.state.catalog, JSON.stringify(ap.state))
+calls.length = 0; await sendmessage('7005', 'درود 🔥 ⭐', null)
+check('…and the next message is premium', /<tg-emoji/.test(last().text))
+check('panel: switches (off / icons) without re-reading the pack', (await pcall('studio_emoji_set', { on: false })).body.state.enabled === false && (await pcall('studio_emoji_set', { on: true, buttons: false })).body.state.buttons === false)
+replies.sendmessage = () => ({ message_id: 1, chat: { id: 1 }, entities: [] })
+check('panel: the test message says whether Telegram kept the emoji', /IGNORED/.test((await pcall('studio_emoji_probe')).body.verdict))
+delete replies.sendmessage
+replies.getStickerSet = () => { throw new BotApiError(400, 'Bad Request: STICKERSET_INVALID', 'getStickerSet') }
+check('panel: an unreadable pack is reported (not a silent success)', (await pcall('studio_emoji_apply', { confirm: true, pack: 'Nope' })).status === 502)
+delete replies.getStickerSet
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)
