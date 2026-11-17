@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 interface Cta { key: string; url?: string; label?: string; code?: string }
 interface Lint { errors: string[]; warnings: string[] }
-interface Post { id: string; title: string; kind: string; occasion: string; text: string; image: string; cta: Cta[]; audience: 'channel' | 'admins'; when: number; status: string; auto: boolean; note: string; offerEnds: number; lint: Lint; day: string }
+interface Post { id: string; title: string; kind: string; occasion: string; text: string; image: string; cta: Cta[]; audience: 'channel' | 'bot' | 'both' | 'admins'; toChannel?: boolean; toBot?: boolean; when: number; status: string; auto: boolean; note: string; offerEnds: number; lint: Lint; day: string }
 interface Occ { id: string; date: string; jy: number; jm: number; jd: number; kind: string; title: string; note: string }
 interface CtaDef { label: string; group: string; ready: boolean; copy?: boolean; custom?: boolean }
 interface State { now: number; settings: { mode: 'sim' | 'test' | 'live'; live: boolean; channel: string; testChannel: string; bot: string }; lib: string[]; occasions: Occ[]; kinds: Record<string, string>; cta: Record<string, CtaDef>; defaultCta: Record<string, string[]>; posts: Post[] }
@@ -40,7 +40,7 @@ function safeHtml(s: string) {
   return esc.replace(/&lt;(\/?)(b|i|u|s|code|blockquote|tg-spoiler)&gt;/g, '<$1$2>').replace(/\n/g, '<br/>')
 }
 
-const blank = (): Post => ({ id: '', title: '', kind: 'tip', occasion: '', text: 'درود 🌿\n\n', image: '', cta: [{ key: 'test' }], audience: 'channel', when: 0, status: 'draft', auto: false, note: '', offerEnds: 0, lint: { errors: [], warnings: [] }, day: '' })
+const blank = (): Post => ({ id: '', title: '', kind: 'tip', occasion: '', text: 'درود 🌿\n\n', image: '', cta: [{ key: 'test' }], audience: 'channel', toChannel: true, toBot: false, when: 0, status: 'draft', auto: false, note: '', offerEnds: 0, lint: { errors: [], warnings: [] }, day: '' })
 
 /** is the post's image really there: a Telegram file_id (the upload button), a https link, or an old library name that still exists */
 const imageOk = (image: string, lib: string[]) => /^https?:\/\//.test(image) || /^[A-Za-z0-9_-]{30,}$/.test(image) || lib.includes(image)
@@ -71,8 +71,10 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
   const [date, setDate] = useState(p.when ? loc.date : '')
   const [time, setTime] = useState(p.when ? loc.time : '19:30')
   const when = fromLocal(date, time)
-  const cur = { ...p, when }
+  const cur = { ...p, toChannel: p.toChannel ?? (p.audience === 'channel' || p.audience === 'both'), toBot: p.toBot ?? (p.audience === 'bot' || p.audience === 'both'), when }
   const set = (k: Partial<Post>) => setP((x) => ({ ...x, ...k }))
+  const wantsC = p.toChannel ?? (p.audience === 'channel' || p.audience === 'both')
+  const wantsB = p.toBot ?? (p.audience === 'bot' || p.audience === 'both')
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState('')
   const upload = useMutation({
@@ -116,8 +118,10 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
             <Select value={p.kind} onValueChange={useDefault}><SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{Object.entries(st.kinds).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>مخاطب</Label>
-            <Select value={p.audience} onValueChange={(v) => set({ audience: v as Post['audience'] })}><SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="channel">کانال</SelectItem><SelectItem value="admins">فقط ادمین‌ها</SelectItem></SelectContent></Select></div>
+            <div className="flex flex-col gap-1 pt-1 text-sm" data-testid="audience">
+              <label className="flex items-center gap-2"><input type="checkbox" data-testid="to-channel" checked={wantsC} onChange={(e) => set({ toChannel: e.target.checked })} /> کانال</label>
+              <label className="flex items-center gap-2"><input type="checkbox" data-testid="to-bot" checked={wantsB} onChange={(e) => set({ toBot: e.target.checked })} /> ربات (همهٔ کاربران)</label>
+            </div></div>
         </div>
         <div><Label>متن (قالب تلگرام: b، i، code، blockquote)</Label>
           <textarea dir="rtl" rows={8} className="w-full rounded-md border bg-background p-2 text-sm" value={p.text} onChange={(e) => set({ text: e.target.value })} data-testid="text" /></div>
@@ -163,9 +167,11 @@ function Composer({ st, post, onDone }: { st: State; post: Post; onDone: () => v
           <Button variant="outline" onClick={() => save.mutate('draft')} disabled={save.isPending}>ذخیره پیش‌نویس</Button>
           <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>{test.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} آزمایشی برای خودم</Button>
           <Button onClick={() => save.mutate('scheduled')} disabled={save.isPending}><Check className="size-4" /> تأیید و زمان‌بندی</Button>
-          <Button variant="secondary" disabled={sendNow.isPending || cur.lint.errors.length > 0} data-testid="editor-send-now" onClick={() => { if (window.confirm(st.settings.mode === 'live' ? 'همین الان به کانال اصلی ارسال می‌شود. ادامه؟' : st.settings.mode === 'test' ? 'همین الان به کانال تست ارسال می‌شود. ادامه؟' : 'در حالت شبیه‌سازی فقط برای ادمین‌ها فرستاده می‌شود. ادامه؟')) sendNow.mutate() }}>{sendNow.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} ارسال همین الان</Button>
+          <Button variant="secondary" disabled={sendNow.isPending || cur.lint.errors.length > 0} data-testid="editor-send-now" onClick={() => { if (window.confirm(st.settings.mode === 'live' ? `همین الان ارسال می‌شود به: ${wantsC ? 'کانال اصلی ' : ''}${wantsB ? '+ همهٔ کاربران ربات ' : ''}${!wantsC && !wantsB ? 'ادمین‌ها ' : ''}. ادامه؟` : st.settings.mode === 'test' ? 'همین الان به کانال تست ارسال می‌شود (کاربران ربات هرگز در این حالت پیام نمی‌گیرند). ادامه؟' : 'در حالت شبیه‌سازی فقط برای ادمین‌ها فرستاده می‌شود. ادامه؟')) sendNow.mutate() }}>{sendNow.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} ارسال همین الان</Button>
           {p.id && <Button variant="ghost" onClick={() => confirm('این پست حذف شود؟') && del.mutate()}><Trash2 className="size-4" /></Button>}
         </div>
+        {wantsB && <div className="text-xs text-amber-600" data-testid="bot-note">{st.settings.mode === 'live' ? '⚠️ این پست برای همهٔ کاربران ربات فرستاده می‌شود (دسته‌ای، با هر ارسال چند نفر).' : 'ارسال به کاربران ربات فقط در حالت «زنده» انجام می‌شود؛ در این حالت فقط برای ادمین‌ها پیش‌نمایش می‌رود.'}</div>}
+        {!wantsC && !wantsB && <div className="text-xs text-muted-foreground">هیچ‌کدام تیک نخورده: فقط برای ادمین‌ها فرستاده می‌شود.</div>}
         <div className="text-xs text-muted-foreground">{st.settings.mode === 'live' ? '⚠️ حالت زنده: ' : st.settings.mode === 'test' ? '🧪 حالت تست: ' : '🧪 حالت شبیه‌سازی: '}{MODE_HELP[st.settings.mode]}</div>
       </div>
     </div>

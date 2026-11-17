@@ -61,6 +61,10 @@ check('the composer opens Yalda with the preview text', prev.includes('درود'
 check('the preview shows the CTA buttons', prev.includes('تست رایگان') && prev.includes('خرید اشتراک'))
 check('a post whose image was never uploaded says so (no library any more)', (await page.getByTestId('no-image').count()) === 1 && !prev.includes('کتابخانه'))
 check('the composer has a picker for the picture, no library box', (await page.getByTestId('image-pick').count()) === 1 && (await page.getByTestId('image-file').count()) === 1 && !(await page.innerText('body')).includes('کتابخانهٔ تصویر'))
+check('the audience is two tick-boxes: channel and the bot', (await page.getByTestId('to-channel').count()) === 1 && (await page.getByTestId('to-bot').count()) === 1 && await page.getByTestId('to-channel').isChecked() && !(await page.getByTestId('to-bot').isChecked()))
+await page.getByTestId('to-bot').check()
+check('ticking the bot shows that its users are reached only in live mode', (await page.getByTestId('bot-note').count()) === 1)
+await page.getByTestId('to-bot').uncheck()
 check('the composer has «send now» next to the other buttons', (await page.getByTestId('editor-send-now').count()) === 1)
 if (shots) await page.screenshot({ path: path.join(shots, 'studio_composer.png'), fullPage: true })
 // an invalid text shows the error live, and scheduling is refused

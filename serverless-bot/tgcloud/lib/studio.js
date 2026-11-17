@@ -62,7 +62,7 @@ export function lint(p) {
   }
   const cap = p.image ? 1024 : 4096
   if (stripHtml(text).length > cap) errors.push(`متن بلندتر از ${cap} نویسه است${p.image ? ' (زیر عکس)' : ''}`)
-  if (p.audience === 'channel' && !p.image && p.kind === 'greeting') warnings.push('پست مناسبتی بدون تصویر')
+  if ((p.toChannel ?? p.audience === 'channel') && !p.image && p.kind === 'greeting') warnings.push('پست مناسبتی بدون تصویر')
   return { errors, warnings }
 }
 
@@ -123,11 +123,15 @@ export async function settingsGet() {
 
 export function normalize(p, old = {}) {
   const cta = (Array.isArray(p.cta) ? p.cta : []).map((b) => ({ key: String(b.key), ...(b.url ? { url: String(b.url) } : {}), ...(b.label ? { label: String(b.label).slice(0, 40) } : {}), ...(b.code ? { code: String(b.code).slice(0, 40) } : {}) }))
+  // who gets it: the channel and/or every user of the bot (two ticks); neither → only the administrators (a preview). Older posts carry the single `audience` word.
+  const wantsOf = (o) => ({ c: o.toChannel ?? (o.audience === undefined ? undefined : o.audience === 'channel' || o.audience === 'both'), b: o.toBot ?? (o.audience === undefined ? undefined : o.audience === 'bot' || o.audience === 'both') })
+  const np = wantsOf(p), op = wantsOf(old)
+  const toChannel = !!(np.c ?? op.c ?? true), toBot = !!(np.b ?? op.b ?? false)
   return {
     id: String(p.id || old.id || 'p' + now().toString(36) + Math.floor(Math.random() * 1296).toString(36)),
     title: String(p.title ?? old.title ?? '').slice(0, 80), kind: KINDS[p.kind] ? p.kind : old.kind || 'tip', occasion: String(p.occasion ?? old.occasion ?? ''),
     text: String(p.text ?? old.text ?? ''), image: String(p.image ?? old.image ?? ''), cta,
-    audience: p.audience === 'admins' ? 'admins' : 'channel', when: parseInt(p.when ?? old.when) || 0,
+    toChannel, toBot, audience: toChannel && toBot ? 'both' : toChannel ? 'channel' : toBot ? 'bot' : 'admins', when: parseInt(p.when ?? old.when) || 0,
     status: ['draft', 'scheduled', 'sent', 'tested', 'simulated', 'cancelled'].includes(p.status) ? p.status : old.status || 'draft',
     auto: !!(p.auto ?? old.auto), note: String(p.note ?? old.note ?? '').slice(0, 200), offerEnds: parseInt(p.offerEnds ?? old.offerEnds) || 0, created: old.created || now(),
   }
@@ -172,25 +176,48 @@ export async function deliver(post, chats, { preview = true } = {}) {
 /** a test send of the post to the administrator who is composing it (always allowed) */
 export const sendTest = (post, tgId) => deliver(post, [String(tgId)], { preview: true })
 
-/** publish one post now (shared by the scheduled job and the «send now» button). Not live → a simulated send to the administrators; live → the channel. */
+export const wantsChannel = (p) => !!(p.toChannel ?? (p.audience === 'channel' || p.audience === 'both'))
+export const wantsBot = (p) => !!(p.toBot ?? (p.audience === 'bot' || p.audience === 'both'))
+
+/** the post to EVERY user of the bot: the existing broadcast job (small batches, one per incoming update / cron run). Only one job runs at a time. */
+async function startBotBroadcast(post, s, lib) {
+  if (await kvGet('broadcast:job')) return { ok: false, error: 'یک ارسال همگانی هنوز در حال انجام است؛ بعد از پایان دوباره بفرستید' }
+  const m = buildMessage(post, s.bot, lib)
+  const admin = (await adminIds())[0] ?? 0
+  const total = Number((await one(sql`SELECT COUNT(*) AS n FROM user WHERE User_Status != 'block'`))?.n ?? 0)
+  const job = { type: m.photo ? 'photo' : 'text', text: m.text, photoid: m.photo, markup: m.reply_markup.inline_keyboard.length ? JSON.stringify(m.reply_markup) : null, admin, message_id: 0, last_id: 0, sent: 0, failed: 0, total }
+  await kvSet('broadcast:job', JSON.stringify(job))
+  return { ok: true, total }
+}
+
+/** publish one post now (shared by the scheduled job and the «send now» button).
+ *  simulation → a preview to the administrators only · test → the test channel (the bot's users never) · live → the channel and/or every user of the bot */
 async function publishOne(list, due) {
-  const s = await settingsGet()
+  const s = await settingsGet(), lib = await libGet()
   if (lint(due).errors.length) { due.status = 'draft'; due.note = 'بازگشت به پیش‌نویس: ' + lint(due).errors[0]; await postsSet(list); return { sent: 0, error: due.note } }
-  const target = due.audience !== 'channel' ? '' : s.mode === 'live' ? s.channel : s.mode === 'test' ? s.testChannel : ''
-  let result = []
-  if (target) {
-    const r = await deliver(due, [target], { preview: false })
-    result = r.sent
-    due.status = r.sent.every((x) => x.ok) ? (s.mode === 'live' ? 'sent' : 'tested') : 'draft'
-    if (due.status === 'draft') due.note = 'ارسال به کانال ناموفق بود: ' + (r.sent.find((x) => !x.ok)?.error || 'ربات ادمین کانال است و اجازهٔ ارسال دارد؟')
-    else delete due.note
-  } else {
-    await deliver(due, await adminIds(), { preview: true })
-    due.status = 'simulated'
+  const wc = wantsChannel(due), wb = wantsBot(due)
+  let result = [], target = '', bot = null, previewed = false, failure = ''
+  const preview = async () => { if (!previewed) { await deliver(due, await adminIds(), { preview: true }); previewed = true } }
+  if (!wc && !wb) await preview()
+  if (wc) {
+    target = s.mode === 'live' ? s.channel : s.mode === 'test' ? s.testChannel : ''
+    if (target) {
+      const r = await deliver(due, [target], { preview: false })
+      result = r.sent
+      if (!r.sent.every((x) => x.ok)) failure = 'ارسال به کانال ناموفق بود: ' + (r.sent.find((x) => !x.ok)?.error || 'ربات ادمین کانال است و اجازهٔ ارسال دارد؟')
+    } else await preview()
   }
+  if (wb) {
+    if (s.mode === 'live') {
+      bot = await startBotBroadcast(due, s, lib)
+      if (!bot.ok && !failure) failure = bot.error
+    } else await preview() // the bot's users are reached only in live mode
+  }
+  due.status = failure ? 'draft' : s.mode === 'live' && (target || bot) ? 'sent' : s.mode === 'test' && target ? 'tested' : 'simulated'
+  if (failure) due.note = failure; else delete due.note
   due.sentAt = now()
   await postsSet(list)
-  return { sent: 1, id: due.id, mode: due.status, target, result }
+  return { sent: 1, id: due.id, mode: due.status, target, result, bot }
 }
 
 /** the scheduled-post job: one due post per run */

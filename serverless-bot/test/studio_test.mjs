@@ -129,6 +129,48 @@ check('a Telegram failure is reported with its reason and the post goes back to 
 delete replies.sendmessage
 await call('studio_settings', { mode: 'sim' })
 
+// 11) the audience is two ticks: the channel and / or every user of the bot
+const nz = (o) => S.normalize(o, {})
+check('audience: two ticks decide it (both / channel / bot / admins only), and the old single word still works', nz({ toChannel: true, toBot: true }).audience === 'both' && nz({ toChannel: true, toBot: false }).audience === 'channel' && nz({ toChannel: false, toBot: true }).audience === 'bot' && nz({ toChannel: false, toBot: false }).audience === 'admins' && nz({ audience: 'admins' }).toChannel === false && nz({ audience: 'channel' }).toBot === false && nz({}).toChannel === true && S.wantsBot({ audience: 'both' }) && S.wantsChannel({ audience: 'both' }))
+const mkPost = (id, o) => call('studio_save', { id, title: id, kind: 'tip', text: 'درود. نکته.', cta: [{ key: 'test' }], when: Math.floor(Date.now() / 1000) + 3600, status: 'scheduled', ...o })
+const jobNow = async () => (await db.get(sql`SELECT value FROM kv WHERE key = 'broadcast:job'`))?.value
+await db.run(sql`INSERT OR IGNORE INTO user (id, username, agent, User_Status, step, Balance) VALUES ('7101', 'a1', 'f', 'Active', 'home', '0'), ('7102', 'a2', 'f', 'Active', 'home', '0'), ('7103', 'a3', 'f', 'block', 'home', '0')`)
+await db.run(sql`DELETE FROM kv WHERE key = 'broadcast:job'`)
+await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_test', mode: 'sim' })
+await mkPost('b1', { toChannel: false, toBot: true })
+await call('studio_send_now', { id: 'b1', confirm: true })
+check('simulation: a post for the bot starts NO broadcast (the users are never reached)', (await jobNow()) === undefined)
+await call('studio_settings', { mode: 'test' })
+await mkPost('b2', { toChannel: true, toBot: true })
+calls.length = 0
+const tb = (await call('studio_send_now', { id: 'b2', confirm: true })).body
+check('test mode: the test channel gets it, the users do not', tb.mode === 'tested' && JSON.stringify(calls).includes('@pichanet_test') && (await jobNow()) === undefined, JSON.stringify(tb))
+await call('studio_settings', { mode: 'live' })
+await mkPost('b3', { toChannel: false, toBot: true, cta: [{ key: 'test' }, { key: 'buy' }] })
+calls.length = 0
+const lb = (await call('studio_send_now', { id: 'b3', confirm: true })).body
+const job = JSON.parse(await jobNow() || 'null')
+check('live, bot only: ONE broadcast job to every active user (blocked ones left out), nothing to the channel', lb.mode === 'sent' && job && job.total === (await db.get(sql`SELECT COUNT(*) AS n FROM user WHERE User_Status != 'block'`)).n && !JSON.stringify(calls).includes('@pichanet_chan') && job.type === 'text' && /درود/.test(job.text), JSON.stringify(lb))
+check('…with the post buttons on the message', job.markup && JSON.parse(job.markup).inline_keyboard.flat().length === 2)
+await mkPost('b4', { toChannel: true, toBot: true })
+calls.length = 0
+const busy = (await call('studio_send_now', { id: 'b4', confirm: true })).body
+const p4 = (await S.postsGet()).find((p) => p.id === 'b4')
+check('live, both, while a broadcast is still running: the channel part goes, the post stays a draft with a plain note (send again later)', JSON.stringify(calls).includes('@pichanet_chan') && p4.status === 'draft' && /ارسال همگانی/.test(p4.note), JSON.stringify(p4))
+await db.run(sql`DELETE FROM kv WHERE key = 'broadcast:job'`)
+await mkPost('b5', { toChannel: true, toBot: true })
+calls.length = 0
+const both = (await call('studio_send_now', { id: 'b5', confirm: true })).body
+check('live, both: the channel gets it AND the broadcast job is created', both.mode === 'sent' && JSON.stringify(calls).includes('@pichanet_chan') && !!(await jobNow()), JSON.stringify(both))
+// the job really delivers to the users through the existing broadcast, with the premium layer
+const { broadcastTick } = await import('../tgcloud/lib/broadcast.js')
+const { systemContext } = await import('../tgcloud/lib/bot.js')
+calls.length = 0
+for (let i = 0; i < 40 && (await jobNow()); i++) await broadcastTick({ ...(await systemContext()), from_id: '7004' }, true) // 25 users per batch
+check('the broadcast sends the post to the active users', ['7101', '7102'].every((id) => calls.some(([m, p]) => /sendmessage/i.test(m) && String(p.chat_id) === id)) && !calls.some(([, p]) => String(p.chat_id) === '7103'))
+await db.run(sql`DELETE FROM kv WHERE key = 'broadcast:job'`)
+await call('studio_settings', { mode: 'sim' })
+
 // 10) the picture: straight to Telegram, the post keeps the file_id (no library)
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64').toString('base64')
 replies.sendphoto = (p) => ({ message_id: 9, chat: { id: Number(p.chat_id) }, photo: [{ file_id: 'SMALL_' + 'x'.repeat(40), width: 90, height: 90 }, { file_id: 'BIGFILEID_' + 'a'.repeat(50), width: 1280, height: 1280 }] })
