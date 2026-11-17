@@ -5,6 +5,7 @@ import { fetch, api, BotApiError } from 'sdk'
 import { one, sql, kvGet, kvSet } from './db.js'
 import config from './config.js'
 import { handleUpdate } from './bot.js'
+import { telegram } from './tg.js'
 
 export const BUSY = '⏳ ربات در حال به‌روزرسانی است؛ چند دقیقه دیگر دوباره امتحان کنید.'
 
@@ -15,6 +16,8 @@ export async function currentMode() {
 }
 
 async function say(chat_id, text, extra = {}) {
+  // through the common sender, so even the «updating» notice gets premium emoji; if that cannot run (the database is busy), the plain direct send still goes out
+  try { const r = await telegram('sendmessage', { chat_id, text, parse_mode: 'HTML', ...extra }); if (r && r.ok !== false) return } catch { /* fall through */ }
   try { await api.sendMessage({ chat_id, text, parse_mode: 'HTML', ...extra }) } catch (e) { if (!(e instanceof BotApiError)) throw e }
 }
 

@@ -45,6 +45,16 @@ check('premium emoji flow again right after the unblock', /<tg-emoji/.test(last(
 check('the audit shows the config', a2.config.enabled === true && a2.config.mapped_emoji >= 3 && a2.config.inline_button_icons === true)
 check('the audit lists emoji the bot uses that still have no premium id', a2.texts.strings_scanned > 500 && a2.texts.without_premium_id > 0 && a2.add_these_to_the_map.length > 0 && a2.add_these_to_the_map[0].uses >= a2.add_these_to_the_map.at(-1).uses, JSON.stringify(a2.texts))
 check('the probe sends a real test to the first administrator', (await h({ tool: 'emoji', probe: true }, {})).probe.sent === true)
+replies.sendmessage = (p) => ({ message_id: 1, chat: { id: 1 }, entities: [] }) // Telegram drops the custom emoji silently
+const pr1 = (await h({ tool: 'emoji', probe: true }, {})).probe
+check('probe: when Telegram silently ignores the custom emoji it says so, and says the config is fine', pr1.sent && pr1.custom_emoji_kept_by_telegram === 0 && /IGNORED/.test(pr1.verdict), JSON.stringify(pr1))
+replies.sendmessage = (p) => ({ message_id: 1, chat: { id: 1 }, entities: [{ type: 'custom_emoji', offset: 0, length: 2, custom_emoji_id: '1' }] })
+const pr2 = (await h({ tool: 'emoji', probe: true }, {})).probe
+check('probe: when Telegram keeps them it says OK', /^OK/.test(pr2.verdict) && pr2.custom_emoji_kept_by_telegram === 1, JSON.stringify(pr2))
+delete replies.sendmessage
+await h({ tool: 'emoji', on: false }, {})
+check('probe: with the layer off it says to run the import', /PREMIUM IS OFF/.test((await h({ tool: 'emoji', probe: true }, {})).probe.verdict))
+await h({ tool: 'emoji', on: true }, {})
 check('a Mini App call is refused', await h({ tool: 'emoji' }, { initData: { user: { id: 1 } } }).then(() => false, () => true))
 // import a pack straight from Telegram (no PHP server needed): ON, the map, the icons you name, and the cache refreshes by itself
 await kvSet('storage:premium_emoji.json', 'null'); E.resetEmojiCache()
@@ -66,5 +76,45 @@ calls.length = 0; await sendmessage('7002', 'درود 🔥', null, 'HTML')
 Date.now = realNow
 check('the config cache refreshes by itself after a minute', !/tg-emoji/.test(last().text), last().text)
 delete replies.getStickerSet
+// every way the bot sends text goes through the premium layer: posts (channel), the test post, /sendall, notices, the «updating» message
+await kvSet('storage:premium_emoji.json', JSON.stringify({ enabled: true, buttons: true, reply_buttons: true, catalog: true, map: { '🔥': '5111111111111111111', '⭐': '5222222222222222222', '✔': '5333333333333333333', '🛍': '5444444444444444444', '🎁': '5555555555555555555' } }))
+E.resetEmojiCache()
+const S = await import('../tgcloud/lib/studio.js')
+const prem = (re) => calls.some(([m, p]) => /^(sendmessage|sendphoto|sendvideo)$/i.test(m) && re.test(String(p.text ?? p.caption ?? '')))
+// a Studio post to the channel (photo + caption) and a text post
+calls.length = 0
+await S.sendTest({ id: 'p1', title: 'x', text: 'درود 🔥 خرید ⭐', image: 'BIGFILEID_' + 'a'.repeat(50), cta: [{ key: 'test' }], kind: 'tip', audience: 'channel' }, '7003')
+check('a Studio post with a picture: the caption is premium', prem(/<tg-emoji emoji-id="5111111111111111111">🔥/))
+calls.length = 0
+await S.sendTest({ id: 'p1', title: 'x', text: 'درود 🔥 خرید ⭐', image: '', cta: [{ key: 'test' }], kind: 'tip', audience: 'channel' }, '7003')
+check('a Studio text post: the text is premium', prem(/<tg-emoji emoji-id="5222222222222222222">⭐/))
+check('the post buttons keep their labels (a premium icon only where icons are on)', calls.some(([m, p]) => /sendmessage/i.test(m) && /reply_markup/.test(JSON.stringify(p))))
+// /sendall
+const { broadcastStart, broadcastTick } = await import('../tgcloud/lib/broadcast.js')
+const { systemContext } = await import('../tgcloud/lib/bot.js')
+await db.run(sql`INSERT OR IGNORE INTO user (id, username, agent, User_Status, step, Balance) VALUES ('7010', 'b1', 'f', 'Active', 'home', '0')`)
+const cc = { ...(await systemContext()), from_id: '7004' }
+calls.length = 0
+await broadcastStart(cc, { type: 'text', text: 'درود 🎁 پیام همگانی' }, 3)
+await broadcastTick(cc, true)
+check('/sendall (text) is premium', prem(/<tg-emoji emoji-id="5555555555555555555">🎁/))
+await kvSet('broadcast:job', '')
+calls.length = 0
+await broadcastStart(cc, { type: 'photo', photoid: 'PHOTO', text: 'عکس 🔥' }, 0)
+await broadcastTick(cc, true)
+check('/sendall (photo caption) is premium', prem(/<tg-emoji emoji-id="5111111111111111111">🔥/))
+// the partner notice
+const H = await import('../tgcloud/lib/partnerhub.js')
+await db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, User_Status, step, Balance, pricediscount) VALUES ('7020', 'pp', 'n', 'Active', 'home', '0', '10')`)
+calls.length = 0
+await H.notifyPartners('درود 🔥 اطلاعیه')
+check('a notice to partners is premium', prem(/<tg-emoji emoji-id="5111111111111111111">🔥/))
+check('no source file talks to Telegram directly any more (only the common sender, which adds the premium layer)', await (async () => {
+  const fs = await import('node:fs'), path = await import('node:path')
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]))
+  const offenders = walk(new URL('../tgcloud', import.meta.url).pathname).filter((f) => f.endsWith('.js') && !f.endsWith('/lib/tg.js') && /\bapi\.(sendMessage|sendPhoto|sendVideo|sendDocument|editMessageText|editMessageCaption|sendPoll)\(/.test(fs.readFileSync(f, 'utf8')))
+  // lib/mode.js keeps ONE direct send as the last resort when the common sender cannot run
+  return offenders.every((f) => f.endsWith('/lib/mode.js')) && offenders.length <= 1
+})())
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)

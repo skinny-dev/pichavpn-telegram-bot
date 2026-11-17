@@ -504,10 +504,18 @@ TOOLS.emoji = (() => {
     out.texts = { strings_scanned: strings, distinct_emoji: seen.size, with_premium_id: covered.length, without_premium_id: missing.length }
     out.add_these_to_the_map = missing.slice(0, 40).map(([e, r]) => ({ emoji: e, uses: r.n, example: r.where }))
     if (input?.probe) {
+      // a real test message; Telegram's answer says whether it KEPT the custom emoji (entities) or silently dropped them
       const admin = await one(sql`SELECT id_admin FROM admin WHERE rule = 'administrator' LIMIT 1`)
-      const sample = [...cfg.map ? Object.keys(cfg.map) : []].slice(0, 6).join(' ')
-      const r = admin ? await telegram('sendmessage', { chat_id: admin.id_admin, text: `🧪 تست اموجی پرمیوم\n${sample}\n✅ ⭐ 🔥 💎`, parse_mode: 'HTML' }) : { ok: false, description: 'no administrator' }
-      out.probe = { sent: r.ok !== false, error: r.ok === false ? String(r.description ?? '') : undefined, note: 'در تلگرام باید این اموجی‌ها متحرک/پرمیوم دیده شوند؛ اگر ساده بودند، پرمیوم برای حساب مالک ربات فعال نیست یا شناسه‌ها اشتباه است' }
+      const keys = Object.keys(cfg.map).slice(0, 6)
+      const to = String(input.probe_chat ?? admin?.id_admin ?? '')
+      const r = to ? await telegram('sendmessage', { chat_id: to, text: `🧪 تست اموجی پرمیوم\n${keys.join(' ') || '🔥 ⭐'}\n✅ ⭐ 🔥 💎`, parse_mode: 'HTML' }) : { ok: false, description: 'no administrator' }
+      const ents = (r.result?.entities ?? []).filter((e) => e.type === 'custom_emoji')
+      const sentTags = cfg.enabled && keys.length > 0
+      out.probe = { chat: to, sent: r.ok !== false, error: r.ok === false ? String(r.description ?? '') : undefined, premium_layer_on: sentTags, custom_emoji_kept_by_telegram: ents.length }
+      out.probe.verdict = r.ok === false ? 'the message was not sent: ' + String(r.description ?? '')
+        : !sentTags ? 'PREMIUM IS OFF or the map is empty in the cloud config → run the import command (see "import")'
+          : ents.length > 0 ? 'OK: Telegram accepted ' + ents.length + ' custom emoji → they show as premium'
+            : 'Telegram IGNORED the custom emoji (sent fine, shown as ordinary emoji): this bot is not allowed to send premium emoji — the bot owner needs an active Telegram Premium, or the bot needs an extra @username bought on Fragment. Config and code are fine.'
     }
     return out
   }
