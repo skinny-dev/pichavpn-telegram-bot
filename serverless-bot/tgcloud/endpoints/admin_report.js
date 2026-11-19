@@ -533,6 +533,44 @@ TOOLS.studio = (() => {
   return main
 })()
 
+// costs: what one GB costs us — the VPN servers (euro, monthly) + the Iranian server (toman, monthly renewal) + the traffic (upload + download) — and what that does to every price and partner tier.
+//   npx tgcloud run endpoints/admin_report '{"tool":"costs","eur_rate":<toman per euro>}'                    → the model (nothing written)
+//   … '{"tool":"costs","eur_rate":<rate>,"apply":true}'   → stores it as the cost per GB (kv events:cost_gb) used by events, partner gifts and the partner-ready check
+//   options: active_users (900) · peak_online (300) · vpn_servers (5) · servers_eur (29.8) · iran_server_toman (980000, monthly renewal) · traffic_tb (30, up+down together) · traffic_toman_per_gb (450) · gb_per_tb (1000) · sold_gb (default = traffic_tb × gb_per_tb)
+TOOLS.costs = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const rate = Number(input?.eur_rate)
+    if (!(rate > 0)) return { error: 'eur_rate (toman per euro) is required', usage: `npx tgcloud run endpoints/admin_report '{"tool":"costs","eur_rate":150000}'` }
+    const eur = Number(input.servers_eur ?? 29.8), tb = Number(input.traffic_tb ?? 30), perGb = Number(input.traffic_toman_per_gb ?? 450), gbTb = Number(input.gb_per_tb ?? 1000)
+    const trafficGb = tb * gbTb, base = Number(input.sold_gb ?? trafficGb)
+    const iran = Number(input.iran_server_toman ?? 980000)
+    const servers = Math.round(eur * rate), traffic = Math.round(trafficGb * perGb), total = servers + iran + traffic
+    const costGb = Math.round(total / base)
+    const before = Number(await kvGet('events:cost_gb')) || 1877
+    const plans = [[10, 60000], [25, 144000], [40, 200000], [80, 370000], [120, 540000], [200, 900000], [300, 1320000], [400, 1680000]]
+    const tiers = [0, 10, 15, 20, 25, 30]
+    const m = (gb, price, off) => Math.round((1 - (costGb * gb) / (price * (1 - off / 100))) * 100)
+    const users = Number(input.active_users ?? 900), peak = Number(input.peak_online ?? 300), nServers = Number(input.vpn_servers ?? 5)
+    const avgMbps = (trafficGb * 8000) / (30 * 86400) // GB per month → megabit per second, averaged over the month
+    const out = {
+      people_and_load: {
+        active_users: users, peak_online: peak, gb_per_active_user: Math.round((trafficGb / users) * 10) / 10, cost_per_active_user_toman: Math.round(total / users),
+        cost_per_peak_online_user_toman: Math.round(total / peak), users_online_per_vpn_server_at_peak: Math.round(peak / nServers),
+        average_mbps_all_servers: Math.round(avgMbps), average_mbps_per_server: Math.round(avgMbps / nServers), peak_mbps_per_server_if_4x_average: Math.round((avgMbps * 4) / nServers),
+      },
+      inputs: { servers_eur: eur, eur_rate: rate, iran_server_toman: iran, traffic_gb_per_month: trafficGb, traffic_toman_per_gb: perGb, gb_basis: base },
+      monthly_toman: { vpn_servers_eur: servers, iran_server: iran, traffic, total },
+      cost_per_gb: { new: costGb, parts: { vpn_servers: Math.round(servers / base), iran_server: Math.round(iran / base), traffic: perGb }, before, change_pct: Math.round(((costGb - before) / before) * 100) },
+      margin_pct_by_plan_and_tier: plans.map(([gb, price]) => ({ gb, retail: price, ...Object.fromEntries(tiers.map((t) => [t ? `partner_${t}pct` : 'customer', m(gb, price, t)])) })),
+      note: 'VPN servers + Iranian server + traffic only: bot hosting, the payment relay server, domains, gateway fees and support are NOT in this number',
+    }
+    if (input.apply) { await kvSet('events:cost_gb', String(costGb)); await kvSet('costs:model', JSON.stringify({ ...out.inputs, total, costGb, at: Math.floor(Date.now() / 1000) })); out.applied = `events:cost_gb = ${costGb}` }
+    return out
+  }
+  return main
+})()
+
 export default async function (input, ctx) {
   if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
   const fn = TOOLS[String(input?.tool ?? '')]
