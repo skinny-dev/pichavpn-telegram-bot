@@ -536,7 +536,7 @@ TOOLS.studio = (() => {
 // costs: what one GB costs us — the VPN servers (euro, monthly) + the Iranian server (toman, monthly renewal) + the traffic (upload + download) — and what that does to every price and partner tier.
 //   npx tgcloud run endpoints/admin_report '{"tool":"costs","eur_rate":<toman per euro>}'                    → the model (nothing written)
 //   … '{"tool":"costs","eur_rate":<rate>,"apply":true}'   → stores it as the cost per GB (kv events:cost_gb) used by events, partner gifts and the partner-ready check
-//   options: active_users (900) · peak_online (300) · vpn_servers (5) · servers_eur (29.8) · iran_server_toman (980000, monthly renewal) · traffic_tb (30, up+down together) · traffic_toman_per_gb (450) · gb_per_tb (1000) · sold_gb (default = traffic_tb × gb_per_tb)
+//   options: active_users (900) · peak_online (300) · vpn_servers (5) · servers_eur (29.8) · iran_server_toman (980000, monthly renewal) · traffic_tb (30, up+down together; the real month was ~35) · traffic_toman_per_gb (450 for a 10 TB package, 390 for the 35 TB package) · gb_per_tb (1000) · sold_gb (default = traffic_tb × gb_per_tb)
 TOOLS.costs = (() => {
   async function main(input, ctx) {
     if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
