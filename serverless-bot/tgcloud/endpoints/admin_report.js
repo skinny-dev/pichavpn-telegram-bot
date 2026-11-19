@@ -14,6 +14,7 @@ import { tetraBase, tetraCall, tetraKey, tetraPickLink } from '../lib/tetraminat
 import { telegram, emojiUnblock } from '../lib/tg.js'
 import { emojiConfig, resetEmojiCache, emojiImport, emojiProbe } from '../lib/emoji.js'
 import { loadTexts } from '../lib/texts.js'
+import { jdate } from '../lib/fmt.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -566,6 +567,35 @@ TOOLS.costs = (() => {
       note: 'VPN servers + Iranian server + traffic only: bot hosting, the payment relay server, domains, gateway fees and support are NOT in this number',
     }
     if (input.apply) { await kvSet('events:cost_gb', String(costGb)); await kvSet('costs:model', JSON.stringify({ ...out.inputs, total, costGb, at: Math.floor(Date.now() / 1000) })); out.applied = `events:cost_gb = ${costGb}` }
+    return out
+  }
+  return main
+})()
+
+// expenses: what the books say we spend — per Jalali month, by kind, with the biggest items — to see ALL costs (servers, domains, tools, fees, people), not only the ones in the cost model.
+//   npx tgcloud run endpoints/admin_report '{"tool":"expenses"}'              (last 3 months)      ·  '{"tool":"expenses","months":6}'
+TOOLS.expenses = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const months = Math.max(1, Math.min(12, Number(input?.months ?? 3)))
+    const since = Math.floor(Date.now() / 1000) - months * 31 * 86400
+    const rows = await all(sql`SELECT CAST(amount AS INTEGER) AS amount, description, CAST(created_at AS INTEGER) AS t, COALESCE(NULLIF(kind, ''), 'general') AS kind FROM expenses WHERE CAST(created_at AS INTEGER) >= ${since} ORDER BY t DESC LIMIT 5000`)
+    const by = {}
+    for (const r of rows) {
+      const m = jdate('Y/m', r.t, true)
+      const b = (by[m] ??= { total: 0, count: 0, by_kind: {}, items: {} })
+      if (r.kind === 'dividend') { b.dividends = (b.dividends ?? 0) + r.amount; continue } // partners' withdrawals are not a cost
+      b.total += r.amount; b.count++
+      b.by_kind[r.kind] = (b.by_kind[r.kind] ?? 0) + r.amount
+      const key = String(r.description ?? '').replace(/[0-9۰-۹,٬./:-]+/g, '#').replace(/\s+/g, ' ').trim().slice(0, 60) || '(no description)'
+      b.items[key] = (b.items[key] ?? 0) + r.amount
+    }
+    const out = { note: 'from the expenses table (the panel «داده‌های حسابداری» and the bot commands); partner withdrawals (dividend) are listed apart and are not counted as a cost', months: {} }
+    for (const m of Object.keys(by).sort().reverse()) {
+      const b = by[m]
+      out.months[m] = { total: b.total, entries: b.count, ...(b.dividends ? { dividends_not_counted: b.dividends } : {}), by_kind: Object.fromEntries(Object.entries(b.by_kind).sort((a, c) => c[1] - a[1])), biggest_items: Object.entries(b.items).sort((a, c) => c[1] - a[1]).slice(0, 12).map(([item, amount]) => ({ item, amount })) }
+    }
+    if (!Object.keys(out.months).length) out.empty = 'no expenses recorded in this period: enter the servers, domains and tools in the accounting data (or tell me the amounts)'
     return out
   }
   return main
