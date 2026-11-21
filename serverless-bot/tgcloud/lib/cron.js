@@ -16,6 +16,7 @@ import { partnersTick } from './partners.js'
 import { gateHealthRun, notifyAdmins, NAMES } from './gatehealth.js'
 import { notifyPartners } from './partnerhub.js'
 import { emojiAutoSetup } from './emoji.js'
+import { reportTs } from './sms.js'
 import { modeGet as partnersMode, partnerEnd } from './partners.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
@@ -213,11 +214,59 @@ const JOBS = [
   ['configtest', 120, configTest],
   ['payment_expire', 300, paymentExpire],
   ['alert_balance', 120, alertBalance],
+  ['pendingnudge', 60, pendingNudge],
   ['on_hold', 900, onHold],
   ['statusday', 300, statusDay],
   ['optimize_order', 1800, optimizeOrder],
   ['expireagent', 1800, expireAgent],
 ]
+
+// ---------- pending orders: after 5 minutes of waiting the customer gets one friendly question («سفارشتون براتون ارسال شده؟»), once per order
+// kinds: undelivered (paid, the service is not created yet) · waiting (a receipt is waiting for approval) · unpaid (a payment was started and not finished).
+// Only FRESH orders (5 minutes to 6 hours old) so switching it on never messages old backlog; one message per order and at most one per customer per 6 hours;
+// nothing for blocked users or people who asked for no messages. kv: nudge:on ('0' = off) · nudge:unpaid ('0' = off for unpaid) · nudge:o:<order> · nudge:u:<user>.
+export const NUDGE_TEXT = {
+  undelivered: 'درود، وقت بخیر 🌿\n\nسفارشتون براتون ارسال شده؟',
+  waiting: 'درود، وقت بخیر 🌿\n\nسفارشتون براتون ارسال شده؟',
+  topup: 'درود، وقت بخیر 🌿\n\nشارژ کیف پولتون انجام شده؟',
+  unpaid: 'درود، وقت بخیر 🌿\n\nپرداخت سفارشتون کامل نشد؟ اگه مشکلی پیش اومد بگید تا کمک کنیم.',
+}
+export const nudgeKb = (kind, id) => J({ inline_keyboard: kind === 'unpaid'
+  ? [[{ text: '🆘 کمک می‌خوام', callback_data: 'nudge_help_' + id }, { text: '🙂 مشکلی نیست', callback_data: 'nudge_ok_' + id }]]
+  : [[{ text: '✅ بله، دریافت کردم', callback_data: 'nudge_ok_' + id }, { text: '❌ هنوز نرسیده', callback_data: 'nudge_no_' + id }]] })
+const DELIVERED = ['active', 'sendedwarn', 'send_on_hold', 'end_of_time', 'end_of_volume', 'disabled', 'disablebyadmin']
+export async function pendingNudge(c) {
+  if ((await kvGet('nudge:on')) === '0') return
+  const t = now(), unpaidOn = (await kvGet('nudge:unpaid')) !== '0'
+  const rows = await all(sql`SELECT id, id_order, id_user, time, price, payment_Status AS st, Payment_Method AS m, id_invoice FROM Payment_report WHERE payment_Status IN ('Unpaid', 'waiting', 'paid') ORDER BY id DESC LIMIT 300`)
+  let sent = 0
+  for (const r of rows) {
+    if (sent >= 10) break // a few per run: the rest next minute
+    const age = t - reportTs(r)
+    if (age < 300 || age > 6 * 3600) continue
+    const inv = String(r.id_invoice ?? '')
+    const topup = !/^(getconfigafterpay|getextenduser|getextravolumeuser|getextratimeuser|refunded)\|/.test(inv)
+    let kind
+    if (r.st === 'waiting') kind = topup ? 'topup' : 'waiting'
+    else if (r.st === 'Unpaid') { if (!unpaidOn) continue; kind = 'unpaid' }
+    else if (r.st === 'paid' && inv.startsWith('getconfigafterpay|')) {
+      const target = inv.split('|').slice(1).join('|').split('%')[0]
+      const last = await one(sql`SELECT Status FROM invoice WHERE username = ${target} ORDER BY CAST(time_sell AS INTEGER) DESC LIMIT 1`)
+      if (last && DELIVERED.includes(String(last.Status).toLowerCase())) continue
+      kind = 'undelivered'
+    } else continue
+    if (await kvGet('nudge:o:' + r.id_order)) continue
+    const u = await one(sql`SELECT id, User_Status FROM user WHERE id = ${r.id_user}`)
+    if (!u || u.User_Status !== 'Active' || intval(await kvGet('care:optout:' + r.id_user)) > t) continue
+    if (t - intval(await kvGet('nudge:u:' + r.id_user)) < 6 * 3600) continue
+    if (kind === 'unpaid' && (await one(sql`SELECT 1 AS x FROM Payment_report WHERE id_user = ${r.id_user} AND payment_Status = 'paid' AND id > ${r.id} LIMIT 1`))) continue // they paid afterwards: nothing is pending for them
+    const res = await sendmessage(r.id_user, NUDGE_TEXT[kind], nudgeKb(kind, r.id_order), 'HTML')
+    await kvSet('nudge:o:' + r.id_order, JSON.stringify({ t, kind, ok: !(res && res.ok === false) }))
+    await kvSet('nudge:u:' + r.id_user, String(t))
+    await kvSet('care:n:nudge:' + kind + ':sent', String(intval(await kvGet('care:n:nudge:' + kind + ':sent')) + 1))
+    sent++
+  }
+}
 
 /** a gateway outage: administrators get the technical text; partners (in live mode) a short, plain one — before customers notice */
 async function gateNotify(text) {

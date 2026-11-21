@@ -3,7 +3,7 @@
 import { brandSettings, brandEligibility, brandSet } from '../partners.js'
 import { reportText, customersPage, isPartner } from '../partnerhub.js'
 import { sleep } from '../timer.js'
-import { one, all, run, sql, kvGet } from '../db.js'
+import { one, all, run, sql, kvGet, kvSet } from '../db.js'
 import { sendmessage, deletemessage, Editmessagetext, telegram } from '../tg.js'
 import { step, shop, tehranDate } from '../bot.js'
 import { checkActiveBtn, backuserKb } from '../keyboards.js'
@@ -76,6 +76,40 @@ const sanitizeName = (s) => ["'", '"', '<', '>', '--', '#', ';', '\\', '%', '(',
 
 export const miscRoutes = [
   ...hubRoutes,
+  // the answers to «سفارشتون براتون ارسال شده؟» (pending-order nudge, lib/cron.js pendingNudge)
+  async (c) => {
+    const m = /^nudge_(ok|no|help)_(.+)$/.exec(c.datain || '')
+    if (!m) return false
+    const [, what, orderId] = m
+    const o = await one(sql`SELECT * FROM Payment_report WHERE id_order = ${orderId} AND id_user = ${c.from_id}`) // only the owner of the order can answer for it
+    const done = async (text, kb = null) => { await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id }); await Editmessagetext(c.from_id, c.message_id, text, kb ?? J({ inline_keyboard: [] }), 'HTML') }
+    const bumpN = async (k) => kvSet('care:n:nudge:' + k, String((Number(await kvGet('care:n:nudge:' + k)) || 0) + 1))
+    if (!o) { await done('سپاسگزارم 🌿'); return true }
+    if (what === 'ok') { await bumpN('ok'); await done('خوشحالیم 🌿 سپاسگزارم.'); return true }
+    if (what === 'help') {
+      await bumpN('help')
+      await done('درود 🌿 پشتیبانی همین‌جاست؛ مشکل را بنویسید تا کمک کنیم.', J({ inline_keyboard: [[{ text: '💬 صحبت با پشتیبانی', callback_data: 'supportbtns' }]] }))
+      return true
+    }
+    await bumpN('no') // «not arrived yet»: the customer is told it is being followed up, the administrators get the order
+    await done('درود 🌿 پیگیری شد؛ همین الان سفارش‌تان را بررسی می‌کنیم و خبر می‌دهیم. سپاسگزارم از صبوری‌تان.')
+    const text = `🔔 مشتری می‌گوید سفارشش نرسیده\nکاربر: <code>${c.from_id}</code> ${c.username ? '@' + String(c.username).replace(/[<>&]/g, '') : ''}\nسفارش: <code>${String(o.id_order).replace(/[<>&]/g, '')}</code>\nمبلغ: ${numberFormat(n(o.price))} تومان · روش: ${String(o.Payment_Method ?? '').replace(/[<>&]/g, '')} · وضعیت: ${String(o.payment_Status).replace(/[<>&]/g, '')}`
+    const kb = J({ inline_keyboard: [[{ text: '👤 مدیریت کاربر', callback_data: 'manageuser_' + c.from_id }]] })
+    for (const id of c.admin_ids) { const a = await one(sql`SELECT rule FROM admin WHERE id_admin = ${id}`); if (a && a.rule === 'Seller') continue; await sendmessage(id, text, kb, 'HTML') }
+    return true
+  },
+  // /nudge — administrator: status, on/off (all), unpaid on/off
+  async (c) => {
+    if (c.adminRow?.rule !== 'administrator') return false
+    const m = /^\/nudge(?:\s+(on|off|unpaid)(?:\s+(on|off))?)?\s*$/.exec(String(c.text ?? '').trim())
+    if (!m) return false
+    if (m[1] === 'on' || m[1] === 'off') await kvSet('nudge:on', m[1] === 'on' ? '1' : '0')
+    if (m[1] === 'unpaid' && m[2]) await kvSet('nudge:unpaid', m[2] === 'on' ? '1' : '0')
+    const sentN = async (k) => Number(await kvGet('care:n:nudge:' + k)) || 0
+    const on = (await kvGet('nudge:on')) !== '0', un = (await kvGet('nudge:unpaid')) !== '0'
+    await sendmessage(c.from_id, `🔔 <b>یادآوری سفارش‌های معلق</b>\n\nوضعیت: ${on ? '✅ روشن' : '⛔ خاموش'} · «پرداخت ناتمام»: ${un ? 'روشن' : 'خاموش'}\nارسال‌شده: نرسیده/تأییدنشده ${await sentN('undelivered') + await sentN('waiting') + await sentN('topup')} · پرداخت ناتمام ${await sentN('unpaid')}\nجواب‌ها: دریافت کردم ${await sentN('ok')} · نرسیده ${await sentN('no')} · کمک ${await sentN('help')}\n\n<code>/nudge off</code> · <code>/nudge on</code> · <code>/nudge unpaid off</code>`, null, 'HTML')
+    return true
+  },
   // the referral page
   async (c) => {
     const T = c.T, user = c.user
