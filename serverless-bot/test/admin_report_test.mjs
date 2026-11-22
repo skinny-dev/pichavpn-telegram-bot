@@ -10,7 +10,7 @@ await seed(process.argv[2])
 const h = (await import('../tgcloud/endpoints/admin_report.js')).default
 check('a Mini App call is refused', await h({ tool: 'diag' }, { initData: { user: { id: 1 } } }).then(() => false, () => true))
 const list = await h({}, {})
-check('without a tool it lists the tools', Array.isArray(list.tools) && list.tools.length === 15, JSON.stringify(list))
+check('without a tool it lists the tools', Array.isArray(list.tools) && list.tools.length === 16, JSON.stringify(list))
 await db.run(sql`DELETE FROM PaySetting WHERE NamePay IN ('tetraminator_api_key')`)
 const run = async (tool, extra = {}) => h({ tool, ...extra }, {})
 const diag = await run('diag'); check('diag: runtime, db speed, cron, gateways, mode', diag.runtime && diag.db_ms && diag.cron && diag.gateways && 'mode' in diag, Object.keys(diag).join())
@@ -24,6 +24,21 @@ await db.run(sql`INSERT INTO invoice (id_user, id_invoice, username, time_sell, 
 const cu = await run('customer', { user: '9301' }); check('customer: services with the plan days, the changes and the payments', cu.found === false && cu.services.length === 1 && cu.services[0].plan_days === 3 && cu.services[0].service === 'svc9301' && Array.isArray(cu.changes) && Array.isArray(cu.payments), JSON.stringify(cu).slice(0, 200))
 check('customer without an id explains the usage', (await run('customer', {})).usage.includes('customer'))
 const pr = await run('partner_ready'); check('partner_ready: a verdict, checks and the price list', typeof pr.verdict === 'string' && pr.checks.length >= 6 && Array.isArray(pr.partner_prices) && pr.products_by_agent, JSON.stringify(pr).slice(0, 200))
+const SV = await import('../tgcloud/lib/servers.js')
+const hostsX = [
+  { id: 1, remark: '🇫🇮 ☁️ فنلاند', address: '1.2.3.4', port: 443, security: 'tls', sni: 'a.example', inbound_tag: 'fi-tcp' },
+  { id: 2, remark: '🇫🇮 🇮🇷 تونل فنلاند', address: 'ir1.example', port: 8443, inbound_tag: 'fi-tunnel' },
+  { id: 3, remark: '🇩🇪 ☁️ آلمان', address: '5.6.7.8', port: 443, inbound_tag: 'de-tcp' },
+  { id: 4, remark: 'سرور جدید', address: '1.2.3.4', port: 2053, inbound_tag: 'other' },
+  { id: 5, remark: '⌛ 12 روز', address: '0.0.0.0', port: 1 },
+]
+const fiH = SV.hostsOfCountry(hostsX, 'FI')
+check('panel_read: the Finland hosts are found by the flag, tcp = direct and tunnel = through Iran; other countries and info lines are left out', fiH.length === 2 && fiH.find((h) => h.id === 1).kind === 'direct' && fiH.find((h) => h.id === 2).kind === 'tunnel', JSON.stringify(fiH.map((h) => [h.id, h.kind])))
+check('panel_read: "match" also catches a host that only mentions the old address', SV.hostsOfCountry(hostsX, 'FI', '1.2.3.4').length === 3)
+const red = SV.redact({ tag: 'x', port: 443, settings: { clients: [{ id: 'u1' }, { id: 'u2' }] }, streamSettings: { realitySettings: { privateKey: 'AAA', publicKey: 'BBB', shortIds: ['ab'] }, tlsSettings: { certificates: [{ keyFile: '/k', key: 'secret' }] } }, password: 'p' })
+check('panel_read: secrets are hidden, users are never listed, the public key stays', red.settings.clients === '‹2 entries hidden›' && red.streamSettings.realitySettings.privateKey === '‹hidden›' && red.streamSettings.realitySettings.publicKey === 'BBB' && red.password === '‹hidden›' && red.port === 443 && JSON.stringify(red).indexOf('AAA') < 0 && JSON.stringify(red).indexOf('secret') < 0, JSON.stringify(red))
+const pr0 = await run('panel_read', { country: 'FI' })
+check('panel_read: without a reachable panel it reports per panel, no crash, nothing written', Array.isArray(pr0.panels) && pr0.country === 'FI')
 const nowT = Math.floor(Date.now() / 1000)
 await db.run(sql`DELETE FROM expenses`)
 for (const [amount, d, kind] of [[8940000, 'سرورهای VPN آلمان و هلند', 'server'], [4500000, 'ترافیک 10TB', 'purchase'], [4500000, 'ترافیک 10TB', 'purchase'], [980000, 'سرور ایران', 'server'], [2000000, 'برداشت شریک', 'dividend']]) await db.run(sql`INSERT INTO expenses (amount, description, created_at, admin_id, kind) VALUES (${amount}, ${d}, ${nowT - 86400}, '1', ${kind})`)

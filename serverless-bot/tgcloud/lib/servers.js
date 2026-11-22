@@ -96,3 +96,41 @@ export async function recommendText(use) {
   const at = intval(await kvGet('servers:synced'))
   return `پیشنهاد سیستم: «${r[0].name}»${r[1] ? ` و بعد «${r[1].name}»` : ''}.\nاین پیشنهاد از آزمون خودکار سرورها و نظر کاربران ساخته شده و ممکن است روی هر اپراتور فرق کند.`
 }
+
+// ---------- reading the panel for ONE country (diagnostics; nothing here changes anything)
+const SECRET_KEY = /(private|secret|password|passwd|token|pem|certificate|\bkey\b|keys$|auth)/i
+/** copy an object with secrets replaced by «‹hidden›» and user lists dropped (core config inbounds can carry every user) */
+export function redact(v, depth = 0) {
+  if (depth > 8) return '…'
+  if (Array.isArray(v)) return v.length > 40 ? [...v.slice(0, 40).map((x) => redact(x, depth + 1)), `… +${v.length - 40} more`] : v.map((x) => redact(x, depth + 1))
+  if (v && typeof v === 'object') {
+    const o = {}
+    for (const [k, x] of Object.entries(v)) {
+      if (k === 'clients' || k === 'users') { o[k] = Array.isArray(x) ? `‹${x.length} entries hidden›` : '‹hidden›'; continue }
+      if (SECRET_KEY.test(k) && !/^(publicKey|public_key|keepalive)$/i.test(k)) { o[k] = x ? '‹hidden›' : x; continue }
+      o[k] = redact(x, depth + 1)
+    }
+    return o
+  }
+  return v
+}
+const FI_WORDS = /فنلاند|finland|helsinki|\bfi\b/i
+/** the hosts that belong to a country: by the flag in the remark (tcp = direct, tunnel = through Iran) or by name / address words; `match` adds any substring (e.g. the old IP) */
+export function hostsOfCountry(hosts, country = 'FI', match = '') {
+  const m = String(match || '').trim().toLowerCase()
+  const out = []
+  for (const h of hosts ?? []) {
+    const info = parseRemark(h.remark)
+    const text = JSON.stringify([h.remark, h.address, h.host, h.sni]).toLowerCase()
+    const byFlag = info && info.country === country
+    const byWord = country === 'FI' && FI_WORDS.test(String(h.remark ?? ''))
+    const byMatch = m && text.includes(m)
+    if (!(byFlag || byWord || byMatch)) continue
+    out.push({
+      id: h.id ?? null, remark: h.remark, kind: info ? info.kind : '(information entry)', country: info?.country ?? null,
+      address: h.address, port: h.port, sni: h.sni, host: h.host, path: h.path, security: h.security, alpn: h.alpn, fingerprint: h.fingerprint,
+      inbound_tag: h.inbound_tag ?? h.inbound ?? null, disabled: h.is_disabled === true || h.status === 'disabled', matched_by: byFlag ? 'flag' : byWord ? 'word' : 'match',
+    })
+  }
+  return out
+}

@@ -4,12 +4,12 @@
 import { EndpointError, fetch } from 'sdk'
 import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
 import { broadcastTick } from '../lib/broadcast.js'
-import { dataUser } from '../lib/panel.js'
+import { dataUser, panelGet } from '../lib/panel.js'
 import { all, kvGet, kvSet, one, run, sql } from '../lib/db.js'
 import { productName, hasNameTokens } from '../lib/php.js'
 import { healthGet } from '../lib/gatehealth.js'
 import { paychiBase, paychiCall, paychiKey } from '../lib/paychi.js'
-import { USE_SERVICES, catalogGet, rankFor, syncHosts } from '../lib/servers.js'
+import { USE_SERVICES, catalogGet, rankFor, syncHosts, hostsOfCountry, redact } from '../lib/servers.js'
 import { tetraBase, tetraCall, tetraKey, tetraPickLink } from '../lib/tetraminator.js'
 import { telegram, emojiUnblock } from '../lib/tg.js'
 import { emojiConfig, resetEmojiCache, emojiImport, emojiProbe } from '../lib/emoji.js'
@@ -596,6 +596,39 @@ TOOLS.expenses = (() => {
       out.months[m] = { total: b.total, entries: b.count, ...(b.dividends ? { dividends_not_counted: b.dividends } : {}), by_kind: Object.fromEntries(Object.entries(b.by_kind).sort((a, c) => c[1] - a[1])), biggest_items: Object.entries(b.items).sort((a, c) => c[1] - a[1]).slice(0, 12).map(([item, amount]) => ({ item, amount })) }
     }
     if (!Object.keys(out.months).length) out.empty = 'no expenses recorded in this period: enter the servers, domains and tools in the accounting data (or tell me the amounts)'
+    return out
+  }
+  return main
+})()
+
+// panel_read: READ-ONLY look at everything the panel has about ONE country: its hosts (tcp = direct, tunnel = through Iran), the nodes, and the inbounds those hosts use. Secrets are hidden.
+//   npx tgcloud run endpoints/admin_report '{"tool":"panel_read","country":"FI"}'                 (add "match":"<old ip or domain>" to also catch hosts that mention it)
+TOOLS.panel_read = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const country = String(input?.country ?? 'FI').toUpperCase(), match = String(input?.match ?? '')
+    const panels = await all(sql`SELECT name_panel FROM marzban_panel WHERE status = 'active' ORDER BY code_panel`)
+    const out = { country, panels: [] }
+    for (const p of panels) {
+      const name = p.name_panel
+      const hostsRaw = await panelGet(name, '/api/hosts')
+      const hosts = Array.isArray(hostsRaw) ? hostsRaw : Array.isArray(hostsRaw?.hosts) ? hostsRaw.hosts : []
+      const mine = hostsOfCountry(hosts, country, match)
+      const nodesRaw = await panelGet(name, '/api/nodes')
+      const nodes = Array.isArray(nodesRaw) ? nodesRaw : Array.isArray(nodesRaw?.nodes) ? nodesRaw.nodes : []
+      const core = await panelGet(name, '/api/core/config')
+      const tags = new Set(mine.map((h) => h.inbound_tag).filter(Boolean))
+      const inbounds = Array.isArray(core?.inbounds) ? core.inbounds.filter((i) => tags.has(i.tag)) : []
+      out.panels.push({
+        panel: name,
+        hosts_total: hosts.length,
+        hosts: mine,
+        nodes: redact(nodes.map((n) => ({ id: n.id, name: n.name, address: n.address, port: n.port, api_port: n.api_port, status: n.status, message: n.message, xray_version: n.xray_version, usage_coefficient: n.usage_coefficient }))),
+        inbounds_used_by_these_hosts: redact(inbounds),
+        errors: [hostsRaw?.error && `hosts: ${hostsRaw.error}`, nodesRaw?.error && `nodes: ${nodesRaw.error}`, core?.error && `core: ${core.error}`].filter(Boolean),
+        note: nodes.length === 0 ? 'no nodes listed: the panel may run its own xray (no remote node) — then the exit is the panel server itself' : undefined,
+      })
+    }
     return out
   }
   return main

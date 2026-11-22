@@ -384,6 +384,18 @@ export async function getHosts(panelName) {
   return Array.isArray(d) ? d : d && Array.isArray(d.hosts) ? d.hosts : []
 }
 
+/** a READ-ONLY look at the panel (diagnostics): only these GET paths. Returns the parsed JSON or {error}. */
+export const PANEL_READ_PATHS = ['/api/hosts', '/api/nodes', '/api/node', '/api/core/config', '/api/core', '/api/inbounds', '/api/system']
+export async function panelGet(panelName, path) {
+  if (!PANEL_READ_PATHS.includes(path)) return { error: 'path not allowed (read-only list)' }
+  const panel = await panelByName(panelName)
+  if (!panel) return { error: 'panel not found' }
+  const r = await authed(panel, 'GET', path)
+  if (!r || r.error) return { error: String((r && r.error) || 'request failed') }
+  const d = parse(r.body)
+  return d === null ? { error: `HTTP ${r.status ?? '?'}: not JSON` } : d
+}
+
 export async function getUsers(panelName, status, limit = 200) {
   const panel = await panelByName(panelName)
   if (!panel) return { users: [] }
