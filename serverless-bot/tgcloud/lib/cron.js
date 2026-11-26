@@ -17,6 +17,7 @@ import { gateHealthRun, notifyAdmins, NAMES } from './gatehealth.js'
 import { notifyPartners } from './partnerhub.js'
 import { emojiAutoSetup } from './emoji.js'
 import { reportTs } from './sms.js'
+import { tehranParts } from './schedule.js'
 import { modeGet as partnersMode, partnerEnd } from './partners.js'
 import { sprintf, numberFormat, intval, J } from './php.js'
 
@@ -215,11 +216,36 @@ const JOBS = [
   ['payment_expire', 300, paymentExpire],
   ['alert_balance', 120, alertBalance],
   ['pendingnudge', 60, pendingNudge],
+  ['receiptwatch', 1800, receiptWatch],
   ['on_hold', 900, onHold],
   ['statusday', 300, statusDay],
   ['optimize_order', 1800, optimizeOrder],
   ['expireagent', 1800, expireAgent],
 ]
+
+// ---------- receipts waiting for a person: a customer who sent a receipt (Variza manual receipt, card, top-up) must not wait for days.
+// Every 30 minutes, daytime in Tehran (09–22): ONE digest to the administrators listing receipts older than 2 hours; each order is mentioned at most once per 24 h,
+// nothing is changed and no customer is messaged. kv: receiptwatch:on ('0' = off) · rw:<order> = last time it was listed.
+export async function receiptWatch() {
+  if ((await kvGet('receiptwatch:on')) === '0') return
+  const t = now(), h = tehranParts(t).hour
+  if (h < 9 || h >= 22) return
+  const rows = await all(sql`SELECT id_order, id_user, time, price, Payment_Method AS m, id_invoice FROM Payment_report WHERE payment_Status = 'waiting' ORDER BY id DESC LIMIT 60`)
+  const due = []
+  for (const r of rows) {
+    if (t - reportTs(r) < 2 * 3600) continue
+    if (t - intval(await kvGet('rw:' + r.id_order)) < 24 * 3600) continue
+    due.push(r)
+  }
+  if (!due.length) return
+  due.sort((a, b) => reportTs(a) - reportTs(b))
+  const kindOf = (inv) => (/^getextenduser\|/.test(inv) ? 'تمدید' : /^getconfigafterpay\|/.test(inv) ? 'خرید' : 'شارژ/سایر')
+  const fmtAge = (s) => (s >= 86400 ? Math.floor(s / 86400) + ' روز' : Math.floor(s / 3600) + ' ساعت')
+  const lines = due.slice(0, 10).map((r) => `• <code>${String(r.id_order).replace(/[<>&]/g, '')}</code> · ${fmtAge(t - reportTs(r))} · ${numberFormat(intval(r.price))} · ${String(r.m ?? '').replace(/[<>&]/g, '')} · ${kindOf(String(r.id_invoice ?? ''))}`)
+  const text = `⏳ <b>${due.length} رسید بیش از ۲ ساعت منتظر تصمیم است</b>\n\n${lines.join('\n')}${due.length > 10 ? `\n… و ${due.length - 10} مورد دیگر` : ''}\n\nلطفاً در پنل «پرداخت‌ها» هر کدام را تأیید یا رد کنید. اگر واریز در درگاه/حساب دیده نشد، رد کنید تا مشتری بداند.`
+  await notifyAdmins(text)
+  for (const r of due) await kvSet('rw:' + r.id_order, String(t))
+}
 
 // ---------- pending orders: after 5 minutes of waiting the customer gets one friendly question («سفارشتون براتون ارسال شده؟»), once per order
 // kinds: undelivered (paid, the service is not created yet) · waiting (a receipt is waiting for approval) · unpaid (a payment was started and not finished).
