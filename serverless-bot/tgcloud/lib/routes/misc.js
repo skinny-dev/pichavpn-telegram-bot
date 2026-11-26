@@ -10,6 +10,7 @@ import { checkActiveBtn, backuserKb } from '../keyboards.js'
 import { dataUser, extraVolume } from '../panel.js'
 import { deductBalance, addBalance, stepPaymentKb } from '../catalog.js'
 import { rateArze } from './pay.js'
+import { extendRoutes } from './extend.js'
 import { reportTs } from '../sms.js'
 import { jdate } from '../fmt.js'
 import { sprintf, numberFormat, intval, time, J, phpJson } from '../php.js'
@@ -65,12 +66,24 @@ export async function keyboardAgent(c) {
   if (named) row.push({ text: T.keyboard.selectCustomName })
   return J({ keyboard: [row, [{ text: HUB.report }, { text: HUB.customers }], [{ text: T.textbot.accountWallet }, { text: HUB.support }], [{ text: T.users.backbtn }]], resize_keyboard: true })
 }
-/** the renew list (20 a page) */
-async function renewList(c, page) {
+/** the renew list (20 a page): every row says which service it is (name · plan), and «next/previous» exist only when there is another page */
+const RENEW_PAGE = 20
+const fun = async (k) => { try { const d = new Date(Date.now() + 12600000).toISOString().slice(0, 10).replace(/-/g, ''); const key = `funnel:${d}:${k}`; await kvSet(key, String((Number(await kvGet(key)) || 0) + 1)) } catch { /* counters never break a menu */ } }
+const renewCount = async (c) => Number((await one(sql`SELECT COUNT(*) AS n FROM invoice WHERE id_user = ${c.from_id} AND ${sql.raw(LIVE)}`)).n)
+const shortText = (s, n) => { const a = Array.from(String(s ?? '')); return a.length > n ? a.slice(0, n - 1).join('') + '…' : a.join('') }
+async function renewList(c, page, count = null) {
   const T = c.T
-  const rows = await all(sql`SELECT * FROM invoice WHERE id_user = ${c.from_id} AND ${sql.raw(LIVE)} ORDER BY time_sell DESC LIMIT 20 OFFSET ${(page - 1) * 20}`)
-  const kb = { inline_keyboard: rows.map((r) => [{ text: '✨' + r.username + (c.statusnote ? ` | ${r.note ?? ''}` : '') + '✨', callback_data: 'extend_' + r.id_invoice }]) }
-  return kb
+  const total = count ?? await renewCount(c)
+  const pages = Math.max(1, Math.ceil(total / RENEW_PAGE))
+  const at = Math.min(Math.max(1, page), pages)
+  const rows = await all(sql`SELECT * FROM invoice WHERE id_user = ${c.from_id} AND ${sql.raw(LIVE)} ORDER BY time_sell DESC LIMIT ${RENEW_PAGE} OFFSET ${(at - 1) * RENEW_PAGE}`)
+  const kb = { inline_keyboard: rows.map((r) => [{ text: '✨' + r.username + (r.name_product ? ' · ' + shortText(r.name_product, 28) : '') + (c.statusnote ? ` | ${r.note ?? ''}` : '') + '✨', callback_data: 'extend_' + r.id_invoice }]) }
+  const nav = []
+  if (at > 1) nav.push({ text: T.users.page.previous, callback_data: 'previous_page_extends' })
+  if (at < pages) nav.push({ text: T.users.page.next, callback_data: 'next_page_extends' })
+  if (nav.length) kb.inline_keyboard.push(nav)
+  kb.inline_keyboard.push([{ text: T.users.backbtn, callback_data: 'backuser' }])
+  return { kb, page: at }
 }
 const sanitizeName = (s) => ["'", '"', '<', '>', '--', '#', ';', '\\', '%', '(', ')'].reduce((a, ch) => a.split(ch).join(''), String(s))
 
@@ -355,30 +368,34 @@ export const miscRoutes = [
     else await sendmessage(c.from_id, sprintf(P.tetherPrice, rates.USD), null, 'HTML')
     return true
   },
-  // «renew»: the list of services
+  // «renew»: the list of services (one live service: straight to its renewal options, no list to choose from)
   async (c) => {
     const T = c.T
     if (!(c.text === T.textbot.extend || c.datain === 'extendbtn')) return false
-    const count = Number((await one(sql`SELECT COUNT(*) AS n FROM invoice WHERE id_user = ${c.from_id} AND ${sql.raw(LIVE)}`)).n)
+    const count = await renewCount(c)
+    await fun('renew_open')
     if (count === 0) { await sendmessage(c.from_id, T.users.extend.emptyServiceforExtend, null, 'html'); return true }
+    if (count === 1) {
+      const only = await one(sql`SELECT id_invoice FROM invoice WHERE id_user = ${c.from_id} AND ${sql.raw(LIVE)} LIMIT 1`)
+      c.datain = 'extend_' + only.id_invoice
+      await fun('renew_skip_list')
+      if (await extendRoutes[0](c)) return true
+    }
     await run(sql`UPDATE user SET pagenumber = '1' WHERE id = ${c.from_id}`)
-    const kb = await renewList(c, 1)
-    kb.inline_keyboard.push([{ text: T.users.page.next, callback_data: 'next_page_extends' }], [{ text: T.users.backbtn, callback_data: 'backuser' }])
+    await fun('renew_list')
+    const { kb } = await renewList(c, 1, count)
     await sendmessage(c.from_id, T.users.extend.selectOrderDirect, J(kb), 'html')
     return true
   },
   async (c) => {
     if (c.datain !== 'next_page_extends' && c.datain !== 'previous_page_extends') return false
-    const T = c.T, user = c.user
-    const total = Number((await one(sql`SELECT COUNT(*) AS n FROM invoice WHERE id_user = ${c.from_id}`)).n)
-    const page = intval(user.pagenumber)
-    let to
-    if (n(user.pagenumber) * 20 > total) to = 1
-    else to = c.datain === 'next_page_extends' ? page + 1 : page - 1
-    if (to < 1) to = 1
-    const kb = await renewList(c, to)
-    kb.inline_keyboard.push([{ text: T.users.page.next, callback_data: 'next_page_extends' }, { text: T.users.page.previous, callback_data: 'previous_page_extends' }], [{ text: T.users.backbtn, callback_data: 'backuser' }])
-    await run(sql`UPDATE user SET pagenumber = ${to} WHERE id = ${c.from_id}`)
+    const T = c.T
+    const count = await renewCount(c)
+    const want = intval(c.user.pagenumber) + (c.datain === 'next_page_extends' ? 1 : -1)
+    await fun('renew_page')
+    const { kb, page } = await renewList(c, want, count)
+    await run(sql`UPDATE user SET pagenumber = ${page} WHERE id = ${c.from_id}`)
+    await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id })
     await Editmessagetext(c.from_id, c.message_id, T.users.extend.selectOrderDirect, J(kb))
     return true
   },

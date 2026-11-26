@@ -1,5 +1,5 @@
 // ONE CLI-only diagnostics endpoint (the platform allows at most 100 modules per app, so the seven small admin_* endpoints live here as «tools»).
-//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, servers, channel_stats, support_export, activity, payments, tetra
+//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
 import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
@@ -631,6 +631,52 @@ TOOLS.panel_read = (() => {
     }
     return out
   }
+  return main
+})()
+
+TOOLS.problems = (() => {
+// How many people run into trouble? (CLI only, read-only, counts only: no user ids, names, card numbers)
+//   npx tgcloud run endpoints/admin_report '{"tool":"problems","days":7}'
+// Sources: Payment_report (by method and status, abandoned = opened a payment and never paid afterwards), service_other (renewals),
+// invoices that failed to be created, the order-failure log (last 300 lines), the «سفارشتون رسید؟» answers, the renew/purchase funnel counters.
+const tsOf = (s) => { s = String(s ?? ''); if (/^\d{9,}$/.test(s)) return Number(s); const m = /^(\d{4})[/-](\d{2})[/-](\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 - 12600 : 0 }
+const tehranStr = (t) => new Date((t + 12600) * 1000).toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/')
+const dayKey = (t) => new Date((t + 12600) * 1000).toISOString().slice(0, 10).replace(/-/g, '')
+const top = (m, n = 8) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n)
+
+async function main(input, ctx) {
+  if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+  const days = Math.min(60, Math.max(1, Number(input?.days) || 7)), t = Math.floor(Date.now() / 1000), from = t - days * 86400
+  const since = tehranStr(from), out = { days }
+  const pr = await all(sql`SELECT id_user, Payment_Method AS m, payment_Status AS s, time, id_invoice FROM Payment_report WHERE time >= ${since}`)
+  const byMs = {}, usersBy = {}
+  for (const r of pr) { const k = `${r.m}/${r.s}`; byMs[k] = (byMs[k] || 0) + 1; (usersBy[k] ||= new Set()).add(r.id_user) }
+  out.payments = Object.fromEntries(Object.entries(byMs).sort().map(([k, n]) => [k, `${n} rows · ${usersBy[k].size} users`]))
+  const paidUsers = new Set(pr.filter((r) => r.s === 'paid').map((r) => r.id_user))
+  const opened = {}
+  for (const r of pr) if (r.s !== 'paid') (opened[r.m] ||= new Set()).add(r.id_user)
+  out.opened_a_payment_and_never_paid = Object.fromEntries(Object.entries(opened).map(([m, set]) => [m, [...set].filter((u) => !paidUsers.has(u)).length]))
+  out.opened_a_payment_users = new Set(pr.map((r) => r.id_user)).size
+  out.paid_users = paidUsers.size
+  const waiting = await all(sql`SELECT time FROM Payment_report WHERE payment_Status = 'waiting'`)
+  out.receipts_waiting_now = { total: waiting.length, over_30_min: waiting.filter((r) => t - tsOf(r.time) > 1800).length, over_6_h: waiting.filter((r) => t - tsOf(r.time) > 21600).length, oldest_h: waiting.length ? Math.round(Math.max(...waiting.map((r) => t - tsOf(r.time))) / 3600) : 0 }
+  try {
+    const so = await all(sql`SELECT id_user, type, status FROM service_other WHERE time >= ${since} AND type = 'extend_user'`)
+    const st = {}; for (const r of so) st[String(r.status).toLowerCase()] = (st[String(r.status).toLowerCase()] || 0) + 1
+    const okU = new Set(so.filter((r) => String(r.status).toLowerCase() === 'paid').map((r) => r.id_user))
+    out.renewals = { by_status: st, users_with_a_renewal_attempt: new Set(so.map((r) => r.id_user)).size, users_who_never_completed: [...new Set(so.map((r) => r.id_user))].filter((u) => !okU.has(u)).length }
+  } catch (e) { out.renewals = { error: String(e?.message ?? e).slice(0, 80) } }
+  out.invoices_unsuccessful_total = Number((await one(sql`SELECT COUNT(*) AS n FROM invoice WHERE Status = 'Unsuccessful'`)).n)
+  const lines = String((await kvGet('log:order_failures')) || '').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter((x) => x && x.at >= from)
+  const kinds = {}, reasons = {}
+  for (const x of lines) { kinds[x.kind] = (kinds[x.kind] || 0) + 1; const r = String(x.reason ?? '').replace(/[0-9]{4,}/g, '#').slice(0, 70); reasons[r] = (reasons[r] || 0) + 1 }
+  out.order_failures = { rows: lines.length, users: new Set(lines.map((x) => x.user)).size, by_kind: top(kinds), top_reasons: top(reasons), note: 'the log keeps only the last 300 lines' }
+  out.nudge_answers = { arrived_ok: Number(await kvGet('care:n:nudge:ok')) || 0, not_arrived: Number(await kvGet('care:n:nudge:no')) || 0, want_help: Number(await kvGet('care:n:nudge:help')) || 0 }
+  const fun = {}
+  for (let i = 0; i < days; i++) { const d = dayKey(t - i * 86400); for (const k of ['renew_open', 'renew_skip_list', 'renew_list', 'renew_page', 'buy_open']) fun[k] = (fun[k] || 0) + (Number(await kvGet(`funnel:${d}:${k}`)) || 0) }
+  out.funnel_counters = { ...fun, note: 'counting started with this version; older days are 0' }
+  return out
+}
   return main
 })()
 
