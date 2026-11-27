@@ -1,5 +1,5 @@
 // ONE CLI-only diagnostics endpoint (the platform allows at most 100 modules per app, so the seven small admin_* endpoints live here as «tools»).
-//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, servers, channel_stats, support_export, activity, payments, tetra
+//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
 import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
@@ -15,6 +15,9 @@ import { telegram, emojiUnblock } from '../lib/tg.js'
 import { emojiConfig, resetEmojiCache, emojiImport, emojiProbe } from '../lib/emoji.js'
 import { loadTexts } from '../lib/texts.js'
 import { jdate } from '../lib/fmt.js'
+import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
+import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
+import { finSetting } from '../lib/panelapi/finance/engine.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -682,6 +685,31 @@ async function main(input, ctx) {
   out.funnel_counters = { ...fun, note: 'counting started with this version; older days are 0' }
   return out
 }
+  return main
+})()
+
+// fees: the gateway fee (Tetraminator = 12% of every paid payment) is booked as an expense «کارمزد درگاه و بانک» in the stats AND in the ledger.
+//   npx tgcloud run endpoints/admin_report '{"tool":"fees"}'                                  → the percent, and what it means for the last 30 days (nothing written)
+//   … '{"tool":"fees","tetraminator":12}'    → store the percent (0 = no fee); the ledger re-posts the old payments at the next sync (or now with "sync":true)
+TOOLS.fees = (() => {
+  const tsOf = (s) => { s = String(s ?? ''); if (/^\d{9,}$/.test(s)) return Number(s); const m = /^(\d{4})[/-](\d{2})[/-](\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 - 12600 : 0 }
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const out = {}
+    if (input && 'tetraminator' in input) {
+      const v = Number(input.tetraminator)
+      if (!(v >= 0 && v < 100)) return { error: 'tetraminator must be a percent from 0 to 99' }
+      await kvSet('accounting:fee_pct:tetraminator', String(v)); out.stored = v
+    }
+    const pct = await gatewayFeePct('tetraminator'), days = Math.min(365, Math.max(1, Number(input?.days) || 30)), t = Math.floor(Date.now() / 1000)
+    const rows = (await all(sql`SELECT price, time FROM Payment_report WHERE Payment_Method = 'tetraminator' AND payment_Status = 'paid'`)).filter((r) => t - tsOf(r.time) <= days * 86400)
+    const gross = rows.reduce((a, r) => a + (Number(String(r.price ?? '').replace(/[^0-9]/g, '')) || 0), 0)
+    out.tetraminator = { fee_percent: pct, days, paid_payments: rows.length, gross_toman: gross, fee_toman: gatewayFee(gross, pct), net_after_fee_toman: gross - gatewayFee(gross, pct) }
+    out.ledger_fee_applied = (await finSetting('legacy_fee_applied', '')) || 'not yet'
+    if (input?.sync) out.ledger_sync = await finSyncLegacy(20000).then((r) => ({ posted: r.legacy_payment, reposted: r.reposted, issues: r.issues.slice(0, 5) }), (e) => ({ error: String(e?.message ?? e).slice(0, 160) }))
+    out.note = 'the same percent feeds the dashboard stats (آمار) and the ledger; past periods change too. A fee you already typed as an expense by hand would be counted twice: remove it.'
+    return out
+  }
   return main
 })()
 

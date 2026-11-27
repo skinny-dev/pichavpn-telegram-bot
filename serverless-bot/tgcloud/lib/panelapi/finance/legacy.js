@@ -2,7 +2,7 @@
 // Idempotent: every row has an entry keyed on its content hash; an edited row is reversed and posted again, a deleted one is reversed.
 import { qAll, qOne, qVal } from '../qb.js'
 import { str, now } from '../util.js'
-import { accParseDateTime, accGuessKind } from '../stats.js'
+import { accParseDateTime, accGuessKind, gatewayFeePct, gatewayFee } from '../stats.js'
 import * as E from './engine.js'
 import { md5 } from './md5.js'
 
@@ -28,9 +28,15 @@ async function legacyEntry(type, id, hash, lines, ts, memo, stats) {
   } catch (e) { stats.issues.push(`${type} #${id}: ${e.message}`) }
 }
 
+/** a Tetraminator payment: the customer paid `price`; the gateway keeps the fee, so the money account gets the rest and the fee is booked as an expense (5240) */
+/** part of the entry's content hash: the percent AND a revision number, so switching the percent back and forth never reuses an old entry key (the ledger ignores a key it has already seen) */
+const feeTag = (pct, epoch) => (pct > 0 ? '|fee' + pct : '') + (epoch > 0 ? '|e' + epoch : '')
+const tetraLines = (price, pct) => { const fee = gatewayFee(price, pct); return [{ account: finMethodAccount('tetraminator'), debit: price - fee }, { account: 'exp_fee', debit: fee, memo: 'کارمزد تتریمیناتور ' + pct + '٪' }, { account: 'revenue_sales', credit: price }] }
+
 export async function finSyncLegacy(limit = 20000) {
   const stats = { legacy_expense: 0, legacy_capital: 0, legacy_cost: 0, legacy_payment: 0, reposted: 0, reversed: 0, issues: [] }
   const seen = { legacy_expense: new Set(), legacy_capital: new Set() }
+  const feePct = await gatewayFeePct('tetraminator'), feeEpoch = parseInt(await E.finSetting('legacy_fee_epoch', 0)) || 0
   for (const r of await qAll(`SELECT * FROM expenses ORDER BY id LIMIT ${limit}`, [])) {
     const amount = parseInt(r.amount) || 0
     seen.legacy_expense.add(String(r.id))
@@ -69,7 +75,20 @@ export async function finSyncLegacy(limit = 20000) {
       await legacyEntry('legacy_cost', pid, md5('c' + price + ts), [{ account: finLegacyKindAccount(accGuessKind(desc) ?? 'general'), debit: price }, { account: 'legacy_cash', credit: price }], ts, desc !== '' ? desc : 'هزینه', stats)
     } else if (method === 'capital_injection') await legacyEntry('legacy_capital', pid, md5('k' + price + ts), [{ account: 'legacy_cash', debit: price }, { account: 'capital', credit: price }], ts, 'ورود سرمایه', stats)
     else if (method === 'low balance by admin') await legacyEntry('legacy_payment', pid, md5('w' + price + ts), [{ account: 'sales_returns', debit: price }, { account: 'legacy_cash', credit: price }], ts, 'کسر موجودی کیف پول (بازپرداخت)', stats)
+    else if (method === 'tetraminator' && feePct > 0) await legacyEntry('legacy_payment', pid, md5('r' + price + ts + method + feeTag(feePct, feeEpoch)), tetraLines(price, feePct), ts, 'پرداخت مشتری ' + r.id_user + ' · tetraminator · کارمزد ' + feePct + '٪', stats)
     else await legacyEntry('legacy_payment', pid, md5('r' + price + ts + method), [{ account: finMethodAccount(method), debit: price }, { account: 'revenue_sales', credit: price }], ts, 'پرداخت مشتری ' + r.id_user + ' · ' + method + ' · ' + r.id_order, stats)
+  }
+  // the fee percent changed (or the fee was just switched on): payments that were already posted are reversed and posted again with the fee, once
+  if (String(await E.finSetting('legacy_fee_applied', '')) !== String(feePct)) {
+    const epoch = feeEpoch + 1
+    await E.finSetSetting('legacy_fee_epoch', String(epoch))
+    for (const r of await qAll(`SELECT p.* FROM Payment_report p WHERE p.payment_Status = 'paid' AND p.Payment_Method = 'tetraminator' AND EXISTS (SELECT 1 FROM fin_journal j WHERE j.source_type = 'legacy_payment' AND j.source_id = 'p' || p.id AND j.status = 'posted') ORDER BY p.id LIMIT ${limit}`, [])) {
+      const price = parseInt(String(r.price ?? '').replace(/[^0-9]/g, '')) || 0, ts = accParseDateTime(String(r.time))
+      if (!price || ts === null) continue
+      const method = String(r.Payment_Method)
+      await legacyEntry('legacy_payment', 'p' + r.id, md5('r' + price + ts + method + feeTag(feePct, epoch)), feePct > 0 ? tetraLines(price, feePct) : [{ account: finMethodAccount(method), debit: price }, { account: 'revenue_sales', credit: price }], ts, 'پرداخت مشتری ' + r.id_user + ' · ' + method + (feePct > 0 ? ' · کارمزد ' + feePct + '٪' : ''), stats)
+    }
+    await E.finSetSetting('legacy_fee_applied', String(feePct))
   }
   await E.finSetSetting('legacy_last_sync', String(now()))
   await E.finSetSetting('legacy_last_stats', JSON.stringify(stats))

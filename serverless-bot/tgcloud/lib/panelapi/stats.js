@@ -52,6 +52,15 @@ export function accGuessKind(desc) {
   for (const [kind, words] of Object.entries(KIND_RULES)) for (const w of words) if (w !== '' && d.includes(w.toLowerCase())) return kind
   return null
 }
+/** the gateway fee in percent, per payment method (kv `accounting:fee_pct:<method>`; Tetraminator = 12 unless changed) — one number for the dashboard stats AND the ledger */
+export const GATEWAY_FEE_DEFAULT = { tetraminator: 12 }
+export async function gatewayFeePct(method) {
+  const m = String(method).toLowerCase()
+  const raw = await qVal("SELECT value FROM kv WHERE key = ?", ['accounting:fee_pct:' + m])
+  const v = raw === null || raw === undefined || raw === '' ? GATEWAY_FEE_DEFAULT[m] ?? 0 : Number(raw)
+  return Number.isFinite(v) && v >= 0 && v < 100 ? v : GATEWAY_FEE_DEFAULT[m] ?? 0
+}
+export const gatewayFee = (price, pct) => Math.round((Number(price) || 0) * pct / 100)
 export const accKindGroup = (k) => (k === 'purchase' ? 'cogs' : k === 'dividend' ? 'equity' : 'opex')
 export const accKindIcon = (k) => ({ purchase: '🛒', partner: '🤝', salary: '👥', advertising: '📣', server: '🖥', tools: '🧰', fee: '🏦', tax: '🏛', general: '🧾', dividend: '🤝' })[k] ?? '🧾'
 
@@ -163,6 +172,12 @@ export async function statsCollect(start, end) {
       GROUP BY t.type, a.system_key`, P)) {
     const k = ['capital_out', 'distribution'].includes(x.type) ? 'dividend' : invMap[String(x.sk)] ?? 'general'
     by[k].c += Math.trunc(N(x.c)); by[k].s += N(x.p)
+  }
+  // the gateway fee is a real cost: every paid Tetraminator payment (purchase, renewal or wallet top-up) costs the fee percent (default 12), booked as «کارمزد درگاه و بانک»
+  const tetraPct = await gatewayFeePct('tetraminator')
+  if (tetraPct > 0) {
+    row = await qOne(`SELECT COUNT(*) c, SUM(CAST(price AS INTEGER)) p ${pay} AND Payment_Method = 'tetraminator'`, P)
+    by.fee.c += Math.trunc(N(row.c)); by.fee.s += gatewayFee(N(row.p), tetraPct); r.tetra_gross = N(row.p); r.tetra_fee_pct = tetraPct
   }
   row = await qOne("SELECT COUNT(*) c, SUM(total) p FROM fin_txn WHERE status = 'posted' AND type = 'capital_in' AND txn_date BETWEEN ? AND ?", P)
   r.cap += Math.trunc(N(row.c)); r.cap_sum += N(row.p)
