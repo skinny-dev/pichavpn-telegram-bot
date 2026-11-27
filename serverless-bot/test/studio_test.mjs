@@ -270,6 +270,23 @@ calls.length = 0
 const sn2 = (await call('studio_send_now', { id: 'img1', confirm: true })).body
 check('a post whose image is a file_id is sent as a PHOTO to the channel', sn2.mode === 'sent' && calls.some(([m, p]) => /sendphoto/i.test(m) && p.photo === up.body.image && String(p.chat_id) === '@pichanet_chan'), JSON.stringify(calls.map(([m]) => m)))
 check('…and it is not reported as a missing image', !(await S.postsGet()).find((p) => p.id === 'img1').note)
+
+// 15) the outage notice (growth/content/outage_nl_fi.json): passes the rules, imports as drafts, «send now» from the CLI honours the mode, premium-ready buttons
+const ox_posts = JSON.parse(fsm.readFileSync(new URL('../../growth/content/outage_nl_fi.json', import.meta.url), 'utf8')).posts
+await db.run(sql`DELETE FROM kv WHERE key = 'studio:posts' OR key = 'broadcast:job'`)
+await call('studio_settings', { channel: '@pichanet_chan', testChannel: '@pichanet_test', mode: 'sim' })
+const ox_imp = await AR({ tool: 'studio', import: ox_posts }, {})
+check('outage file: both posts import as drafts (tone and button rules pass)', ox_imp.imported === 2 && ox_imp.counts.draft === 2, JSON.stringify(ox_imp.counts))
+calls.length = 0
+const ox_sim = await AR({ tool: 'studio', send_now: ['outage-nl-fi'] }, {})
+check('send now in SIMULATION: only a preview to the administrators, never the channel', ox_sim.sent_now[0].ok && !calls.some(([, p]) => String(p.chat_id) === '@pichanet_chan'), JSON.stringify(ox_sim.sent_now))
+const ox_live = await AR({ tool: 'studio', mode: 'live', send_now: ['outage-nl-fi-resolved'] }, {})
+const ox_chan = calls.filter(([m, p]) => /sendmessage/i.test(m) && String(p.chat_id) === '@pichanet_chan')
+check('--live: the mode is switched to live', ox_live.mode_change === 'live' && /posts go out for real/.test(ox_live.mode))
+check('…and the notice reaches the CHANNEL with its buttons (first = main colour, support = green)', ox_chan.length >= 1 && /دوباره/.test(String(ox_chan.at(-1)[1].text)) && JSON.stringify(ox_chan.at(-1)[1].reply_markup).includes('primary') && JSON.stringify(ox_chan.at(-1)[1].reply_markup).includes('success'), JSON.stringify(ox_chan.map((x) => x[1])).slice(0, 300))
+check('channel only: no broadcast to the bot users was started', !(await S.postsGet()).find((p) => p.id === 'outage-nl-fi-resolved').toBot && !((await db.get(sql`SELECT value FROM kv WHERE key = 'broadcast:job'`))?.value))
+const ox_bad = await AR({ tool: 'studio', mode: 'nonsense' }, {})
+check('an invalid mode is refused, nothing changes', /refused/.test(String(ox_bad.mode_change)) && /posts go out for real/.test(ox_bad.mode))
 await call('studio_settings', { mode: 'sim' })
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED')
 process.exit(fails ? 1 : 0)

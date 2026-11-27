@@ -95,8 +95,8 @@ Applied centrally to every send (including the Studio's): on by default (NewsEmo
 ## 12. Bulk import, approve-all and the CLI
 - `studio_import` (≤ 50 posts): always **drafts**. Options: `startDate` + `time` (one post per day at that Tehran time, in order), `toChannel` / `toBot` override, `replace: [ids]` (overwrites **named drafts only**; scheduled or sent posts are never touched). Existing ids are skipped.
 - `studio_approve_all {ids, confirm}`: schedules the listed drafts that have a **future time** and pass the rules; the rest are reported.
-- CLI (no Mini App): `npx tgcloud run endpoints/admin_report '{"tool":"studio", …}'` → state (mode, channel, posts with status/time/audience, running broadcast); `import`, `startDate`, `time`, `replace`, `approve`, `toBot`/`toChannel`; `pump_broadcast`; `cancel_broadcast`.
-- Ready content: `growth/content/daily_7.json` (seven daily posts), `growth/content/partner_launch.json` (partnership announcement).
+- CLI (no Mini App): `npx tgcloud run endpoints/admin_report '{"tool":"studio", …}'` → state (mode, channel, posts with status/time/audience, running broadcast); `import`, `startDate`, `time`, `replace`, `approve`, `toBot`/`toChannel`; `mode` (`sim|test|live`); `send_now: [ids]` (the Mini App «ارسال همین الان», honours the mode); `pump_broadcast`; `cancel_broadcast`. Helper: `scripts/studio_post.sh <file.json> [--bot] [--send <id>] [--live]`.
+- Ready content: `growth/content/daily_7.json` (seven daily posts), `growth/content/partner_launch.json` (partnership announcement), `growth/content/outage_nl_fi.json` (a server-outage notice + its «resolved» follow-up, channel only).
 
 ## 13. Sending to the bot's users (broadcast)
 One job in kv `broadcast:job` (**one at a time**): text or photo caption, the post's buttons, total of non-blocked users, `last_id`, `sent`, `failed`. The `broadcast` cron job (20 s) sends **batches of 25 users repeatedly for ~8 s per run** (thousands of users ≈ minutes). `pump_broadcast` runs ~25 s at once; `cancel_broadcast` removes a stuck job. Blocked users are skipped; failures are counted; the administrator gets a summary when it ends.

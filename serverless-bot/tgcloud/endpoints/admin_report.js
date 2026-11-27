@@ -511,6 +511,11 @@ TOOLS.studio = (() => {
       out.import_note = r.imported === 0 ? 'nothing new: these ids are already in the Studio (look at "posts" below)' : undefined
       if (input.approve && r.imported) out.approved = await studioRoute('studio_approve_all', {}, { ids: r.posts.map((p) => p.id), confirm: true }, admin ?? {})
     }
+    if (input?.mode) out.mode_change = await studioRoute('studio_settings', {}, { mode: String(input.mode) }, admin ?? {}).then((r) => r.settings?.mode, (e) => 'refused: ' + String(e?.message ?? e).slice(0, 120))
+    if (Array.isArray(input?.send_now) && input.send_now.length) { // «send now» for the listed post ids (the Mini App button does the same); honours the mode: sim = a preview to the administrators only
+      out.sent_now = []
+      for (const id of input.send_now.slice(0, 5)) out.sent_now.push({ id, ...(await studioRoute('studio_send_now', {}, { id, confirm: true }, admin ?? {}).then((r) => ({ ok: true, mode: r.mode ?? r.result ?? undefined, note: r.note }), (e) => ({ ok: false, error: String(e?.message ?? e).slice(0, 160) }))) })
+    }
     const s = await settingsGet(), posts = await postsGet(), t = Math.floor(Date.now() / 1000)
     const when = (w) => (w ? new Date((w + 12600) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' Tehran' : 'no time')
     out.mode = s.mode + (s.mode === 'live' ? ' (posts go out for real)' : s.mode === 'test' ? ' (only the test channel)' : ' (SIMULATION: nothing reaches the channel or the bot users)')
