@@ -1,5 +1,5 @@
 // ONE CLI-only diagnostics endpoint (the platform allows at most 100 modules per app, so the seven small admin_* endpoints live here as «tools»).
-//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, marketers, servers, channel_stats, support_export, activity, payments, tetra
+//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, marketers, partner_prices, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
 import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
@@ -19,6 +19,7 @@ import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
 import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
 import { finSetting } from '../lib/panelapi/finance/engine.js'
 import { overview as referralOverview } from '../lib/panelapi/referrals.js'
+import { tiersGet } from '../lib/partners.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -730,6 +731,37 @@ TOOLS.marketers = (() => {
     const sum = (k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0)
     return { marketers: rows, totals: { brought: sum('brought'), partner_requests: sum('partner_requests'), approved: sum('approved'), buyers: sum('buyers'), revenue_toman: sum('revenue_toman') },
       note: 'brought = people who started the bot through the link; a person belongs to the first marketer whose link he used. Percent: set it on the campaign later (pays_commission + commission_percent); commission/due are then filled in here and in the Mini App.' }
+  }
+  return main
+})()
+
+// partner_prices: what a customer (f), a partner (n) and an advanced partner (n2) really pay. A partner sees ONLY the products whose agent column is his own type, and the tier percent
+// (user.pricediscount) is taken off that price — so if the «n» list is already cheaper than the customer list, the two discounts STACK. This shows the numbers side by side (read-only).
+//   npx tgcloud run endpoints/admin_report '{"tool":"partner_prices"}'
+TOOLS.partner_prices = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const rows = await all(sql`SELECT code_product, name_product, price_product, Volume_constraint AS gb, Service_time AS days, Location AS loc, agent, status_product FROM product`)
+    const num = (v) => Number(String(v ?? '').replace(/[^0-9.]/g, '')) || 0
+    const by = { f: [], n: [], n2: [] }, other = {}
+    for (const r of rows) { if (by[r.agent]) by[r.agent].push(r); else other[r.agent] = (other[r.agent] || 0) + 1 }
+    const tiers = await tiersGet()
+    const key = (r) => `${r.loc}|${num(r.gb)}|${num(r.days)}`
+    const fMap = new Map(by.f.map((r) => [key(r), r]))
+    const out = { products_per_list: { f_customer: by.f.length, n_partner: by.n.length, n2_credit_partner: by.n2.length, other_agent_values: other }, tiers: tiers.map((t) => `${t.name}: from ${t.gb} GB/30d → ${t.pct}%`) }
+    out.partner_list = by.n.slice(0, 30).map((r) => {
+      const list = fMap.get(key(r)), p = num(r.price_product)
+      return { gb: num(r.gb), days: num(r.days), partner_list_price: p, customer_price: list ? num(list.price_product) : null, partner_list_vs_customer: list && num(list.price_product) ? Math.round((p / num(list.price_product) - 1) * 1000) / 10 + '%' : 'no matching customer product',
+        after_tier: Object.fromEntries(tiers.map((t) => [t.name + ' ' + t.pct + '%', Math.round(p - (p * t.pct) / 100)])) }
+    })
+    const w = []
+    if (!by.n.length) w.push('NO partner (n) products: a partner would see an EMPTY price list. Create the n list (the tier percent is applied on top of it).')
+    const lower = out.partner_list.filter((r) => typeof r.partner_list_vs_customer === 'string' && /^-/.test(r.partner_list_vs_customer))
+    if (lower.length) w.push(`${lower.length} partner products are ALREADY cheaper than the customer price: the tier percent stacks on top (a double discount).`)
+    if (by.n.length && by.n.some((r) => !fMap.has(key(r)))) w.push('some partner products have no customer product with the same location / GB / days (cannot be compared).')
+    out.warnings = w
+    out.how = 'partner price = (price of the product row whose agent = the partner type) minus pricediscount percent (the tier). Custom-volume plans use the per-GB price saved per agent type on the panel, with the same percent taken off.'
+    return out
   }
   return main
 })()
