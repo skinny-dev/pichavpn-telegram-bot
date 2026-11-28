@@ -572,7 +572,7 @@ TOOLS.costs = (() => {
       },
       inputs: { servers_eur: eur, eur_rate: rate, iran_server_toman: iran, traffic_gb_per_month: trafficGb, traffic_toman_per_gb: perGb, gb_basis: base },
       monthly_toman: { vpn_servers_eur: servers, iran_server: iran, traffic, total },
-      cost_per_gb: { new: costGb, parts: { vpn_servers: Math.round(servers / base), iran_server: Math.round(iran / base), traffic: perGb }, before, change_pct: Math.round(((costGb - before) / before) * 100) },
+      cost_per_gb: { new: costGb, parts: { vpn_servers: Math.round(servers / base), iran_server: Math.round(iran / base), traffic: Math.round(traffic / base) }, before, change_pct: Math.round(((costGb - before) / before) * 100) },
       margin_pct_by_plan_and_tier: plans.map(([gb, price]) => ({ gb, retail: price, ...Object.fromEntries(tiers.map((t) => [t ? `partner_${t}pct` : 'customer', m(gb, price, t)])) })),
       note: 'VPN servers + Iranian server + traffic only: bot hosting, the payment relay server, domains, gateway fees and support are NOT in this number',
     }
