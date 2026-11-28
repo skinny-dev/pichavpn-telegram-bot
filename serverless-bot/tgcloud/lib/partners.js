@@ -13,12 +13,12 @@ const DAY = 86400
 const parse = (s, d) => { try { const v = JSON.parse(s); return v ?? d } catch { return d } }
 export const DEFAULT_TIERS = [
   { id: 'start', name: 'شروع', gb: 0, pct: 10 },
-  { id: 'bronze', name: 'برنز', gb: 100, pct: 15 },
-  { id: 'silver', name: 'نقره', gb: 500, pct: 20 },
-  { id: 'gold', name: 'طلا', gb: 2048, pct: 25 },
-  { id: 'platinum', name: 'پلاتین', gb: 5120, pct: 30 },
+  { id: 'bronze', name: 'برنز', gb: 100, pct: 12 },
+  { id: 'silver', name: 'نقره', gb: 500, pct: 15 },
+  { id: 'gold', name: 'طلا', gb: 2048, pct: 18 },
+  { id: 'platinum', name: 'پلاتین', gb: 5120, pct: 20 },
 ]
-export const MAX_PCT = 40 // a deeper partner price is refused (PARTNER_PROGRAM.md: the lowest margin is about 41%)
+export const MAX_PCT = 20 // the ceiling of every partner price (decided 1405/09: at 20% the margin of the biggest plan is ~45%, ~32% after fees and the marketer's 5%); a deeper price is refused
 export const DOWNGRADE_AFTER_MONTHS = 2
 
 export async function tiersGet() {

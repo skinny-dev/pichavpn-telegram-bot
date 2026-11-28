@@ -11,6 +11,12 @@ const ep = (await import('../tgcloud/endpoints/panel.js')).default
 const T = Math.floor(Date.now() / 1000), DAY = 86400
 const tehran = (t) => new Date((t + 12600) * 1000).toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/')
 const kvSet = (k, v) => db.run(sql`INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (${k}, ${v}, 0)`)
+// the decided defaults (1405/09): 10 / 12 / 15 / 18 / 20, and 20% is the ceiling
+check('the default tiers are 10/12/15/18/20 and the ceiling is 20%', (await P.tiersGet()).map((t) => t.pct).join() === '10,12,15,18,20' && P.MAX_PCT === 20)
+check('a tier above the ceiling is refused', P.tiersValidate([{ id: 'a', name: 'a', gb: 0, pct: 10 }, { id: 'b', name: 'b', gb: 100, pct: 21 }]) !== '')
+check('a manual price above the ceiling is refused', await P.partnerSet('1', { pct: 25 }).then(() => false, () => true))
+// the engine tests below are about the RULES (up at once, down after two months …), not the numbers: they run on the former 10/15/20/25/30 table, written straight into the store
+await kvSet('partner:tiers', JSON.stringify([{ id: 'start', name: 'شروع', gb: 0, pct: 10 }, { id: 'bronze', name: 'برنز', gb: 100, pct: 15 }, { id: 'silver', name: 'نقره', gb: 500, pct: 20 }, { id: 'gold', name: 'طلا', gb: 2048, pct: 25 }, { id: 'platinum', name: 'پلاتین', gb: 5120, pct: 30 }]))
 const mk = async (id, o = {}) => db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, pricediscount, Balance, expire, register) VALUES (${id}, ${'p' + id}, ${o.agent ?? 'n'}, ${String(o.pct ?? 0)}, '0', ${String(o.expire ?? 0)}, ${String(T - 90 * DAY)})`)
 const inv = async (user, gb, o = {}) => db.run(sql`INSERT INTO invoice (id_user, id_invoice, username, time_sell, Volume, price_product, Status, name_product, Service_location) VALUES (${user}, ${'i' + Math.random().toString(36).slice(2, 9)}, ${'u' + Math.random().toString(36).slice(2, 6)}, ${String(o.at ?? T - 3 * DAY)}, ${String(gb)}, ${String(o.price ?? 100000)}, ${o.status ?? 'active'}, ${o.name ?? 'پلن'}, 'p')`)
 const ren = async (user, gb, at = T - 2 * DAY) => db.run(sql`INSERT INTO service_other (id_user, username, value, time, price, type, status) VALUES (${user}, 'x', ${JSON.stringify({ volumebuy: String(gb) })}, ${tehran(at)}, '50000', 'extend_user', 'paid')`)
