@@ -19,7 +19,7 @@ import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
 import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
 import { finSetting } from '../lib/panelapi/finance/engine.js'
 import { overview as referralOverview } from '../lib/panelapi/referrals.js'
-import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE } from '../lib/partners.js'
+import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE, brandSettings } from '../lib/partners.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -774,8 +774,12 @@ TOOLS.partner_rules = (() => {
     if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
     const out = {}
     if (input && 'min_charge' in input) { const v = Number(input.min_charge); if (!(v >= 0 && v <= 100000000)) return { error: 'min_charge must be 0 to 100,000,000 toman' }; await minChargeSet(v); out.stored = v }
+    if (input && 'brand_on' in input) { await kvSet('partner:brand_on', input.brand_on ? '1' : '0'); out.stored_brand_on = !!input.brand_on }
+    if (input && 'brand_min' in input) { const t = (await tiersGet()).find((x) => x.id === String(input.brand_min)); if (!t) return { error: 'brand_min must be a tier id', tiers: (await tiersGet()).map((x) => x.id + ' = ' + x.name) }; await kvSet('partner:brand_min', t.id); out.stored_brand_min = t.id }
     const tiers = await tiersGet()
     const waiting = (await all(sql`SELECT key FROM kv WHERE key LIKE 'partner:need:%' AND value != ''`)).length
+    const br = await brandSettings()
+    out.brand_name = { on: br.on, from_tier: `${br.minName} (${br.minPct}%)`, format: '{name}_{7 digits}, e.g. mobile_aria_3948945', how_to_change: '{"tool":"partner_rules","brand_on":true,"brand_min":"<tier id>"} (tier ids: ' + tiers.map((x) => x.id).join(', ') + ')' }
     out.rules = { first_tier_percent: tiers[0].pct, min_first_charge_toman: await minChargeGet(), default_min_charge_toman: DEFAULT_MIN_CHARGE, referred: 'marketer link (ag_ / campaign code) or an invitation from us → the first tier at once', walk_in: 'no marketer → partner list at once, the tier percent and the welcome package only after the first charge of min_first_charge_toman' }
     out.partners_waiting_for_first_charge = waiting
     return out

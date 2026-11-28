@@ -269,7 +269,7 @@ export async function partnerInvite(who, { type = 'n', trialDays = 0 } = {}) {
 const BRAND_BLOCKED = /picha|pichavpn|pichanet|admin|support|official|system|root|null|none|test|vpn|bot|telegram/
 export function brandNameCheck(raw) {
   const name = String(raw ?? '').trim().toLowerCase()
-  if (!/^[a-z][a-z0-9]{2,15}$/.test(name)) return { ok: false, error: 'نام باید ۳ تا ۱۶ حرف لاتین یا عدد باشد و با حرف شروع شود (بدون فاصله و خط تیره).' }
+  if (!/^[a-z][a-z0-9_]{2,19}$/.test(name) || /__|_$/.test(name)) return { ok: false, error: 'نام باید ۳ تا ۲۰ حرف لاتین یا عدد باشد، با حرف شروع شود و فقط یک زیرخط (_) بین کلمه‌ها داشته باشد؛ بدون فاصله (مثل mobile_aria).' }
   if (BRAND_BLOCKED.test(name)) return { ok: false, error: 'این نام مجاز نیست (نام یا نشانی از پیچا، ادمین و پشتیبانی، یا واژهٔ عمومی).' }
   return { ok: true, name }
 }

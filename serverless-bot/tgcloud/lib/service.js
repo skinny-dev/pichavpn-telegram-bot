@@ -43,7 +43,13 @@ export async function generateUsername(T, fromId, method, username, randomString
   }
   const s = (v) => (v === null || v === undefined ? '' : String(v))
   let g
-  switch (usernameMethodKey(T, method)) {
+  const methodKey = usernameMethodKey(T, method)
+  if (brand && !['customUsername', 'customUsernameRandom'].includes(methodKey)) { // a partner with an approved name: «mobile_aria_3948945» = {name}_{7 digits}, whatever the shop's naming method
+    let id = rand7()
+    for (let i = 0; i < 12 && (await one(sql`SELECT 1 AS x FROM invoice WHERE LOWER(username) = ${`${brand}_${id}`.toLowerCase()} LIMIT 1`)); i++) id = rand7()
+    return `${brand}_${id}`
+  }
+  switch (methodKey) {
     case 'usernameSequential':
       if (username === 'NOT_USERNAME' && /^\w{3,32}$/.test(s(namecustom))) username = namecustom
       g = `${s(username)}_${s(user.number_username)}`; break

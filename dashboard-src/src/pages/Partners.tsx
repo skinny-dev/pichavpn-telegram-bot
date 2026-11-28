@@ -154,7 +154,7 @@ function Brand({ st }: { st: State }) {
   const save = useMutation({ mutationFn: (b: object) => api('partner_brand_settings', { body: b }), onSuccess: after, onError: err })
   return (
     <Card><CardHeader><CardTitle className="text-base">نام برند در سرویس‌ها</CardTitle></CardHeader><CardContent className="space-y-2 text-sm" data-testid="brand">
-      <div className="text-xs text-muted-foreground">وقتی روشن باشد، همکارِ واجد شرایط سرویس‌هایش را با نام خودش می‌سازد: <span dir="ltr">acme_a1b2</span> به‌جای <span dir="ltr">pichavpn_a1b2</span>. نام فقط لاتین، یکتا و هرگز نام ما نیست.</div>
+      <div className="text-xs text-muted-foreground">وقتی روشن باشد، همکارِ واجد شرایط سرویس‌هایش را با نام خودش می‌سازد: <span dir="ltr">mobile_aria_3948945</span> (نام همکار + یک شمارهٔ ۷ رقمی) به‌جای <span dir="ltr">pichavpn_a1b2</span>. نام فقط لاتین، یکتا و هرگز نام ما نیست.</div>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant={st.brand.on ? 'default' : 'outline'} data-testid="brand-on" onClick={() => save.mutate({ on: !st.brand.on })}>{st.brand.on ? 'روشن است' : 'خاموش است'}</Button>
         <span className="text-xs">حداقل پله:</span>

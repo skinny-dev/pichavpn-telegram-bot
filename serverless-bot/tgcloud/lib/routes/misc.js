@@ -1,6 +1,6 @@
 // index.php lines 5918–6652: referral page and membership gift, agents (extra volume for a panel user, panel,
 // custom name, request to become an agent), message to the admins, lucky wheel, price commands, renew list, apps, notes.
-import { brandSettings, brandEligibility, brandSet } from '../partners.js'
+import { brandSettings, brandEligibility, brandSet, tiersGet, partnerReferred, minChargeGet } from '../partners.js'
 import { reportText, customersPage, isPartner } from '../partnerhub.js'
 import { sleep } from '../timer.js'
 import { one, all, run, sql, kvGet, kvSet } from '../db.js'
@@ -66,6 +66,27 @@ export async function keyboardAgent(c) {
   if (named) row.push({ text: T.keyboard.selectCustomName })
   return J({ keyboard: [row, [{ text: HUB.report }, { text: HUB.customers }], [{ text: T.textbot.accountWallet }, { text: HUB.support }], [{ text: T.users.backbtn }]], resize_keyboard: true })
 }
+const toFa = (v) => String(v).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
+/** what the bot says BEFORE asking for the application: what a partner gets, the tier table, and how the first price is switched on for THIS person */
+export async function agentIntro(c) {
+  const tiers = await tiersGet(), brand = await brandSettings(), referred = await partnerReferred(c.from_id), min = await minChargeGet()
+  const pad = (t, n) => t + ' '.repeat(Math.max(1, n - Array.from(t).length))
+  const rows = tiers.map((t, i) => `${pad(t.name, 8)}│ ${pad(toFa(t.pct) + '٪', 5)}│ ${i === 0 ? 'از اولین خرید' : toFa(t.gb >= 1024 ? Math.round((t.gb / 1024) * 10) / 10 + ' ترابایت' : t.gb + ' گیگ')}`)
+  const lines = ['💼 <b>همکاری با پیچا</b>', '',
+    'اگه VPN به مشتری‌های مغازه، کانال یا مخاطب‌هات میدی، با «قیمت همکار» از ما می‌خری و به قیمت خودت می‌فروشی؛ سودت اختلاف قیمته.', '',
+    '<b>تخفیف پله‌ای از قیمت لیست</b> (با خرید ۳۰ روز اخیرت بالاتر می‌ره):', `<pre>${'سطح'.padEnd(5)}│ تخفیف │ خرید ۳۰ روز\n${rows.join('\n')}</pre>`, '',
+    '<b>چی دستت میاد:</b>',
+    '🔹 ساخت سرویس تکی و دسته‌ای از همین ربات',
+    '🔹 دیدن مشتری‌ها و تمدیدشون با یک دکمه (اول اونایی که نزدیک اتمامن)',
+    '🔹 گزارش خریدت و اینکه تا سطح بعدی چقدر مونده',
+    brand.on ? `🔹 اسم خودت روی کانفیگ‌ها، مثل <code>mobile_aria_3948945</code> (از سطح «${brand.minName}» به بالا)` : null,
+    '🔹 پشتیبانی با اولویت و خبر زودتر از وضعیت سرورها',
+    '🔹 چند لوکیشن، هم مستقیم هم تانل', '',
+    referred ? `✅ چون با معرف اومدی، بعد از تأیید همون لحظه ${toFa(tiers[0].pct)}٪ تخفیف فعاله.` : (min > 0 ? `✅ بعد از تأیید، با یک بار شارژ کیف پول (حداقل ${numberFormat(min)} تومان) تخفیف پله‌ای فعال می‌شه.` : `✅ بعد از تأیید، تخفیف ${toFa(tiers[0].pct)}٪ فعال می‌شه.`), '',
+    'می‌خوای قبلش کیفیت رو خودت ببینی؟ «اکانت تست» رایگانه.'].filter((x) => x !== null)
+  return lines.join('\n')
+}
+export const agentIntroKb = () => J({ inline_keyboard: [[{ text: '✍️ ثبت درخواست همکاری', callback_data: 'agentstart' }], [{ text: '🎁 اول تست رایگان می‌گیرم', callback_data: 'usertestbtn' }], [{ text: '↩️ بازگشت', callback_data: 'backuser' }]] })
 /** what we ask a shop owner who wants to become a partner (instead of the vague «توضیحات»): everything the administrator needs to decide, with an example */
 export const AGENT_ASK = 'درود 🌿\nبرای ثبت درخواست همکاری، لطفاً در <b>یک پیام</b> بنویسید:\n\n۱) نام فروشگاه یا کسب‌وکار\n۲) شهر\n۳) نوع کار (موبایل‌فروشی، کانال، فروشگاه آنلاین …)\n۴) تقریباً ماهی چند مشتری VPN دارید یا فکر می‌کنید داشته باشید؟\n۵) آیدی تلگرام یا شماره برای تماس\n\nنمونه:\n«موبایل پارس، شیراز، موبایل‌فروشی، حدود ۳۰ مشتری در ماه، @name»'
 export const AGENT_DONE = '✅ درخواست‌تون ثبت شد 🌿\nبررسی می‌شه و نتیجه رو همین‌جا خبر می‌دیم. تا اون موقع می‌تونید با «اکانت تست» کیفیت سرویس رو خودتون امتحان کنید.\nاگه سؤالی بود، از «پشتیبانی» بنویسید.'
@@ -275,7 +296,7 @@ export const miscRoutes = [
         await sendmessage(c.from_id, `درود 🌿\n${why}`, backuserKb(c), 'HTML')
         return true
       }
-      await sendmessage(c.from_id, `درود 🌿\nنام برند خود را به لاتین بنویسید (۳ تا ۱۶ حرف یا عدد، بدون فاصله؛ مثال: acmephone).\nنام کاربری سرویس‌هایی که می‌سازید به این شکل می‌شود: <code>acmephone_a1b2</code>${c.user.namecustom ? `\nنام فعلی شما: <code>${String(c.user.namecustom).replace(/[<>&]/g, '')}</code>` : ''}`, backuserKb(c), 'HTML')
+      await sendmessage(c.from_id, `درود 🌿\nنام برند خود را به لاتین بنویسید (۳ تا ۲۰ حرف یا عدد، بدون فاصله؛ می‌توانید یک _ بین کلمه‌ها بگذارید؛ مثال: mobile_aria).\nنام کاربری سرویس‌هایی که می‌سازید به این شکل می‌شود: <code>mobile_aria_3948945</code>${c.user.namecustom ? `\nنام فعلی شما: <code>${String(c.user.namecustom).replace(/[<>&]/g, '')}</code>` : ''}`, backuserKb(c), 'HTML')
     } else await sendmessage(c.from_id, c.T.users.selectusername, backuserKb(c), 'html')
     await step(c, 'selectusernamecustom')
     return true
@@ -305,8 +326,17 @@ export const miscRoutes = [
     if (n(user.Balance) < n(c.setting.agentreqprice)) { await sendmessage(c.from_id, sprintf(A.insufficientbalanceagent, numberFormat(n(c.setting.agentreqprice))), backuserKb(c), 'HTML'); return true }
     if (Number((await one(sql`SELECT COUNT(*) AS n FROM Requestagent WHERE id = ${c.from_id}`)).n) !== 0) { await sendmessage(c.from_id, A.requestreport, null, 'html'); return true }
     if (user.agent !== 'f') { await sendmessage(c.from_id, A.isagent, null, 'html'); return true }
-    if (c.datain === 'requestagent') await Editmessagetext(c.from_id, c.message_id, AGENT_ASK, backuserKb(c), 'HTML')
-    else await sendmessage(c.from_id, AGENT_ASK, backuserKb(c), 'html')
+    const intro = await agentIntro(c) // first what a partner gets and how this person starts; the form follows when he taps «ثبت درخواست»
+    if (c.datain === 'requestagent') await Editmessagetext(c.from_id, c.message_id, intro, agentIntroKb(), 'HTML')
+    else await sendmessage(c.from_id, intro, agentIntroKb(), 'HTML')
+    return true
+  },
+  async (c) => {
+    if (c.datain !== 'agentstart') return false
+    const A = c.T.users.agent
+    if (Number((await one(sql`SELECT COUNT(*) AS n FROM Requestagent WHERE id = ${c.from_id}`)).n) !== 0) { await sendmessage(c.from_id, A.requestreport, null, 'html'); return true }
+    if (c.user.agent !== 'f') { await sendmessage(c.from_id, A.isagent, null, 'html'); return true }
+    await Editmessagetext(c.from_id, c.message_id, AGENT_ASK, backuserKb(c), 'HTML')
     await step(c, 'getagentrequest')
     return true
   },

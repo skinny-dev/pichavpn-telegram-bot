@@ -30,7 +30,16 @@ check("the link attaches the shop to the marketer's campaign", !!(await db.get(s
 check('a new person sees the rules first (as always)', body(SHOP).some((t) => /قوانین/.test(t)) && !body(SHOP).some((t) => /نام فروشگاه/.test(t)))
 calls.length = 0
 await cb(SHOP, 'acceptrule')
-check('…and after accepting them the clear partnership form follows (the action is not lost)', body(SHOP).some((t) => /نام فروشگاه/.test(t) && /شهر/.test(t) && /نمونه/.test(t)), JSON.stringify(body(SHOP).map((t) => t.slice(0, 40))))
+check('…and after accepting them the partnership INTRO follows (what a partner gets, the tier table, how this person starts)', body(SHOP).some((t) => /همکاری با پیچا/.test(t) && /تخفیف پله‌ای/.test(t) && /شروع/.test(t) && /پنل|مشتری‌ها/.test(t)), JSON.stringify(body(SHOP).map((t) => t.slice(0, 40))))
+check('…the intro tells a marketer-referred person that the first tier is active at once after approval', body(SHOP).some((t) => /با معرف اومدی/.test(t) && /همون لحظه/.test(t)))
+check('…and has the buttons: apply / free test / back', to(SHOP).some(([, p]) => ['agentstart', 'usertestbtn', 'backuser'].every((d) => JSON.stringify(p.reply_markup ?? '').includes(d))))
+calls.length = 0
+await cb(SHOP, 'agentstart')
+check('tapping «ثبت درخواست» opens the clear form (name, city, kind, volume, contact + an example)', body(SHOP).some((t) => /نام فروشگاه/.test(t) && /شهر/.test(t) && /نمونه/.test(t)), JSON.stringify(body(SHOP).map((t) => t.slice(0, 40))))
+// a walk-in reads a different last line
+await db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, Balance, step, User_Status, roll_Status) VALUES ('8820', 'w8820', 'f', '0', 'home', 'Active', 1)`)
+calls.length = 0; await msg(8820, '/start agent')
+check('a walk-in intro says the tier starts after a first wallet charge (with the amount)', body(8820).some((t) => /همکاری با پیچا/.test(t) && /حداقل/.test(t) && /شارژ کیف پول/.test(t)), JSON.stringify(body(8820)).slice(0, 200))
 check('the click is counted', Number((await db.get(sql`SELECT value FROM kv WHERE key = 'care:n:ag:ali-mobile'`))?.value) === 1)
 check('the remembered action is used up (not replayed later)', !((await db.get(sql`SELECT value FROM kv WHERE key = ${'pending_action:' + SHOP}`))?.value))
 // the same for a channel button «خرید» pressed by a new person: after the rules the buy menu follows
