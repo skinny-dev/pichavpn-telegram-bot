@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 interface Link {
   id: number; name: string; platform: string; code: string; tg_user_id: string | null; contact: string | null
   price: number; pays_commission: number; commission_percent: number | null; active: number; notes: string | null; expense_id: number | null; expense_at: number | null; ad_date: number | null; created_at: number
-  signups: number; buyers: number; orders: number; revenue: number; percent: number; commission: number; paid: number; due: number; cost: number; net: number; roi: number | null
+  signups: number; partner_requests: number; partners_waiting: number; partners_approved: number; partners_now: number; buyers: number; orders: number; revenue: number; percent: number; commission: number; paid: number; due: number; cost: number; net: number; roi: number | null
 }
 interface Data { links: Link[]; global_percent: number; bot: string; tg_referrers: { id: string; username: string; count: number }[] }
 interface Form { id: number; name: string; platform: string; code: string; tg_user_id: string; contact: string; price: string; pays_commission: boolean; commission_percent: string; active: boolean; notes: string; ad_date: string }
@@ -91,7 +91,7 @@ export default function Referrals() {
               {l.ad_date ? <div className="mt-1 text-xs text-muted-foreground">تاریخ تبلیغ: <span dir="ltr">{jDate(l.ad_date)}</span></div> : null}
               {(l.contact || l.tg_user_id) && <div className="mt-1 text-xs text-muted-foreground" dir="auto">{l.contact}{l.tg_user_id ? ` · tg ${l.tg_user_id}` : ''}</div>}
               <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                {[['ورودی', fmtNum(l.signups)], ['خریدار', fmtNum(l.buyers)], ['سفارش', fmtNum(l.orders)], ['فروش', fmtToman(l.revenue)], ['هزینه', fmtToman(l.cost)], ['سود خالص', fmtToman(l.net)]].map(([k, v]) => (
+                {[['ورودی', fmtNum(l.signups)], ['درخواست همکاری', fmtNum(l.partner_requests)], ['همکار تأییدشده', fmtNum(l.partners_approved)], ['خریدار', fmtNum(l.buyers)], ['سفارش', fmtNum(l.orders)], ['فروش', fmtToman(l.revenue)], ['هزینه', fmtToman(l.cost)], ['سود خالص', fmtToman(l.net)]].map(([k, v]) => (
                   <div key={k} className="min-w-0 rounded-lg bg-muted/50 p-2"><dt className="text-muted-foreground">{k}</dt><dd className="tabular truncate font-medium">{v}</dd></div>
                 ))}
               </dl>

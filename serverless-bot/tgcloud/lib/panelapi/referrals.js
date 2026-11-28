@@ -28,6 +28,8 @@ function money(link, revenue, paidOut, global) {
   return { percent: pct, commission, paid: paidOut, due: Math.max(0, commission - paidOut), cost, net: revenue - cost - commission, roi: cost + commission > 0 ? phpRound(((revenue - cost - commission) / (cost + commission)) * 100, 1) : null }
 }
 
+/** a person who came through several marketers' links counts for the FIRST one only (for the partnership numbers) */
+const FIRST = 's.id = (SELECT MIN(s2.id) FROM referral_signups s2 WHERE s2.user_id = s.user_id)'
 export async function overview() {
   const global = parseFloat(await qVal('SELECT affiliatespercentage FROM setting LIMIT 1', [])) || 0
   const sale = "CAST(i.price_product AS INTEGER) > 0 AND LOWER(i.Status) NOT IN ('unpaid','expire','unsuccessful','reject') AND i.name_product NOT LIKE '%تست%'"
@@ -36,13 +38,17 @@ export async function overview() {
       (SELECT COUNT(DISTINCT i.id_user) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale}) AS buyers,
       (SELECT COUNT(*) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale}) AS orders,
       (SELECT COALESCE(SUM(CAST(i.price_product AS INTEGER)),0) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale}) AS revenue,
+      (SELECT COUNT(*) FROM referral_signups s JOIN Requestagent r ON r.id = s.user_id WHERE s.link_id = l.id AND ${FIRST}) AS partner_requests,
+      (SELECT COUNT(*) FROM referral_signups s JOIN Requestagent r ON r.id = s.user_id WHERE s.link_id = l.id AND ${FIRST} AND r.status = 'waiting') AS partners_waiting,
+      (SELECT COUNT(*) FROM referral_signups s JOIN Requestagent r ON r.id = s.user_id WHERE s.link_id = l.id AND ${FIRST} AND r.status = 'accept') AS partners_approved,
+      (SELECT COUNT(*) FROM referral_signups s JOIN user u ON u.id = s.user_id WHERE s.link_id = l.id AND ${FIRST} AND u.agent IN ('n', 'n2')) AS partners_now,
       (SELECT COALESCE(SUM(p.amount),0) FROM referral_payouts p WHERE p.link_id = l.id) AS paid_out,
       (SELECT e.created_at FROM expenses e WHERE e.id = l.expense_id) AS expense_at
     FROM referral_links l ORDER BY CAST(l.active AS INTEGER) DESC, l.id DESC`, [])
   const links = rows.map((r) => {
     const m = money(r, parseInt(r.revenue) || 0, parseInt(r.paid_out) || 0, global)
     const o = { ...r }
-    for (const k of ['id', 'signups', 'buyers', 'orders', 'revenue', 'price', 'pays_commission', 'active', 'created_at']) o[k] = parseInt(r[k]) || 0
+    for (const k of ['id', 'signups', 'partner_requests', 'partners_waiting', 'partners_approved', 'partners_now', 'buyers', 'orders', 'revenue', 'price', 'pays_commission', 'active', 'created_at']) o[k] = parseInt(r[k]) || 0
     o.expense_id = r.expense_id === null ? null : parseInt(r.expense_id)
     o.expense_at = r.expense_at === null ? null : parseInt(r.expense_at)
     o.ad_date = r.ad_date === null || r.ad_date === undefined ? null : parseInt(r.ad_date)

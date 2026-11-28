@@ -1,5 +1,5 @@
 // ONE CLI-only diagnostics endpoint (the platform allows at most 100 modules per app, so the seven small admin_* endpoints live here as «tools»).
-//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, servers, channel_stats, support_export, activity, payments, tetra
+//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, marketers, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
 import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
@@ -18,6 +18,7 @@ import { jdate } from '../lib/fmt.js'
 import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
 import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
 import { finSetting } from '../lib/panelapi/finance/engine.js'
+import { overview as referralOverview } from '../lib/panelapi/referrals.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -709,6 +710,26 @@ TOOLS.fees = (() => {
     if (input?.sync) out.ledger_sync = await finSyncLegacy(20000).then((r) => ({ posted: r.legacy_payment, reposted: r.reposted, issues: r.issues.slice(0, 5) }), (e) => ({ error: String(e?.message ?? e).slice(0, 160) }))
     out.note = 'the same percent feeds the dashboard stats (آمار) and the ledger; past periods change too. A fee you already typed as an expense by hand would be counted twice: remove it.'
     return out
+  }
+  return main
+})()
+
+// marketers: who brought how many (campaigns = the marketers' links). Counts now; the percent is added later on the campaign (pays_commission + commission_percent) and the same report then shows the commission.
+//   npx tgcloud run endpoints/admin_report '{"tool":"marketers"}'
+TOOLS.marketers = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const bot = String((await kvGet('config:usernamebot')) || '').replace(/^@+/, ''), o = await referralOverview()
+    const rows = o.links.map((l) => ({
+      name: l.name, code: l.code, active: !!l.active,
+      partner_link: bot ? `https://t.me/${bot}?start=ag_${l.code}` : 'set config:usernamebot', customer_link: bot ? `https://t.me/${bot}?start=${l.code}` : null,
+      brought: l.signups, partner_requests: l.partner_requests, waiting: l.partners_waiting, approved: l.partners_approved, partners_now: l.partners_now,
+      buyers: l.buyers, orders: l.orders, revenue_toman: l.revenue,
+      commission_percent: l.percent, commission_toman: l.commission, paid_toman: l.paid, due_toman: l.due,
+    }))
+    const sum = (k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0)
+    return { marketers: rows, totals: { brought: sum('brought'), partner_requests: sum('partner_requests'), approved: sum('approved'), buyers: sum('buyers'), revenue_toman: sum('revenue_toman') },
+      note: 'brought = people who started the bot through the link; a person belongs to the first marketer whose link he used. Percent: set it on the campaign later (pays_commission + commission_percent); commission/due are then filled in here and in the Mini App.' }
   }
   return main
 })()
