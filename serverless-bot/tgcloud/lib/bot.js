@@ -229,7 +229,7 @@ async function main(c) {
     await run(sql`UPDATE user SET roll_Status = 1 WHERE id = ${c.from_id}`)
     const pa = await pendingTake(c) // what the person came for (buy, test, partnership …) continues now
     if (!pa) return
-    c.text = pa; c.datain = ''
+    c.text = pa; c.datain = ''; c.pendingAction = pa // …and is remembered again if the next gate (joining the channel) also has to come first
   }
   if (S.Bot_Status === 'botstatusoff' && !c.isAdmin) {
     await sendmessage(c.from_id, T.textbot.botOff, null, 'html')
@@ -244,7 +244,7 @@ async function main(c) {
         await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text: T.users.channel.confirmed, show_alert: false, cache_time: 5 })
         const pa = await pendingTake(c)
         if (!pa) { await sendStartMessage(c, c.from_id, c.keyboard); return }
-        c.text = pa; c.datain = '' // joined: the action they came for continues
+        c.text = pa; c.datain = ''; c.pendingAction = pa // joined: the action they came for continues
       } else {
       await Editmessagetext(c.from_id, c.message_id, T.textbot.channel, await channelKeyboard(c, channels))
       await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text: T.users.channel.notconfirmed, show_alert: true, cache_time: 5 })

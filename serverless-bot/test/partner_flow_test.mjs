@@ -2,7 +2,7 @@
 // the approval (bot button or panel: ONE decision) → a friendly message with the first steps and buttons.
 //   node --no-warnings --import ./register.mjs partner_flow_test.mjs <export dir>
 import { seed } from './seed.mjs'
-import { db, calls } from 'sdk'
+import { db, calls, replies } from 'sdk'
 import { sql } from 'sdk/db'
 let fails = 0
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' ' + extra}`); if (!ok) fails++ }
@@ -139,4 +139,26 @@ const AR = (await import('../tgcloud/endpoints/admin_report.js')).default
 await db.run(sql`DELETE FROM kv WHERE key = 'config:usernamebot'`); await db.run(sql`INSERT INTO kv (key, value, updated_at) VALUES ('config:usernamebot', '@pichanet_bot', 0)`)
 const mk = (await AR({ tool: 'marketers' }, {})).marketers
 check('the marketers tool tells which link to give: the plain one for a recruitment campaign, the ag_ one for an ordinary campaign', mk.find((m) => m.code === 'hire-1').give_the_marketer === 'https://t.me/pichanet_bot?start=hire-1' && mk.find((m) => m.code === 'adv-1').give_the_marketer === 'https://t.me/pichanet_bot?start=ag_adv-1', JSON.stringify(mk.map((m) => [m.code, m.give_the_marketer])))
+
+// 7) the order from a real screenshot: link → RULES → JOIN THE CHANNEL → the partnership page (the intent must survive BOTH gates)
+await db.run(sql`DELETE FROM channels`); await db.run(sql`INSERT INTO channels (remark, linkjoin, link) VALUES ('کانال پیچا', 'https://t.me/pichanet', '@pichanet')`)
+await db.run(sql`DELETE FROM user WHERE id = '8840'`)
+replies.getChatMember = () => ({ status: 'left', user: { id: 8840 } }) // not in the channel yet
+calls.length = 0; await msg(8840, '/start hire-1')
+check('step 1: the rules come first', body(8840).some((t) => /قوانین/.test(t)) && !body(8840).some((t) => /همکاری با پیچا/.test(t)))
+calls.length = 0; await cb(8840, 'acceptrule')
+check('step 2: after the rules he is asked to join the channel (not welcomed, not yet the partnership page)', JSON.stringify(calls.map(([, p]) => p)).includes('confirmchannel') && !body(8840).some((t) => /همکاری با پیچا/.test(t)), JSON.stringify(body(8840).map((t) => t.slice(0, 30))))
+replies.getChatMember = () => ({ status: 'member', user: { id: 8840 } }) // he joined
+calls.length = 0; await cb(8840, 'confirmchannel')
+check('step 3: after joining, the partnership page opens (the screenshot bug: it showed the plain welcome and forgot why he came)', body(8840).some((t) => /همکاری با پیچا/.test(t) && /تخفیف پله‌ای/.test(t)), JSON.stringify(body(8840).map((t) => t.slice(0, 40))))
+check('…and not the ordinary welcome message', !body(8840).some((t) => /خوش اومدی به پیچا/.test(t)))
+// the same order for a channel «buy» button
+await db.run(sql`DELETE FROM user WHERE id = '8841'`)
+replies.getChatMember = () => ({ status: 'left', user: { id: 8841 } })
+calls.length = 0; await msg(8841, '/start buy'); await cb(8841, 'acceptrule')
+replies.getChatMember = () => ({ status: 'member', user: { id: 8841 } })
+calls.length = 0; await cb(8841, 'confirmchannel')
+check('a channel «buy» button through rules + channel ends in the buy flow, not the plain welcome', !body(8841).some((t) => /خوش اومدی به پیچا/.test(t)) && body(8841).length >= 1, JSON.stringify(body(8841).map((t) => t.slice(0, 30))))
+delete replies.getChatMember
+await db.run(sql`DELETE FROM channels`)
 console.log(fails ? `\n${fails} FAILED` : '\nall passed'); process.exit(fails ? 1 : 0)
