@@ -117,4 +117,26 @@ await db.run(sql`DELETE FROM kv WHERE key = 'partner:min_charge'`)
 await walkin(8812, '400000'); calls.length = 0; await cb(ADMIN, 'addagentrequest_8812')
 check('a walk-in who already has enough in the wallet gets the tier at once', Number((await db.get(sql`SELECT pricediscount FROM user WHERE id = '8812'`)).pricediscount) === 10)
 // a marketer's shop is unchanged: 10% at once even with an empty wallet (section 3 above)
+
+// 6) a campaign of type «جذب همکار» (platform partner): its PLAIN link opens the partnership page; an ordinary campaign still shows the start page
+await db.run(sql`DELETE FROM referral_links WHERE code IN ('hire-1', 'adv-1')`)
+await db.run(sql`INSERT INTO referral_links (name, platform, code, active, created_at) VALUES ('بازاریاب حسن', 'partner', 'hire-1', 1, 1)`)
+await db.run(sql`INSERT INTO referral_links (name, platform, code, active, created_at) VALUES ('تبلیغ اینستاگرام', 'instagram', 'adv-1', 1, 1)`)
+await db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, Balance, step, User_Status, roll_Status) VALUES ('8830', 'h8830', 'f', '0', 'home', 'Active', 1)`)
+calls.length = 0; await msg(8830, '/start hire-1')
+check('a partner-recruitment link (plain, no ag_) goes straight to the partnership page', body(8830).some((t) => /همکاری با پیچا/.test(t) && /تخفیف پله‌ای/.test(t)), JSON.stringify(body(8830).map((t) => t.slice(0, 40))))
+check('…and the shop is attached to that marketer', !!(await db.get(sql`SELECT 1 AS x FROM referral_signups s JOIN referral_links l ON l.id = s.link_id WHERE s.user_id = '8830' AND l.code = 'hire-1'`)))
+check('…as a marketer-referred person (the intro says the first tier is active at once)', body(8830).some((t) => /با معرف اومدی/.test(t)))
+await db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, Balance, step, User_Status, roll_Status) VALUES ('8831', 'h8831', 'f', '0', 'home', 'Active', 1)`)
+calls.length = 0; await msg(8831, '/start adv-1')
+check('an ordinary campaign link still shows the normal start page (not the partnership page)', !body(8831).some((t) => /همکاری با پیچا/.test(t)) && body(8831).length >= 1)
+// a brand-new person with a partner-recruitment link: rules first, then the partnership page
+calls.length = 0; await msg(8832, '/start hire-1')
+check('a brand-new person: rules first', body(8832).some((t) => /قوانین/.test(t)) && !body(8832).some((t) => /همکاری با پیچا/.test(t)))
+calls.length = 0; await cb(8832, 'acceptrule')
+check('…then the partnership page (the intent survives the rules)', body(8832).some((t) => /همکاری با پیچا/.test(t)), JSON.stringify(body(8832).map((t) => t.slice(0, 40))))
+const AR = (await import('../tgcloud/endpoints/admin_report.js')).default
+await db.run(sql`DELETE FROM kv WHERE key = 'config:usernamebot'`); await db.run(sql`INSERT INTO kv (key, value, updated_at) VALUES ('config:usernamebot', '@pichanet_bot', 0)`)
+const mk = (await AR({ tool: 'marketers' }, {})).marketers
+check('the marketers tool tells which link to give: the plain one for a recruitment campaign, the ag_ one for an ordinary campaign', mk.find((m) => m.code === 'hire-1').give_the_marketer === 'https://t.me/pichanet_bot?start=hire-1' && mk.find((m) => m.code === 'adv-1').give_the_marketer === 'https://t.me/pichanet_bot?start=ag_adv-1', JSON.stringify(mk.map((m) => [m.code, m.give_the_marketer])))
 console.log(fails ? `\n${fails} FAILED` : '\nall passed'); process.exit(fails ? 1 : 0)

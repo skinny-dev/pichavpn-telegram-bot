@@ -22,7 +22,7 @@ interface Data { links: Link[]; global_percent: number; bot: string; tg_referrer
 interface Form { id: number; name: string; platform: string; code: string; tg_user_id: string; contact: string; price: string; pays_commission: boolean; commission_percent: string; active: boolean; notes: string; ad_date: string }
 const EMPTY: Form = { id: 0, name: '', platform: 'instagram', code: '', tg_user_id: '', contact: '', price: '', pays_commission: false, commission_percent: '', active: true, notes: '', ad_date: '' }
 const jDate = (ts: number | null | undefined) => (ts ? latinDigits(fmtTs(ts, true)) : '')
-const PLATFORMS: Record<string, string> = { instagram: 'اینستاگرام', telegram: 'تلگرام', youtube: 'یوتیوب', tiktok: 'تیک‌تاک', website: 'سایت/وبلاگ', other: 'سایر' }
+const PLATFORMS: Record<string, string> = { instagram: 'اینستاگرام', telegram: 'تلگرام', youtube: 'یوتیوب', tiktok: 'تیک‌تاک', website: 'سایت/وبلاگ', partner: 'جذب همکار (مستقیم به صفحهٔ همکاری)', other: 'سایر' }
 
 export default function Referrals() {
   const qc = useQueryClient()

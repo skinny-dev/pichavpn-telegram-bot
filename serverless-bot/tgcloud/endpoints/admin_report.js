@@ -723,7 +723,9 @@ TOOLS.marketers = (() => {
     const bot = String((await kvGet('config:usernamebot')) || '').replace(/^@+/, ''), o = await referralOverview()
     const rows = o.links.map((l) => ({
       name: l.name, code: l.code, active: !!l.active,
+      type: l.platform === 'partner' ? 'partner-recruitment (the plain link opens the partnership page)' : 'ordinary campaign',
       partner_link: bot ? `https://t.me/${bot}?start=ag_${l.code}` : 'set config:usernamebot', customer_link: bot ? `https://t.me/${bot}?start=${l.code}` : null,
+      give_the_marketer: bot ? (l.platform === 'partner' ? `https://t.me/${bot}?start=${l.code}` : `https://t.me/${bot}?start=ag_${l.code}`) : null,
       brought: l.signups, partner_requests: l.partner_requests, waiting: l.partners_waiting, approved: l.partners_approved, partners_now: l.partners_now,
       buyers: l.buyers, orders: l.orders, revenue_toman: l.revenue, of_which_renewals_toman: l.renewal_revenue,
       commission_percent: l.percent, commission_toman: l.commission, paid_toman: l.paid, due_toman: l.due,

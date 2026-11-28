@@ -171,12 +171,16 @@ async function main(c) {
   // /start <code>
   if (c.text.includes('/start ') && user.step !== 'gettextSystemMessage') {
     const affiliatesid = c.text.split(' ')[1]
+    let partnerLanding = false
     if (affiliatesid === 'fit') { await showFitMenu(c); await step(c, 'home'); return } // channel / message button: «best server for my use»
     const sa = await startAction(c, affiliatesid)
     if (sa === 'fit') { await showFitMenu(c); await step(c, 'home'); return }
     if (sa) { c.text = sa; c.pendingAction = sa } // the same text the customer would have typed: the ordinary routes answer (buy menu, free test, help …)
     else if (!['start', 'usertest', '/start', 'buy', 'help'].includes(affiliatesid)) {
-      if (!/^\d+$/.test(affiliatesid ?? '') && (await referralCampaignAttach(c.from_id, affiliatesid)) !== null) {
+      const camp = !/^\d+$/.test(affiliatesid ?? '') ? await referralCampaignAttach(c.from_id, affiliatesid) : null
+      if (camp && camp.platform === 'partner') { c.text = c.T.textbot.requestAgent; c.pendingAction = c.text; partnerLanding = true } // a partner-recruitment campaign: the plain link goes straight to the partnership page
+      else {
+      if (camp) {
         await sendStartMessage(c, c.from_id, c.keyboard)
         await step(c, 'home')
         return
@@ -205,8 +209,9 @@ async function main(c) {
         await step(c, 'home')
       }
       return
+      }
     }
-    if (!sa) c.text = affiliatesid
+    if (!sa && !partnerLanding) c.text = affiliatesid
   }
   if (intval(user.verify) === 0 && !c.isAdmin && S.verifystart === 'onverify') {
     await sendmessage(c.from_id, sprintf(T.users.account.notVerifiedNotice, S.id_support), null, 'html')

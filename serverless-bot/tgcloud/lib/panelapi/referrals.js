@@ -71,7 +71,7 @@ export async function list() {
 export async function save(b) {
   const name = str(b.name).trim()
   if (name === '' || [...name].length > 200) fail('نام تبلیغ‌دهنده/کمپین را وارد کنید', 422)
-  const platform = ['instagram', 'telegram', 'youtube', 'tiktok', 'website', 'other'].includes(str(b.platform)) ? str(b.platform) : 'other'
+  const platform = ['instagram', 'telegram', 'youtube', 'tiktok', 'website', 'partner', 'other'].includes(str(b.platform)) ? str(b.platform) : 'other'
   const price = moneyInput(b.price ?? '0')
   const pays = b.pays_commission ? 1 : 0
   const pct = b.commission_percent === '' || b.commission_percent === null || b.commission_percent === undefined ? null : parseInt(b.commission_percent) || 0
