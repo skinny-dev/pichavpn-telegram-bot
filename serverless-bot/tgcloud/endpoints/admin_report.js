@@ -19,7 +19,7 @@ import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
 import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
 import { finSetting } from '../lib/panelapi/finance/engine.js'
 import { overview as referralOverview } from '../lib/panelapi/referrals.js'
-import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE, brandSettings, rulesGet, rulesSet } from '../lib/partners.js'
+import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE, brandSettings, rulesGet, rulesSet, tiersSet } from '../lib/partners.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -769,6 +769,7 @@ TOOLS.partner_prices = (() => {
 // partner_rules: how a new partner starts. Came through a marketer / from us → the first tier (10%) at once. A walk-in applicant → the partner list at once, the tier percent after a first wallet charge of `min_charge`.
 //   npx tgcloud run endpoints/admin_report '{"tool":"partner_rules"}'                       → the rules and who is waiting for the first charge
 //   … '{"tool":"partner_rules","min_gb":20,"grace_days":30,"warn_days":7,"tests":3}'  → the minimum sales per 30 days to keep the partner price, the grace and warning periods, and the extra free tests given at approval
+//   … '{"tool":"partner_rules","tier_pcts":[10,12,15,18,20]}'  → change ONLY the tier discounts (one number per tier, thresholds stay); the output shows the margin of every tier at the stored cost per GB
 //   … '{"tool":"partner_rules","min_charge":300000}'                                          → set the minimum first charge in toman (0 = no minimum: everybody gets the tier at once)
 TOOLS.partner_rules = (() => {
   async function main(input, ctx) {
@@ -781,7 +782,15 @@ TOOLS.partner_rules = (() => {
     out.keep_the_price = await rulesGet().then((r) => ({ min_gb_per_30_days: r.minGb, grace_days_after_approval: r.graceDays, warning_days_before_the_price_goes_back: r.warnDays, extra_free_tests_at_approval: r.tests, note: 'only partners approved/invited after this version are counted (they have a start day); trial partners are exempt; works only in live partner mode; 0 = off' }))
     if (input && 'brand_on' in input) { await kvSet('partner:brand_on', input.brand_on ? '1' : '0'); out.stored_brand_on = !!input.brand_on }
     if (input && 'brand_min' in input) { const t = (await tiersGet()).find((x) => x.id === String(input.brand_min)); if (!t) return { error: 'brand_min must be a tier id', tiers: (await tiersGet()).map((x) => x.id + ' = ' + x.name) }; await kvSet('partner:brand_min', t.id); out.stored_brand_min = t.id }
+    if (input && 'tier_pcts' in input) { // only the percents change (names, ids and the GB thresholds stay); existing partners move down only through the normal 2-month rule
+      const cur = await tiersGet(), want = Array.isArray(input.tier_pcts) ? input.tier_pcts : []
+      if (want.length !== cur.length) return { error: `tier_pcts needs ${cur.length} numbers (one per tier: ${cur.map((t) => t.name).join(', ')})` }
+      try { out.stored_tiers = (await tiersSet(cur.map((t, i) => ({ ...t, pct: want[i] })))).map((t) => `${t.name}: from ${t.gb} GB → ${t.pct}%`) } catch (e) { return { error: String(e?.message ?? e) } }
+    }
     const tiers = await tiersGet()
+    const costGb = Number(await kvGet('events:cost_gb')) || 1877, otherPct = 13 // gateway fees + support + the marketer's 5%
+    const mg = (gb, price, off) => Math.round((1 - (costGb * gb) / (price * (1 - off / 100))) * 100)
+    out.tiers_now = tiers.map((t) => ({ tier: t.name, from_gb_30d: t.gb, discount_pct: t.pct, margin_pct_40gb_plan: mg(40, 200000, t.pct), margin_pct_400gb_plan: mg(400, 1680000, t.pct), net_after_13pct_costs_400gb: mg(400, 1680000, t.pct) - otherPct, cost_per_gb_used: costGb }))
     const waiting = (await all(sql`SELECT key FROM kv WHERE key LIKE 'partner:need:%' AND value != ''`)).length
     const br = await brandSettings()
     out.brand_name = { on: br.on, from_tier: `${br.minName} (${br.minPct}%)`, format: '{name}_{7 digits}, e.g. mobile_aria_3948945', how_to_change: '{"tool":"partner_rules","brand_on":true,"brand_min":"<tier id>"} (tier ids: ' + tiers.map((x) => x.id).join(', ') + ')' }
