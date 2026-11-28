@@ -37,7 +37,9 @@ export async function overview() {
       (SELECT COUNT(*) FROM referral_signups s WHERE s.link_id = l.id) AS signups,
       (SELECT COUNT(DISTINCT i.id_user) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale}) AS buyers,
       (SELECT COUNT(*) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale}) AS orders,
-      (SELECT COALESCE(SUM(CAST(i.price_product AS INTEGER)),0) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale}) AS revenue,
+      (SELECT COALESCE(SUM(CAST(so.price AS INTEGER)),0) FROM referral_signups s JOIN service_other so ON so.id_user = s.user_id WHERE s.link_id = l.id AND so.type = 'extend_user' AND LOWER(so.status) = 'paid') AS renewal_revenue,
+      (SELECT COALESCE(SUM(CAST(i.price_product AS INTEGER)),0) FROM referral_signups s JOIN invoice i ON i.id_user = s.user_id WHERE s.link_id = l.id AND ${sale})
+        + (SELECT COALESCE(SUM(CAST(so.price AS INTEGER)),0) FROM referral_signups s JOIN service_other so ON so.id_user = s.user_id WHERE s.link_id = l.id AND so.type = 'extend_user' AND LOWER(so.status) = 'paid') AS revenue,
       (SELECT COUNT(*) FROM referral_signups s JOIN Requestagent r ON r.id = s.user_id WHERE s.link_id = l.id AND ${FIRST}) AS partner_requests,
       (SELECT COUNT(*) FROM referral_signups s JOIN Requestagent r ON r.id = s.user_id WHERE s.link_id = l.id AND ${FIRST} AND r.status = 'waiting') AS partners_waiting,
       (SELECT COUNT(*) FROM referral_signups s JOIN Requestagent r ON r.id = s.user_id WHERE s.link_id = l.id AND ${FIRST} AND r.status = 'accept') AS partners_approved,
@@ -48,7 +50,7 @@ export async function overview() {
   const links = rows.map((r) => {
     const m = money(r, parseInt(r.revenue) || 0, parseInt(r.paid_out) || 0, global)
     const o = { ...r }
-    for (const k of ['id', 'signups', 'partner_requests', 'partners_waiting', 'partners_approved', 'partners_now', 'buyers', 'orders', 'revenue', 'price', 'pays_commission', 'active', 'created_at']) o[k] = parseInt(r[k]) || 0
+    for (const k of ['id', 'renewal_revenue', 'signups', 'partner_requests', 'partners_waiting', 'partners_approved', 'partners_now', 'buyers', 'orders', 'revenue', 'price', 'pays_commission', 'active', 'created_at']) o[k] = parseInt(r[k]) || 0
     o.expense_id = r.expense_id === null ? null : parseInt(r.expense_id)
     o.expense_at = r.expense_at === null ? null : parseInt(r.expense_at)
     o.ad_date = r.ad_date === null || r.ad_date === undefined ? null : parseInt(r.ad_date)

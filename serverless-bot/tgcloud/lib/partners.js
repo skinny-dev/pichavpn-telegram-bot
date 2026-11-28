@@ -104,6 +104,40 @@ export async function partnerChargeCheck(u) {
   return pct
 }
 
+// ---------- rules that keep the partner price honest: a minimum of sales per 30 days (after a grace period, with a warning first), and a few extra free tests at approval
+export const RULES_DEFAULT = { minGb: 20, graceDays: 30, warnDays: 7, tests: 3 }
+export const rulesGet = async () => ({ ...RULES_DEFAULT, ...parse(await kvGet('partner:rules'), {}) })
+export async function rulesSet(patch) {
+  const next = await rulesGet()
+  for (const k of ['minGb', 'graceDays', 'warnDays', 'tests']) if (k in patch) { const v = Number(patch[k]); if (!(v >= 0 && v <= 100000)) throw new Error(k + ' must be between 0 and 100000'); next[k] = Math.trunc(v) }
+  await kvSet('partner:rules', JSON.stringify(next))
+  return next
+}
+const toFaDigits = (v) => String(v).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
+/** the day a partner started (approval / invitation): the minimum-sales rule counts from it. Partners without a start day (the ones we already had) are never touched by the rule. */
+export const partnerSinceSet = async (id) => kvSet('partner:since:' + id, String(now()))
+/** a few extra free tests to show to his customers, once per partner */
+export async function grantTests(id) {
+  const r = await rulesGet()
+  if (!(r.tests > 0) || (await kvGet('partner:tests_given:' + id))) return 0
+  await run(sql`UPDATE user SET limit_usertest = COALESCE(CAST(limit_usertest AS INTEGER), 0) + ${r.tests} WHERE id = ${String(id)}`)
+  await kvSet('partner:tests_given:' + id, String(now()))
+  return r.tests
+}
+export const testsLine = (n) => (n > 0 ? `\n\n🎁 ${toFaDigits(n)} تست اضافه هم برای نشان دادن به مشتری‌هات فعال شد (از «اکانت تست»).` : '')
+export async function rulesLine() {
+  const r = await rulesGet()
+  return r.minGb > 0 ? `\n\nیک نکته: برای ماندن قیمت همکار، بعد از ماه اول حداقل ${toFaDigits(r.minGb)} گیگ خرید در ۳۰ روز لازم است (قبلش هم خبرتان می‌کنیم).` : ''
+}
+/** what the minimum-sales rule says about one partner (p = a row of partnersList): none | minwarn | clear | minend */
+export function minSalesCheck(p, r, at = now()) {
+  if (!(r.minGb > 0) || p.level !== 'n' || p.locked || p.expired || p.expire > 0 || p.pending || !p.since) return { action: 'none' } // a trial partner (expire set) ends by itself
+  if ((at - p.since) / DAY < r.graceDays) return { action: 'none' }
+  if (p.gb30 >= r.minGb) return { action: p.minWarn ? 'clear' : 'none' }
+  if (!p.minWarn) return { action: 'minwarn' }
+  return (at - p.minWarn) / DAY >= r.warnDays ? { action: 'minend' } : { action: 'none' }
+}
+
 /** every partner with the numbers the panel and the automation need */
 export async function partnersList(at = now()) {
   const tiers = await tiersGet(), locks = await locksGet(), below = parse(await kvGet('partner:below'), {})
@@ -120,7 +154,7 @@ export async function partnersList(at = now()) {
       id: String(u.id), username: String(u.username ?? ''), level: u.agent, pct, tier: cur?.id ?? null, tierName: cur?.name ?? (pct ? 'دستی' : '—'), earned: earned.id, earnedName: earned.name, earnedPct: earned.pct,
       gb30: Math.round(v.gb * 10) / 10, orders30: v.orders, spent30: v.spent, balance: Number(u.Balance) || 0, locked: !!locks[u.id], below: below[u.id] || 0,
       brand: String(u.namecustom ?? ''), brandOk: (await brandEligibility(u)).ok, brandAllowed: brandAllow.includes(String(u.id)),
-      pending: !!(await kvGet(needKey(u.id))), toNext: next ? Math.max(0, Math.ceil(next.gb - v.gb)) : 0, nextName: next?.name ?? '', expired: !!expired, expire: Number(u.expire) || 0,
+      pending: !!(await kvGet(needKey(u.id))), since: Number(await kvGet('partner:since:' + u.id)) || 0, minWarn: Number(await kvGet('partner:minwarn:' + u.id)) || 0, toNext: next ? Math.max(0, Math.ceil(next.gb - v.gb)) : 0, nextName: next?.name ?? '', expired: !!expired, expire: Number(u.expire) || 0,
     })
   }
   return out
@@ -170,6 +204,26 @@ export async function partnersRun({ dry = false, at = now(), mode } = {}) {
     }
   }
   if (live) { await kvSet('partner:below', JSON.stringify(below)); await kvSet('partner:below_month', JSON.stringify(seen)) }
+  // the minimum-sales rule: a warning first, then (after the warning period) the partner price goes back to the ordinary one
+  const rules = await rulesGet()
+  for (const p of list) {
+    const m = minSalesCheck(p, rules, at)
+    if (m.action === 'none') continue
+    report.push({ id: p.id, username: p.username, action: m.action, gb30: p.gb30, min: rules.minGb })
+    if (!live) continue
+    if (m.action === 'clear') { await kvSet('partner:minwarn:' + p.id, ''); continue }
+    if (m.action === 'minwarn') {
+      await kvSet('partner:minwarn:' + p.id, String(at))
+      await sendmessage(p.id, `درود 🌿\nحجم خرید ۳۰ روز اخیر شما ${toFaDigits(p.gb30)} گیگ است. برای ماندن قیمت همکار حداقل ${toFaDigits(rules.minGb)} گیگ در ۳۰ روز لازم است؛ تا ${toFaDigits(rules.warnDays)} روز دیگر فرصت دارید.\nاگر مشکلی هست یا کمکی لازم دارید همین‌جا بنویسید. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '🛒 خرید اشتراک', callback_data: 'buy' }, { text: '💬 پشتیبانی', callback_data: 'supportbtns' }]] }), 'HTML')
+      await logAdd({ id: p.id, username: p.username, action: 'minwarn', gb30: p.gb30 })
+    } else if (m.action === 'minend') {
+      await partnerEnd(p.id)
+      await run(sql`DELETE FROM Requestagent WHERE id = ${p.id} AND status = 'accept'`) // he may apply again whenever he wants
+      await kvSet('partner:minwarn:' + p.id, '')
+      await sendmessage(p.id, `درود 🌿\nچون حجم خرید ۳۰ روز اخیر به ${toFaDigits(rules.minGb)} گیگ نرسید، قیمت همکار فعلاً به قیمت عادی برگشت. سرویس‌های فعال شما همان‌طور که هست ادامه دارد.\nهر وقت خواستید، دوباره از «درخواست نمایندگی» شروع کنید. سپاسگزارم.`, null, 'HTML')
+      await logAdd({ id: p.id, username: p.username, action: 'minend', gb30: p.gb30 })
+    }
+  }
   return { live, partners: list.length, changes: report }
 }
 
@@ -219,11 +273,13 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
     const claim = await run(sql`UPDATE Requestagent SET status = 'accept', type = ${type} WHERE id = ${id} AND status = 'waiting'`)
     if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }
     const pct = await welcomePct(), referred = await partnerReferred(id)
+    await partnerSinceSet(id)
+    const tests = await grantTests(id), extra = testsLine(tests) + (await rulesLine())
     if (referred) {
       await run(sql`UPDATE user SET agent = ${type}, expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
-      await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nاز همین الان قیمت همکار برای شما فعال است (${pct}٪ زیر لیست؛ هر چه بیشتر بخرید، تخفیف بیشتر می‌شود).\n\n<b>شروع در ۳ قدم:</b>\n۱) کیف پول را کمی شارژ کنید\n۲) از «خرید اشتراک» اولین سرویس را بسازید (یا اول یک تست رایگان بگیرید)\n۳) از «پنل نمایندگی» مشتری‌ها و گزارش خرید را ببینید\n\nاگر سؤالی بود همین‌جا بنویسید؛ پیام همکارها با اولویت بررسی می‌شود. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '🏠 منوی همکار', callback_data: 'backuser' }], [{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی ویژه', callback_data: 'supportbtns' }]] }), 'HTML')
+      await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nاز همین الان قیمت همکار برای شما فعال است (${pct}٪ زیر لیست؛ هر چه بیشتر بخرید، تخفیف بیشتر می‌شود).\n\n<b>شروع در ۳ قدم:</b>\n۱) کیف پول را کمی شارژ کنید\n۲) از «خرید اشتراک» اولین سرویس را بسازید (یا اول یک تست رایگان بگیرید)\n۳) از «پنل نمایندگی» مشتری‌ها و گزارش خرید را ببینید\n\nاگر سؤالی بود همین‌جا بنویسید؛ پیام همکارها با اولویت بررسی می‌شود. سپاسگزارم.${extra}`, J({ inline_keyboard: [[{ text: '🏠 منوی همکار', callback_data: 'backuser' }], [{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی ویژه', callback_data: 'supportbtns' }]] }), 'HTML')
       const gift = await welcomeGive(id)
-      return { ok: true, pct, gift }
+      return { ok: true, pct, gift, tests }
     }
     // a walk-in applicant: partner list now, the tier percent after the first charge (he may take the free test first)
     const min = await minChargeGet()
@@ -233,7 +289,7 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
     const early = min > 0 && u0 ? await partnerChargeCheck(u0) : null // he may already have charged enough
     if (min === 0) { await run(sql`UPDATE user SET pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`); await welcomeGive(id) }
     if (early === null && min > 0) {
-      await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nبرای فعال شدن قیمت همکار (${pct}٪ زیر لیست) کافیه کیف پول را یک بار حداقل <b>${numberFormat(min)} تومان</b> شارژ کنید؛ بعدش خودکار فعال می‌شود.\nقبلش هم می‌تونید با «اکانت تست» کیفیت سرویس را خودتان امتحان کنید.\n\nاگر سؤالی بود همین‌جا بنویسید. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی', callback_data: 'supportbtns' }]] }), 'HTML')
+      await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nبرای فعال شدن قیمت همکار (${pct}٪ زیر لیست) کافیه کیف پول را یک بار حداقل <b>${numberFormat(min)} تومان</b> شارژ کنید؛ بعدش خودکار فعال می‌شود.\nقبلش هم می‌تونید با «اکانت تست» کیفیت سرویس را خودتان امتحان کنید.\n\nاگر سؤالی بود همین‌جا بنویسید. سپاسگزارم.${extra}`, J({ inline_keyboard: [[{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی', callback_data: 'supportbtns' }]] }), 'HTML')
     }
     return { ok: true, pct: early ?? (min === 0 ? pct : 0), needCharge: early === null && min > 0, min }
   }
@@ -257,7 +313,9 @@ export async function partnerInvite(who, { type = 'n', trialDays = 0 } = {}) {
   const days = Math.max(0, Math.min(365, Math.trunc(Number(trialDays) || 0))), pct = await welcomePct(), id = String(u.id)
   const expire = days > 0 ? now() + days * DAY : null
   await run(sql`UPDATE user SET agent = ${type === 'n2' ? 'n2' : 'n'}, expire = ${expire}, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
-  await sendmessage(id, `درود 🌿\nبه همکاری با پیچا دعوت شدید. از این پس قیمت همکار برای شما فعال است (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).${days ? `\nدورهٔ آشنایی شما ${days} روز است؛ در این مدت با ربات کار کنید و هر سؤالی داشتید همین‌جا بنویسید.` : ''}\nبرای شروع، ربات را باز کنید و از «پنل همکار» استفاده کنید. سپاسگزارم.`, null, 'HTML')
+  await partnerSinceSet(id)
+  const inviteTests = await grantTests(id)
+  await sendmessage(id, `درود 🌿\nبه همکاری با پیچا دعوت شدید. از این پس قیمت همکار برای شما فعال است (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).${days ? `\nدورهٔ آشنایی شما ${days} روز است؛ در این مدت با ربات کار کنید و هر سؤالی داشتید همین‌جا بنویسید.` : ''}\nبرای شروع، ربات را باز کنید و از «پنل همکار» استفاده کنید. سپاسگزارم.${testsLine(inviteTests)}${days ? '' : await rulesLine()}`, null, 'HTML')
   const gift = await welcomeGive(id)
   await logAdd({ id, username: String(u.username ?? ''), action: 'invite', to: `${pct}٪` + (days ? ` · ${days} روز` : '') })
   return { ok: true, id, username: String(u.username ?? ''), pct, expire, gift }

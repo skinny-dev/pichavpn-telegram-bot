@@ -1,6 +1,6 @@
 // index.php lines 5918–6652: referral page and membership gift, agents (extra volume for a panel user, panel,
 // custom name, request to become an agent), message to the admins, lucky wheel, price commands, renew list, apps, notes.
-import { brandSettings, brandEligibility, brandSet, tiersGet, partnerReferred, minChargeGet } from '../partners.js'
+import { brandSettings, brandEligibility, brandSet, tiersGet, partnerReferred, minChargeGet, rulesGet } from '../partners.js'
 import { reportText, customersPage, isPartner } from '../partnerhub.js'
 import { sleep } from '../timer.js'
 import { one, all, run, sql, kvGet, kvSet } from '../db.js'
@@ -69,7 +69,7 @@ export async function keyboardAgent(c) {
 const toFa = (v) => String(v).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d])
 /** what the bot says BEFORE asking for the application: what a partner gets, the tier table, and how the first price is switched on for THIS person */
 export async function agentIntro(c) {
-  const tiers = await tiersGet(), brand = await brandSettings(), referred = await partnerReferred(c.from_id), min = await minChargeGet()
+  const tiers = await tiersGet(), brand = await brandSettings(), referred = await partnerReferred(c.from_id), min = await minChargeGet(), rules = await rulesGet()
   const pad = (t, n) => t + ' '.repeat(Math.max(1, n - Array.from(t).length))
   const rows = tiers.map((t, i) => `${pad(t.name, 8)}│ ${pad(toFa(t.pct) + '٪', 5)}│ ${i === 0 ? 'از اولین خرید' : toFa(t.gb >= 1024 ? Math.round((t.gb / 1024) * 10) / 10 + ' ترابایت' : t.gb + ' گیگ')}`)
   const lines = ['💼 <b>همکاری با پیچا</b>', '',
@@ -80,9 +80,12 @@ export async function agentIntro(c) {
     '🔹 دیدن مشتری‌ها و تمدیدشون با یک دکمه (اول اونایی که نزدیک اتمامن)',
     '🔹 گزارش خریدت و اینکه تا سطح بعدی چقدر مونده',
     brand.on ? `🔹 اسم خودت روی کانفیگ‌ها، مثل <code>mobile_aria_3948945</code> (از سطح «${brand.minName}» به بالا)` : null,
+    '🔹 هر هفته خلاصهٔ مشتری‌هایی که باید تمدید بشن، و هر ماه گزارش کامل',
+    rules.tests > 0 ? `🔹 ${toFa(rules.tests)} تست اضافه برای نشون دادن به مشتری‌هات` : null,
     '🔹 پشتیبانی با اولویت و خبر زودتر از وضعیت سرورها',
     '🔹 چند لوکیشن، هم مستقیم هم تانل', '',
     referred ? `✅ چون با معرف اومدی، بعد از تأیید همون لحظه ${toFa(tiers[0].pct)}٪ تخفیف فعاله.` : (min > 0 ? `✅ بعد از تأیید، با یک بار شارژ کیف پول (حداقل ${numberFormat(min)} تومان) تخفیف پله‌ای فعال می‌شه.` : `✅ بعد از تأیید، تخفیف ${toFa(tiers[0].pct)}٪ فعال می‌شه.`), '',
+    rules.minGb > 0 ? `یک نکته: برای ماندن قیمت همکار، بعد از ماه اول حداقل ${toFa(rules.minGb)} گیگ خرید در ۳۰ روز لازمه (قبلش خبرت می‌کنیم).` : null,
     'می‌خوای قبلش کیفیت رو خودت ببینی؟ «اکانت تست» رایگانه.'].filter((x) => x !== null)
   return lines.join('\n')
 }

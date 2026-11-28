@@ -19,7 +19,7 @@ import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
 import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
 import { finSetting } from '../lib/panelapi/finance/engine.js'
 import { overview as referralOverview } from '../lib/panelapi/referrals.js'
-import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE, brandSettings } from '../lib/partners.js'
+import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE, brandSettings, rulesGet, rulesSet } from '../lib/partners.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -725,12 +725,12 @@ TOOLS.marketers = (() => {
       name: l.name, code: l.code, active: !!l.active,
       partner_link: bot ? `https://t.me/${bot}?start=ag_${l.code}` : 'set config:usernamebot', customer_link: bot ? `https://t.me/${bot}?start=${l.code}` : null,
       brought: l.signups, partner_requests: l.partner_requests, waiting: l.partners_waiting, approved: l.partners_approved, partners_now: l.partners_now,
-      buyers: l.buyers, orders: l.orders, revenue_toman: l.revenue,
+      buyers: l.buyers, orders: l.orders, revenue_toman: l.revenue, of_which_renewals_toman: l.renewal_revenue,
       commission_percent: l.percent, commission_toman: l.commission, paid_toman: l.paid, due_toman: l.due,
     }))
     const sum = (k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0)
     return { marketers: rows, totals: { brought: sum('brought'), partner_requests: sum('partner_requests'), approved: sum('approved'), buyers: sum('buyers'), revenue_toman: sum('revenue_toman') },
-      note: 'brought = people who started the bot through the link; a person belongs to the first marketer whose link he used. Percent: set it on the campaign later (pays_commission + commission_percent); commission/due are then filled in here and in the Mini App.' }
+      note: 'brought = people who started the bot through the link; revenue = new purchases + paid renewals of the people he brought; a person belongs to the first marketer whose link he used. Percent: set it on the campaign later (pays_commission + commission_percent); commission/due are then filled in here and in the Mini App.' }
   }
   return main
 })()
@@ -768,12 +768,17 @@ TOOLS.partner_prices = (() => {
 
 // partner_rules: how a new partner starts. Came through a marketer / from us → the first tier (10%) at once. A walk-in applicant → the partner list at once, the tier percent after a first wallet charge of `min_charge`.
 //   npx tgcloud run endpoints/admin_report '{"tool":"partner_rules"}'                       → the rules and who is waiting for the first charge
+//   … '{"tool":"partner_rules","min_gb":20,"grace_days":30,"warn_days":7,"tests":3}'  → the minimum sales per 30 days to keep the partner price, the grace and warning periods, and the extra free tests given at approval
 //   … '{"tool":"partner_rules","min_charge":300000}'                                          → set the minimum first charge in toman (0 = no minimum: everybody gets the tier at once)
 TOOLS.partner_rules = (() => {
   async function main(input, ctx) {
     if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
     const out = {}
     if (input && 'min_charge' in input) { const v = Number(input.min_charge); if (!(v >= 0 && v <= 100000000)) return { error: 'min_charge must be 0 to 100,000,000 toman' }; await minChargeSet(v); out.stored = v }
+    const patch = {}
+    for (const [k, to] of [['min_gb', 'minGb'], ['grace_days', 'graceDays'], ['warn_days', 'warnDays'], ['tests', 'tests']]) if (input && k in input) patch[to] = input[k]
+    if (Object.keys(patch).length) { try { out.stored_rules = await rulesSet(patch) } catch (e) { return { error: String(e?.message ?? e) } } }
+    out.keep_the_price = await rulesGet().then((r) => ({ min_gb_per_30_days: r.minGb, grace_days_after_approval: r.graceDays, warning_days_before_the_price_goes_back: r.warnDays, extra_free_tests_at_approval: r.tests, note: 'only partners approved/invited after this version are counted (they have a start day); trial partners are exempt; works only in live partner mode; 0 = off' }))
     if (input && 'brand_on' in input) { await kvSet('partner:brand_on', input.brand_on ? '1' : '0'); out.stored_brand_on = !!input.brand_on }
     if (input && 'brand_min' in input) { const t = (await tiersGet()).find((x) => x.id === String(input.brand_min)); if (!t) return { error: 'brand_min must be a tier id', tiers: (await tiersGet()).map((x) => x.id + ' = ' + x.name) }; await kvSet('partner:brand_min', t.id); out.stored_brand_min = t.id }
     const tiers = await tiersGet()

@@ -4,8 +4,9 @@
 import { all, one, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage } from './tg.js'
 import { jdate } from './fmt.js'
-import { numberFormat } from './php.js'
-import { tiersGet, tierFor, tierByPct, volume30, volumeSince } from './partners.js'
+import { numberFormat, J } from './php.js'
+import { tiersGet, tierFor, tierByPct, volume30, volumeSince, modeGet } from './partners.js'
+import { tehranParts } from './schedule.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 const parse = (s, d) => { try { const v = JSON.parse(s); return v ?? d } catch { return d } }
@@ -85,6 +86,39 @@ export async function notifyPartners(text, { dry = false, source = 'manual', sen
   await kvSet('partner:notices', JSON.stringify(list))
   return { ok: true, count: ids.length, sent, failed }
 }
+
+// ---------- the weekly summary (Saturday 10:00–13:00 Tehran: customers who need renewal) and the monthly report (the 1st of the Jalali month, same hours).
+// Only in «live» partner mode (the same switch as the tier automation) and unless kv partner:digest = '0'. One message per partner per period (kv partner:dg:*), a few per run
+// (the lazy cron runs again), nothing for partners who are not active yet. The weekly one is silent when nobody needs renewal.
+export async function partnerDigestTick(send = sendmessage) {
+  if ((await modeGet()) !== 'live' || (await kvGet('partner:digest')) === '0') return { skipped: 'off' }
+  const at = now(), p = tehranParts(at)
+  if (!(p.hour >= 10 && p.hour < 13)) return { skipped: 'time' }
+  const day = new Date((at + 12600) * 1000).toISOString().slice(0, 10)
+  const weekly = p.dow === 'sat', monthly = jdate('d', at, true) === '01', ym = jdate('Y/m', at, true)
+  if (!weekly && !monthly) return { skipped: 'day' }
+  const out = { weekly: 0, monthly: 0, left: 0 }
+  let budget = 8
+  for (const id of await partnerIds()) {
+    const wKey = `partner:dg:w:${day}:${id}`, mKey = `partner:dg:m:${ym}:${id}`
+    const todoW = weekly && !(await kvGet(wKey)), todoM = monthly && !(await kvGet(mKey))
+    if (!todoW && !todoM) continue
+    if (budget <= 0) { out.left++; continue }
+    const u = await one(sql`SELECT * FROM user WHERE id = ${id} AND User_Status = 'Active'`)
+    if (!u || (await kvGet('partner:need:' + id))) { if (todoW) await kvSet(wKey, 'skip'); if (todoM) await kvSet(mKey, 'skip'); continue }
+    const r = await reportData(u)
+    if (todoM) {
+      await kvSet(mKey, String(at))
+      if (r.total > 0) { budget--; await send(id, `درود 🌿\nگزارش ماهانهٔ همکاری شما آماده است:\n\n${await reportText(u)}`, J({ inline_keyboard: [[{ text: '🔄 مشتری‌های نیازمند تمدید', callback_data: 'pcust_need_1' }], [{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '💬 پشتیبانی', callback_data: 'agentsupport' }]] }), 'HTML'); out.monthly++ }
+    }
+    if (todoW) {
+      await kvSet(wKey, String(at))
+      if (r.need > 0 && !todoM) { budget--; await send(id, `درود 🌿\nخلاصهٔ این هفته:\n🔄 ${fa(r.need)} مشتری شما نیاز به تمدید دارد (تمام‌شده یا نزدیک اتمام).\n📅 ۳۰ روز اخیر: ${fa(r.orders30)} سفارش · ${r.gb30} گیگ${r.nextName ? `\n⬆️ تا سطح «${esc(r.nextName)}»: ${fa(r.toNext)} گیگ دیگر` : ''}\nتمدید به‌موقع یعنی مشتری از دست نمی‌رود.`, J({ inline_keyboard: [[{ text: '🔄 مشتری‌های نیازمند تمدید', callback_data: 'pcust_need_1' }], [{ text: '📊 گزارش من', callback_data: 'agentreport' }]] }), 'HTML'); out.weekly++ }
+    }
+  }
+  return out
+}
+
 export const PRIORITY_TAG = '⭐ <b>همکار (اولویت پشتیبانی)</b>\n'
 
 // ---------- what partners cost and bring (gifts are expenses of kind «partner»; their purchases are revenue)

@@ -14,7 +14,7 @@ import { studioTick } from './studio.js'
 import { eventsTick } from './events.js'
 import { partnersTick } from './partners.js'
 import { gateHealthRun, notifyAdmins, NAMES } from './gatehealth.js'
-import { notifyPartners } from './partnerhub.js'
+import { notifyPartners, partnerDigestTick } from './partnerhub.js'
 import { emojiAutoSetup } from './emoji.js'
 import { reportTs } from './sms.js'
 import { tehranParts } from './schedule.js'
@@ -209,6 +209,7 @@ const JOBS = [
   ['studio', 60, () => studioTick()],
   ['events', 60, () => eventsTick()],
   ['partners', 3600, () => partnersTick()],
+  ['partnerdigest', 1800, () => partnerDigestTick()],
   ['gatehealth', 120, () => gateHealthRun(gateNotify)],
   ['emojidefault', 3600, () => emojiAutoSetup(telegram)], // premium emoji are on by default: once, when nothing was ever set up
   ['notifications', 60, notifications],
