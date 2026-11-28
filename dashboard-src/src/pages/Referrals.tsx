@@ -34,6 +34,7 @@ export default function Referrals() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['referrals'] })
   const err = (fallback: string) => (e: unknown) => toast.error(e instanceof ApiError ? e.message : fallback)
   const linkOf = (l: Link) => `https://t.me/${data?.bot ?? ''}?start=${l.code}`
+  const partnerLinkOf = (l: Link) => `https://t.me/${data?.bot ?? ''}?start=ag_${l.code}` // the same campaign, but it opens the partnership request
 
   const save = useMutation({
     mutationFn: (f: Form) => api('referral_save', { body: { ...f, id: f.id || undefined } }),
@@ -48,8 +49,8 @@ export default function Referrals() {
     onError: err('ثبت پرداخت ناموفق بود'),
   })
 
-  async function copy(l: Link) {
-    try { await navigator.clipboard.writeText(linkOf(l)); setCopied(l.code); setTimeout(() => setCopied(''), 1500) } catch { toast.error('کپی نشد') }
+  async function copy(l: Link, partner = false) {
+    try { await navigator.clipboard.writeText(partner ? partnerLinkOf(l) : linkOf(l)); setCopied(l.code + (partner ? ':p' : '')); setTimeout(() => setCopied(''), 1500) } catch { toast.error('کپی نشد') }
   }
   const set = (p: Partial<Form>) => setForm((f) => (f ? { ...f, ...p } : f))
   const total = (k: 'signups' | 'buyers' | 'revenue' | 'cost' | 'commission') => (data?.links ?? []).reduce((s, l) => s + l[k], 0)
@@ -87,6 +88,10 @@ export default function Referrals() {
               <div className="mt-2 flex min-w-0 items-center gap-1">
                 <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs" dir="ltr">{linkOf(l)}</code>
                 <Button variant="ghost" size="icon-sm" aria-label="کپی لینک" onClick={() => copy(l)}>{copied === l.code ? <Check /> : <Copy />}</Button>
+              </div>
+              <div className="mt-1 flex min-w-0 items-center gap-1">
+                <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs" dir="ltr">{partnerLinkOf(l)}</code>
+                <Button variant="ghost" size="sm" aria-label="کپی لینک همکاری" onClick={() => copy(l, true)}>{copied === l.code + ':p' ? <Check /> : <Copy />}<span className="text-xs">لینک همکاری</span></Button>
               </div>
               {l.ad_date ? <div className="mt-1 text-xs text-muted-foreground">تاریخ تبلیغ: <span dir="ltr">{jDate(l.ad_date)}</span></div> : null}
               {(l.contact || l.tg_user_id) && <div className="mt-1 text-xs text-muted-foreground" dir="auto">{l.contact}{l.tg_user_id ? ` · tg ${l.tg_user_id}` : ''}</div>}
