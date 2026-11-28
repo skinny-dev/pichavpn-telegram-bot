@@ -172,7 +172,7 @@ async function main(c) {
     if (affiliatesid === 'fit') { await showFitMenu(c); await step(c, 'home'); return } // channel / message button: «best server for my use»
     const sa = await startAction(c, affiliatesid)
     if (sa === 'fit') { await showFitMenu(c); await step(c, 'home'); return }
-    if (sa) c.text = sa // the same text the customer would have typed: the ordinary routes answer (buy menu, free test, help …)
+    if (sa) { c.text = sa; c.pendingAction = sa } // the same text the customer would have typed: the ordinary routes answer (buy menu, free test, help …)
     else if (!['start', 'usertest', '/start', 'buy', 'help'].includes(affiliatesid)) {
       if (!/^\d+$/.test(affiliatesid ?? '') && (await referralCampaignAttach(c.from_id, affiliatesid)) !== null) {
         await sendStartMessage(c, c.from_id, c.keyboard)
@@ -212,6 +212,7 @@ async function main(c) {
   }
   // rules
   if (S.roll_Status === 'rolleon' && intval(user.roll_Status) === 0 && c.text !== T.keyboard.acceptRulesButton && c.datain !== 'acceptrule' && !c.isAdmin) {
+    await pendingPut(c)
     await sendmessage(c.from_id, T.textbot.rules, c.confrimrolls, 'html')
     return
   }
@@ -219,7 +220,9 @@ async function main(c) {
     await deletemessage(c.from_id, c.message_id)
     await sendmessage(c.from_id, T.users.Rules, c.keyboard, 'html')
     await run(sql`UPDATE user SET roll_Status = 1 WHERE id = ${c.from_id}`)
-    return
+    const pa = await pendingTake(c) // what the person came for (buy, test, partnership …) continues now
+    if (!pa) return
+    c.text = pa; c.datain = ''
   }
   if (S.Bot_Status === 'botstatusoff' && !c.isAdmin) {
     await sendmessage(c.from_id, T.textbot.botOff, null, 'html')
@@ -231,10 +234,11 @@ async function main(c) {
     if (c.datain === 'confirmchannel') {
       if (channels.length === 0) {
         await deletemessage(c.from_id, c.message_id)
-        await sendStartMessage(c, c.from_id, c.keyboard)
         await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text: T.users.channel.confirmed, show_alert: false, cache_time: 5 })
-        return
-      }
+        const pa = await pendingTake(c)
+        if (!pa) { await sendStartMessage(c, c.from_id, c.keyboard); return }
+        c.text = pa; c.datain = '' // joined: the action they came for continues
+      } else {
       await Editmessagetext(c.from_id, c.message_id, T.textbot.channel, await channelKeyboard(c, channels))
       await telegram('answerCallbackQuery', { callback_query_id: c.callback_query_id, text: T.users.channel.notconfirmed, show_alert: true, cache_time: 5 })
       const parts = String(user.Processing_value_four ?? '').split('_')
@@ -253,8 +257,10 @@ async function main(c) {
         await run(sql`UPDATE user SET affiliatescount = ${intval(ua.affiliatescount) + 1} WHERE id = ${aid}`)
       }
       return
+      }
     }
     if (channels.length && !c.isAdmin) {
+      await pendingPut(c)
       await sendmessage(c.from_id, T.textbot.channel, await channelKeyboard(c, channels), 'html')
       return
     }
@@ -321,6 +327,17 @@ async function channelKeyboard(c, channels) {
   return J({ inline_keyboard: rows })
 }
 
+/** a new person arrives through a channel button («خرید», «تست رایگان», «درخواست همکاری»): the rules screen and the join-channel step come first, so the action is remembered for 24 h and run right after */
+async function pendingPut(c) { if (c.pendingAction) await kvSet('pending_action:' + c.from_id, JSON.stringify({ a: c.pendingAction, t: time() })) }
+async function pendingTake(c) {
+  const k = 'pending_action:' + c.from_id
+  let v = null
+  try { v = JSON.parse((await kvGet(k)) || 'null') } catch { v = null }
+  if (!v || !v.a) return null
+  await kvSet(k, '')
+  return time() - Number(v.t) < 86400 ? String(v.a) : null
+}
+
 const RESERVED = ['start', 'usertest', 'buy', 'help', 'admin', 'test', 'tariff', 'plan', 'plan_top', 'wallet', 'support', 'extend', 'services', 'wheel', 'ref', 'status', 'fit', 'agent'] // referralReservedCodes() + the action words below
 
 /** ?start=<word> and ?start=ch_<post>_<word> → what the customer would have typed ('fit' = the use-case menu). null = not an action (a referral code, an id …). A channel click is counted per post. */
@@ -329,6 +346,11 @@ const START_WORDS = (T) => ({
   agent: T.textbot.requestAgent, requestagent: T.textbot.requestAgent, tariff: T.textbot.tariffList, wallet: '/wallet', support: '/support', extend: T.textbot.extend, services: '/services', wheel: '/gift', ref: T.textbot.affiliates,
 })
 async function startAction(c, payload) {
+  const ag = /^ag_([a-z][a-z0-9_-]{2,39})$/.exec(String(payload ?? ''))
+  if (ag) { // a marketer's link for the shops he brings: his campaign code is remembered (who brought whom) and the person lands on «درخواست نمایندگی»
+    try { await referralCampaignAttach(c.from_id, ag[1]); const k = 'care:n:ag:' + ag[1]; await kvSet(k, String((Number(await kvGet(k)) || 0) + 1)) } catch { /* attribution never blocks the request */ }
+    return c.T.textbot.requestAgent
+  }
   const m = /^ch_([A-Za-z0-9]+)_([a-z0-9_]+)$/.exec(String(payload ?? ''))
   const word = m ? m[2] : String(payload ?? '')
   const act = START_WORDS(c.T)[word]

@@ -6,6 +6,7 @@
 import { all, one, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage } from './tg.js'
 import { welcomeGive } from './partnerhub.js'
+import { J } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 const DAY = 86400
@@ -187,7 +188,7 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
     if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }
     const pct = await welcomePct()
     await run(sql`UPDATE user SET agent = ${type}, expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
-    await sendmessage(id, `درود 🌿\nدرخواست همکاری شما تأیید شد. از این پس قیمت همکار برای شما فعال است (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).\nبرای شروع، ربات را باز کنید و از منوی خرید استفاده کنید. اگر سؤالی داشتید همین‌جا بنویسید. سپاسگزارم.`, null, 'HTML')
+    await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nاز همین الان قیمت همکار برای شما فعال است (${pct}٪ زیر لیست؛ هر چه بیشتر بخرید، تخفیف بیشتر می‌شود).\n\n<b>شروع در ۳ قدم:</b>\n۱) کیف پول را کمی شارژ کنید\n۲) از «خرید اشتراک» اولین سرویس را بسازید (یا اول یک تست رایگان بگیرید)\n۳) از «پنل نمایندگی» مشتری‌ها و گزارش خرید را ببینید\n\nاگر سؤالی بود همین‌جا بنویسید؛ پیام همکارها با اولویت بررسی می‌شود. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '🏠 منوی همکار', callback_data: 'backuser' }], [{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی ویژه', callback_data: 'supportbtns' }]] }), 'HTML')
     const gift = await welcomeGive(id)
     return { ok: true, pct, gift }
   }

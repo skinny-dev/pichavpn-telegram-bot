@@ -4,7 +4,7 @@ import { sendmessage, Editmessagetext, telegram } from '../tg.js'
 import { step } from '../bot.js'
 import { directPayment } from '../directpay.js'
 import { receiptsClose } from '../receipts.js'
-import { welcomePct } from '../partners.js'
+import { welcomePct, requestDecide } from '../partners.js'
 import { keyboardAdmin, backAdmin } from './keyboards.js'
 import { sprintf, numberFormat, intval, J } from '../php.js'
 
@@ -164,12 +164,9 @@ export const adminAgentRoutes = [
     const req = await requestBy(id)
     if (!req) { await alert(c, K.requestNotFound ?? 'درخواست پیدا نشد'); return true }
     if (req.status === 'reject' || req.status === 'accept') { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
-    const claim = await run(sql`UPDATE Requestagent SET status = 'reject' WHERE id = ${id} AND status NOT IN ('reject', 'accept')`)
-    if (Number(claim?.rowsAffected ?? 0) === 0) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true } // someone else was faster: no second refund
-    const u = await one(sql`SELECT Balance FROM user WHERE id = ${id}`)
-    if (u) await run(sql`UPDATE user SET Balance = ${intval(u.Balance) + intval(c.setting.agentreqprice)} WHERE id = ${id}`) // the request fee goes back
+    const done = await requestDecide(id, 'reject') // the same decision the panel makes: the fee goes back exactly once, the person is told respectfully
+    if (!done.ok || done.already) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true } // someone else was faster
     await sendmessage(c.from_id, A.requestRejected ?? '❌ درخواست نمایندگی رد شد', null, 'HTML')
-    await sendmessage(id, T.users?.agent?.requestRejected ?? 'درخواست نمایندگی شما رد شد. هزینهٔ درخواست به کیف پول شما برگشت.', null, 'HTML')
     await Editmessagetext(c.from_id, c.message_id, sprintf(A.requestNotice ?? '%s %s %s', id, req.username, req.Description), J({ inline_keyboard: [[{ text: K.requestRejected ?? '❌ رد شد', callback_data: 'reject' }]] }))
     return true
   },
@@ -180,10 +177,8 @@ export const adminAgentRoutes = [
     const req = await requestBy(id)
     if (!req) { await alert(c, K.requestNotFound ?? 'درخواست پیدا نشد'); return true }
     if (req.status === 'reject' || req.status === 'accept') { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
-    const claim = await run(sql`UPDATE Requestagent SET status = 'accept', type = 'n' WHERE id = ${id} AND status NOT IN ('reject', 'accept')`)
-    if (Number(claim?.rowsAffected ?? 0) === 0) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
-    await run(sql`UPDATE user SET agent = 'n', expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(await welcomePct())} ELSE pricediscount END WHERE id = ${id}`) // the first tier: otherwise a partner pays the customer price
-    await sendmessage(id, T.users?.agent?.requestApproved ?? 'درخواست نمایندگی شما تأیید شد.', null, 'HTML')
+    const done = await requestDecide(id, 'accept', { type: 'n' }) // first tier + friendly message with the first steps + welcome package: one code path for the panel and the bot
+    if (!done.ok || done.already) { await alert(c, K.alreadyReviewed ?? 'قبلاً بررسی شده است'); return true }
     await sendmessage(c.from_id, A.userAgented ?? '✅ کاربر نماینده شد', keyboardAdmin(c), 'HTML')
     const label = agentLabels(T).n
     const text = sprintf(A.requestNotice2 ?? '%s %s %s', id, req.username, req.Description) + sprintf(A.statusApproved ?? ' %s', label) + (A.changeTypeHint ?? '')

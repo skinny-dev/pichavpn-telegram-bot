@@ -66,6 +66,9 @@ export async function keyboardAgent(c) {
   if (named) row.push({ text: T.keyboard.selectCustomName })
   return J({ keyboard: [row, [{ text: HUB.report }, { text: HUB.customers }], [{ text: T.textbot.accountWallet }, { text: HUB.support }], [{ text: T.users.backbtn }]], resize_keyboard: true })
 }
+/** what we ask a shop owner who wants to become a partner (instead of the vague «توضیحات»): everything the administrator needs to decide, with an example */
+export const AGENT_ASK = 'درود 🌿\nبرای ثبت درخواست همکاری، لطفاً در <b>یک پیام</b> بنویسید:\n\n۱) نام فروشگاه یا کسب‌وکار\n۲) شهر\n۳) نوع کار (موبایل‌فروشی، کانال، فروشگاه آنلاین …)\n۴) تقریباً ماهی چند مشتری VPN دارید یا فکر می‌کنید داشته باشید؟\n۵) آیدی تلگرام یا شماره برای تماس\n\nنمونه:\n«موبایل پارس، شیراز، موبایل‌فروشی، حدود ۳۰ مشتری در ماه، @name»'
+export const AGENT_DONE = '✅ درخواست‌تون ثبت شد 🌿\nبررسی می‌شه و نتیجه رو همین‌جا خبر می‌دیم. تا اون موقع می‌تونید با «اکانت تست» کیفیت سرویس رو خودتون امتحان کنید.\nاگه سؤالی بود، از «پشتیبانی» بنویسید.'
 /** the renew list (20 a page): every row says which service it is (name · plan), and «next/previous» exist only when there is another page */
 const RENEW_PAGE = 20
 const fun = async (k) => { try { const d = new Date(Date.now() + 12600000).toISOString().slice(0, 10).replace(/-/g, ''); const key = `funnel:${d}:${k}`; await kvSet(key, String((Number(await kvGet(key)) || 0) + 1)) } catch { /* counters never break a menu */ } }
@@ -302,8 +305,8 @@ export const miscRoutes = [
     if (n(user.Balance) < n(c.setting.agentreqprice)) { await sendmessage(c.from_id, sprintf(A.insufficientbalanceagent, numberFormat(n(c.setting.agentreqprice))), backuserKb(c), 'HTML'); return true }
     if (Number((await one(sql`SELECT COUNT(*) AS n FROM Requestagent WHERE id = ${c.from_id}`)).n) !== 0) { await sendmessage(c.from_id, A.requestreport, null, 'html'); return true }
     if (user.agent !== 'f') { await sendmessage(c.from_id, A.isagent, null, 'html'); return true }
-    if (c.datain === 'requestagent') await Editmessagetext(c.from_id, c.message_id, T.textbot.agentRequestDesc, backuserKb(c))
-    else await sendmessage(c.from_id, T.textbot.agentRequestDesc, backuserKb(c), 'html')
+    if (c.datain === 'requestagent') await Editmessagetext(c.from_id, c.message_id, AGENT_ASK, backuserKb(c), 'HTML')
+    else await sendmessage(c.from_id, AGENT_ASK, backuserKb(c), 'html')
     await step(c, 'getagentrequest')
     return true
   },
@@ -311,14 +314,15 @@ export const miscRoutes = [
     if (!(c.user.step === 'getagentrequest' && truthy(c.text))) return false
     const T = c.T, A = T.users.agent
     if (!(await deductBalance(c.user, intval(c.setting.agentreqprice)))) { await sendmessage(c.from_id, T.users.Balance.notEnoughBalance, c.keyboard, 'HTML'); await step(c, 'home'); return true }
-    await sendmessage(c.from_id, A.endrequest, c.keyboard, 'html')
+    await sendmessage(c.from_id, AGENT_DONE, c.keyboard, 'html')
     await step(c, 'home')
     await run(sql`INSERT INTO Requestagent (id, username, time, Description, status, type) VALUES (${c.from_id}, ${c.username}, ${time()}, ${c.text}, 'waiting', 'None')`)
     const kb = J({ inline_keyboard: [
       [{ text: A.acceptrequest, callback_data: 'addagentrequest_' + c.from_id }, { text: A.rejectrequest, callback_data: 'rejectrequesta_' + c.from_id }],
       [{ text: T.users.SendMessage, callback_data: 'Response_' + c.from_id }],
     ] })
-    const text = sprintf(A.agentRequest, c.from_id, c.username, c.first_name, c.text)
+    const marketer = await one(sql`SELECT l.name AS name, l.code AS code FROM referral_signups s JOIN referral_links l ON l.id = s.link_id WHERE s.user_id = ${c.from_id} ORDER BY s.created_at DESC LIMIT 1`) // the marketer who brought this person, if any
+    const text = sprintf(A.agentRequest, c.from_id, c.username, c.first_name, c.text) + (marketer ? `\n\n📣 معرف: ${String(marketer.name ?? '').replace(/[<>&]/g, '')} (${String(marketer.code ?? '').replace(/[<>&]/g, '')})` : '')
     for (const id of c.admin_ids) await sendmessage(id, text, kb, 'HTML')
     return true
   },
