@@ -23,8 +23,9 @@ const go = async (c) => { for (const r of adminAgentRoutes) if (await r(c)) retu
 const user = (id) => db.get(sql`SELECT agent, Balance, expire FROM user WHERE id = ${id}`)
 const req = (id) => db.get(sql`SELECT status, type FROM Requestagent WHERE id = ${id}`)
 
+const refer = async (id) => { await db.run(sql`INSERT OR IGNORE INTO referral_links (id, name, code, active, created_at) VALUES (9990, 'm', 'tstmk', 1, 1)`); await db.run(sql`INSERT OR IGNORE INTO referral_signups (link_id, user_id, created_at) VALUES (9990, ${String(id)}, 1)`) } // came through a marketer: the first tier at once
 // accept
-await mkUser('8101'); await mkReq('8101')
+await mkUser('8101'); await mkReq('8101'); await refer('8101')
 calls.length = 0
 check('accept is handled', await go(await ctx('addagentrequest_8101')))
 check('the first tier (10%) is given with the approval', Number((await db.get(sql`SELECT pricediscount FROM user WHERE id = '8101'`)).pricediscount) === 10)

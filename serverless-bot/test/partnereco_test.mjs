@@ -43,11 +43,14 @@ check('totals add up', E.totals.gifts === 440000 && E.totals.revenue === 150000 
 
 // welcome package: off by default, once per partner when on
 await user('9603', 'f'); await db.run(sql`INSERT OR REPLACE INTO Requestagent (id, username, time, Description, status, type) VALUES ('9603', 'p9603', '1', 'x', 'waiting', 'None')`)
+const refer = async (id) => { await db.run(sql`INSERT OR IGNORE INTO referral_links (id, name, code, active, created_at) VALUES (9990, 'm', 'tstmk', 1, 1)`); await db.run(sql`INSERT OR IGNORE INTO referral_signups (link_id, user_id, created_at) VALUES (9990, ${String(id)}, 1)`) } // came through a marketer: the first tier at once
+await refer('9603')
 await P.requestDecide('9603', 'accept')
 check('welcome package is OFF by default (nothing booked)', (await exp()).filter((x) => /9603/.test(x.description)).length === 0)
 await kvSet('partner:welcome', JSON.stringify({ on: true, wallet: 200000, gb: 10, days: 3 }))
 await user('9604', 'f'); await db.run(sql`INSERT OR REPLACE INTO Requestagent (id, username, time, Description, status, type) VALUES ('9604', 'p9604', '1', 'x', 'waiting', 'None')`)
 calls.length = 0
+await refer('9604')
 await P.requestDecide('9604', 'accept')
 const mine = (await exp()).filter((x) => /9604/.test(x.description))
 check('ON: accepting a request books wallet + free service, credits the wallet, tells the partner', mine.length === 2 && Number((await db.get(sql`SELECT Balance FROM user WHERE id = '9604'`)).Balance) === 200000 && calls.some(([, p]) => /هدیهٔ خوشامد/.test(String(p.text))))

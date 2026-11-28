@@ -102,7 +102,8 @@ check('a stranger cannot use partner routes', (await ep({ r: 'partner_state', qu
 // 10) partner requests from the panel: the list, accept (with the first tier), reject (refund once)
 await db.run(sql`UPDATE setting SET agentreqprice = '50000'`)
 const mkR = async (id, bal = '0', pct = '0') => { await db.run(sql`INSERT OR REPLACE INTO user (id, username, agent, Balance, pricediscount, expire) VALUES (${id}, ${'q' + id}, 'f', ${bal}, ${pct}, NULL)`); await db.run(sql`INSERT OR REPLACE INTO Requestagent (id, username, time, Description, status, type) VALUES (${id}, ${'q' + id}, ${String(T)}, 'موبایل‌فروشی در تهران', 'waiting', 'None')`) }
-await mkR('8201'); await mkR('8202'); await mkR('8203', '0', '15'); await mkR('8204')
+const refer = async (id) => { await db.run(sql`INSERT OR IGNORE INTO referral_links (id, name, code, active, created_at) VALUES (9990, 'm', 'tstmk', 1, 1)`); await db.run(sql`INSERT OR IGNORE INTO referral_signups (link_id, user_id, created_at) VALUES (9990, ${String(id)}, 1)`) } // came through a marketer: the first tier at once
+await mkR('8201'); await mkR('8202'); await mkR('8203', '0', '15'); await mkR('8204'); await refer('8201')
 const rq = await call('partner_requests')
 check('the panel lists the waiting requests with the first-tier percent', rq.status === 200 && rq.body.requests.filter((r) => ['8201', '8202', '8203', '8204'].includes(r.id)).length === 4 && rq.body.welcome_pct === 10, JSON.stringify(rq.body).slice(0, 120))
 calls.length = 0

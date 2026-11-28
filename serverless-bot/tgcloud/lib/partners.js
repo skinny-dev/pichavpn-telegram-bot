@@ -6,7 +6,7 @@
 import { all, one, run, sql, kvGet, kvSet } from './db.js'
 import { sendmessage } from './tg.js'
 import { welcomeGive } from './partnerhub.js'
-import { J } from './php.js'
+import { J, numberFormat } from './php.js'
 
 const now = () => Math.floor(Date.now() / 1000)
 const DAY = 86400
@@ -73,6 +73,37 @@ export const locksGet = async () => parse(await kvGet('partner:locks'), {})
 export const logGet = async () => parse(await kvGet('partner:log'), [])
 const logAdd = async (e) => kvSet('partner:log', JSON.stringify([{ t: now(), ...e }, ...(await logGet())].slice(0, 200)))
 
+// ---------- how a partner starts: someone who came through a marketer or from us gets the first tier (10%) at once; a walk-in applicant gets the partner list
+// at once but the tier percent only after a first wallet charge of a reasonable size (kv partner:min_charge, default 300,000 toman) — he may take the free test meanwhile.
+export const DEFAULT_MIN_CHARGE = 300000
+export const minChargeGet = async () => { const raw = await kvGet('partner:min_charge'); if (raw === null || raw === undefined || raw === '') return DEFAULT_MIN_CHARGE; const v = Number(raw); return Number.isFinite(v) && v >= 0 ? Math.trunc(v) : DEFAULT_MIN_CHARGE }
+export const minChargeSet = async (v) => kvSet('partner:min_charge', String(Math.max(0, Math.trunc(Number(v) || 0))))
+/** came through a marketer's campaign link (referral_signups) */
+export const partnerReferred = async (id) => !!(await one(sql`SELECT 1 AS x FROM referral_signups WHERE user_id = ${String(id)} LIMIT 1`))
+const needKey = (id) => 'partner:need:' + id
+const payTs = (s) => { s = String(s ?? ''); if (/^\d{9,}$/.test(s)) return Number(s); const m = /^(\d{4})[/-](\d{2})[/-](\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 - 12600 : 0 }
+/** money the person put into the wallet since `since` (paid top-ups only: not purchases, not deductions) */
+async function topupsSince(id, since) {
+  const rows = await all(sql`SELECT price, time, id_invoice, Payment_Method AS m FROM Payment_report WHERE id_user = ${String(id)} AND payment_Status = 'paid'`)
+  return rows.filter((r) => payTs(r.time) >= since && !/^(getconfigafterpay|getextenduser|getextravolumeuser|getextratimeuser|refunded)\|/.test(String(r.id_invoice ?? '')) && !['low balance by admin', 'cost', 'capital_injection', 'cost_migrated', 'capital_migrated', 'wallet'].includes(String(r.m)))
+    .reduce((a, r) => a + (Number(String(r.price ?? '').replace(/[^0-9]/g, '')) || 0), 0)
+}
+export const partnerPending = async (id) => parse(await kvGet(needKey(id)), null)
+/** a partner waiting for his first charge: when the charge is there the first tier is switched on (+ the welcome package) and he is told. Returns the percent given, or null. */
+export async function partnerChargeCheck(u) {
+  const need = await partnerPending(u.id)
+  if (!need) return null
+  const enough = (await topupsSince(u.id, Number(need.since) || 0)) >= need.min || (Number(u.Balance) || 0) >= need.min
+  if (!enough) return null
+  await kvSet(needKey(u.id), '')
+  const pct = await welcomePct()
+  await run(sql`UPDATE user SET pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${String(u.id)}`)
+  await sendmessage(String(u.id), `درود 🌿\nسپاسگزارم از شارژ کیف پول؛ قیمت همکار شما فعال شد (${pct}٪ زیر لیست، و با حجم خرید بیشتر کمتر هم می‌شود).\nاز منوی «خرید اشتراک» می‌توانید شروع کنید.`, null, 'HTML')
+  await welcomeGive(String(u.id))
+  await logAdd({ id: String(u.id), username: String(u.username ?? ''), action: 'activate', to: `${pct}٪` })
+  return pct
+}
+
 /** every partner with the numbers the panel and the automation need */
 export async function partnersList(at = now()) {
   const tiers = await tiersGet(), locks = await locksGet(), below = parse(await kvGet('partner:below'), {})
@@ -89,7 +120,7 @@ export async function partnersList(at = now()) {
       id: String(u.id), username: String(u.username ?? ''), level: u.agent, pct, tier: cur?.id ?? null, tierName: cur?.name ?? (pct ? 'دستی' : '—'), earned: earned.id, earnedName: earned.name, earnedPct: earned.pct,
       gb30: Math.round(v.gb * 10) / 10, orders30: v.orders, spent30: v.spent, balance: Number(u.Balance) || 0, locked: !!locks[u.id], below: below[u.id] || 0,
       brand: String(u.namecustom ?? ''), brandOk: (await brandEligibility(u)).ok, brandAllowed: brandAllow.includes(String(u.id)),
-      toNext: next ? Math.max(0, Math.ceil(next.gb - v.gb)) : 0, nextName: next?.name ?? '', expired: !!expired, expire: Number(u.expire) || 0,
+      pending: !!(await kvGet(needKey(u.id))), toNext: next ? Math.max(0, Math.ceil(next.gb - v.gb)) : 0, nextName: next?.name ?? '', expired: !!expired, expire: Number(u.expire) || 0,
     })
   }
   return out
@@ -97,6 +128,7 @@ export async function partnersList(at = now()) {
 
 /** what the automation would do for one partner: {action: 'none'|'up'|'down'|'warn', to: pct} */
 export function decide(p, tiers) {
+  if (p.pending) return { action: 'none', why: 'منتظر شارژ اول' }
   if (p.level !== 'n' || p.locked || p.expired) return { action: 'none', why: p.level !== 'n' ? 'سطح اعتباری' : p.locked ? 'قفل دستی' : 'نمایندگی منقضی' }
   const earned = tierFor(tiers, p.gb30)
   if (earned.pct > p.pct) return { action: 'up', to: earned.pct, name: earned.name }
@@ -186,11 +218,24 @@ export async function requestDecide(id, decision, { type = 'n' } = {}) {
   if (decision === 'accept') {
     const claim = await run(sql`UPDATE Requestagent SET status = 'accept', type = ${type} WHERE id = ${id} AND status = 'waiting'`)
     if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }
-    const pct = await welcomePct()
-    await run(sql`UPDATE user SET agent = ${type}, expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
-    await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nاز همین الان قیمت همکار برای شما فعال است (${pct}٪ زیر لیست؛ هر چه بیشتر بخرید، تخفیف بیشتر می‌شود).\n\n<b>شروع در ۳ قدم:</b>\n۱) کیف پول را کمی شارژ کنید\n۲) از «خرید اشتراک» اولین سرویس را بسازید (یا اول یک تست رایگان بگیرید)\n۳) از «پنل نمایندگی» مشتری‌ها و گزارش خرید را ببینید\n\nاگر سؤالی بود همین‌جا بنویسید؛ پیام همکارها با اولویت بررسی می‌شود. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '🏠 منوی همکار', callback_data: 'backuser' }], [{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی ویژه', callback_data: 'supportbtns' }]] }), 'HTML')
-    const gift = await welcomeGive(id)
-    return { ok: true, pct, gift }
+    const pct = await welcomePct(), referred = await partnerReferred(id)
+    if (referred) {
+      await run(sql`UPDATE user SET agent = ${type}, expire = NULL, pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`)
+      await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nاز همین الان قیمت همکار برای شما فعال است (${pct}٪ زیر لیست؛ هر چه بیشتر بخرید، تخفیف بیشتر می‌شود).\n\n<b>شروع در ۳ قدم:</b>\n۱) کیف پول را کمی شارژ کنید\n۲) از «خرید اشتراک» اولین سرویس را بسازید (یا اول یک تست رایگان بگیرید)\n۳) از «پنل نمایندگی» مشتری‌ها و گزارش خرید را ببینید\n\nاگر سؤالی بود همین‌جا بنویسید؛ پیام همکارها با اولویت بررسی می‌شود. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '🏠 منوی همکار', callback_data: 'backuser' }], [{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی ویژه', callback_data: 'supportbtns' }]] }), 'HTML')
+      const gift = await welcomeGive(id)
+      return { ok: true, pct, gift }
+    }
+    // a walk-in applicant: partner list now, the tier percent after the first charge (he may take the free test first)
+    const min = await minChargeGet()
+    await run(sql`UPDATE user SET agent = ${type}, expire = NULL WHERE id = ${id}`)
+    if (min > 0) await kvSet(needKey(id), JSON.stringify({ min, since: Math.max(0, Number(req.time) || 0) - 3600, t: now() }))
+    const u0 = await one(sql`SELECT id, username, Balance FROM user WHERE id = ${id}`)
+    const early = min > 0 && u0 ? await partnerChargeCheck(u0) : null // he may already have charged enough
+    if (min === 0) { await run(sql`UPDATE user SET pricediscount = CASE WHEN CAST(COALESCE(NULLIF(pricediscount, ''), '0') AS REAL) = 0 THEN ${String(pct)} ELSE pricediscount END WHERE id = ${id}`); await welcomeGive(id) }
+    if (early === null && min > 0) {
+      await sendmessage(id, `درود 🌿\nخوش اومدید؛ درخواست همکاری‌تون تأیید شد.\n\nبرای فعال شدن قیمت همکار (${pct}٪ زیر لیست) کافیه کیف پول را یک بار حداقل <b>${numberFormat(min)} تومان</b> شارژ کنید؛ بعدش خودکار فعال می‌شود.\nقبلش هم می‌تونید با «اکانت تست» کیفیت سرویس را خودتان امتحان کنید.\n\nاگر سؤالی بود همین‌جا بنویسید. سپاسگزارم.`, J({ inline_keyboard: [[{ text: '💳 شارژ کیف پول', callback_data: 'account' }, { text: '🎁 تست رایگان', callback_data: 'usertestbtn' }], [{ text: '💬 پشتیبانی', callback_data: 'supportbtns' }]] }), 'HTML')
+    }
+    return { ok: true, pct: early ?? (min === 0 ? pct : 0), needCharge: early === null && min > 0, min }
   }
   const claim = await run(sql`UPDATE Requestagent SET status = 'reject' WHERE id = ${id} AND status = 'waiting'`)
   if (Number(claim?.rowsAffected ?? 0) === 0) return { ok: true, already: true }

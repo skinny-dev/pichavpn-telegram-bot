@@ -322,7 +322,7 @@ export const miscRoutes = [
       [{ text: T.users.SendMessage, callback_data: 'Response_' + c.from_id }],
     ] })
     const marketer = await one(sql`SELECT l.name AS name, l.code AS code FROM referral_signups s JOIN referral_links l ON l.id = s.link_id WHERE s.user_id = ${c.from_id} ORDER BY s.created_at DESC LIMIT 1`) // the marketer who brought this person, if any
-    const text = sprintf(A.agentRequest, c.from_id, c.username, c.first_name, c.text) + (marketer ? `\n\n📣 معرف: ${String(marketer.name ?? '').replace(/[<>&]/g, '')} (${String(marketer.code ?? '').replace(/[<>&]/g, '')})` : '')
+    const text = sprintf(A.agentRequest, c.from_id, c.username, c.first_name, c.text) + (marketer ? `\n\n📣 معرف: ${String(marketer.name ?? '').replace(/[<>&]/g, '')} (${String(marketer.code ?? '').replace(/[<>&]/g, '')}) · بعد از تأیید ۱۰٪ فوری فعال می‌شود` : '\n\n🆕 بدون معرف · بعد از تأیید باید کیف پول را حداقل یک بار شارژ کند تا تخفیف پله فعال شود')
     for (const id of c.admin_ids) await sendmessage(id, text, kb, 'HTML')
     return true
   },

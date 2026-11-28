@@ -10,6 +10,7 @@ import { routes, adminRoutes } from './routes.js'
 import { pullRelay } from './relay.js'
 import { cronTick } from './cron.js'
 import { showFitMenu } from './fit.js'
+import { partnerChargeCheck } from './partners.js'
 import { promoAutoEnd } from './panelapi/promo.js'
 
 /** one update, like one webhook request to index.php */
@@ -144,6 +145,7 @@ async function main(c) {
   if (!['fa', 'en', 'ru', 'zh'].includes(user.lang)) await run(sql`UPDATE user SET lang = 'fa' WHERE id = ${c.from_id}`)
   if (user.register === 'none') await run(sql`UPDATE user SET register = ${time()} WHERE id = ${c.from_id}`)
   if (!['n', 'n2', 'f'].includes(user.agent)) await run(sql`UPDATE user SET agent = 'f' WHERE id = ${c.from_id}`)
+  if ((user.agent === 'n' || user.agent === 'n2') && !(Number(user.pricediscount) > 0)) { try { if (await partnerChargeCheck(user)) c.user = user = await one(sql`SELECT * FROM user WHERE id = ${c.from_id}`) } catch { /* the check never blocks a message */ } } // a partner who has just made his first charge gets the tier percent before his next price is shown
 
   // blocked
   if (user.User_Status === 'block' && !c.isAdmin) {

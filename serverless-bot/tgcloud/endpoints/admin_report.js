@@ -1,5 +1,5 @@
 // ONE CLI-only diagnostics endpoint (the platform allows at most 100 modules per app, so the seven small admin_* endpoints live here as «tools»).
-//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, marketers, partner_prices, servers, channel_stats, support_export, activity, payments, tetra
+//   npx tgcloud run endpoints/admin_report '{"tool":"diag"}'   tools: diag, problems, fees, marketers, partner_prices, partner_rules, servers, channel_stats, support_export, activity, payments, tetra
 // Each tool is the unchanged endpoint it replaces (admin_diag, admin_servers, admin_channel_stats, admin_support_export, admin_activity, admin_payments, admin_tetra); the Mini App can never call it.
 import { EndpointError, fetch } from 'sdk'
 import { systemContext } from '../lib/bot.js' // first: bot.js and the routes import each other and only load in this order
@@ -19,7 +19,7 @@ import { gatewayFeePct, gatewayFee } from '../lib/panelapi/stats.js'
 import { finSyncLegacy } from '../lib/panelapi/finance/legacy.js'
 import { finSetting } from '../lib/panelapi/finance/engine.js'
 import { overview as referralOverview } from '../lib/panelapi/referrals.js'
-import { tiersGet } from '../lib/partners.js'
+import { tiersGet, minChargeGet, minChargeSet, DEFAULT_MIN_CHARGE } from '../lib/partners.js'
 import { route as studioRoute } from '../lib/panelapi/studio.js'
 import { postsGet, settingsGet, wantsChannel, wantsBot } from '../lib/studio.js'
 import { abortAfter, withTimeout } from '../lib/timer.js'
@@ -761,6 +761,23 @@ TOOLS.partner_prices = (() => {
     if (by.n.length && by.n.some((r) => !fMap.has(key(r)))) w.push('some partner products have no customer product with the same location / GB / days (cannot be compared).')
     out.warnings = w
     out.how = 'partner price = (price of the product row whose agent = the partner type) minus pricediscount percent (the tier). Custom-volume plans use the per-GB price saved per agent type on the panel, with the same percent taken off.'
+    return out
+  }
+  return main
+})()
+
+// partner_rules: how a new partner starts. Came through a marketer / from us → the first tier (10%) at once. A walk-in applicant → the partner list at once, the tier percent after a first wallet charge of `min_charge`.
+//   npx tgcloud run endpoints/admin_report '{"tool":"partner_rules"}'                       → the rules and who is waiting for the first charge
+//   … '{"tool":"partner_rules","min_charge":300000}'                                          → set the minimum first charge in toman (0 = no minimum: everybody gets the tier at once)
+TOOLS.partner_rules = (() => {
+  async function main(input, ctx) {
+    if (ctx && ctx.initData) throw new EndpointError('forbidden', { code: 'FORBIDDEN' })
+    const out = {}
+    if (input && 'min_charge' in input) { const v = Number(input.min_charge); if (!(v >= 0 && v <= 100000000)) return { error: 'min_charge must be 0 to 100,000,000 toman' }; await minChargeSet(v); out.stored = v }
+    const tiers = await tiersGet()
+    const waiting = (await all(sql`SELECT key FROM kv WHERE key LIKE 'partner:need:%' AND value != ''`)).length
+    out.rules = { first_tier_percent: tiers[0].pct, min_first_charge_toman: await minChargeGet(), default_min_charge_toman: DEFAULT_MIN_CHARGE, referred: 'marketer link (ag_ / campaign code) or an invitation from us → the first tier at once', walk_in: 'no marketer → partner list at once, the tier percent and the welcome package only after the first charge of min_first_charge_toman' }
+    out.partners_waiting_for_first_charge = waiting
     return out
   }
   return main
